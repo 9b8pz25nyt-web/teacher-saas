@@ -1,14 +1,21 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { supabase } from "@/lib/supabase";
-import { ArrowLeft, Plus, Trash2, Check, Sparkles } from "lucide-react";
+import { Plus, Trash2, Check, Sparkles, Lock } from "lucide-react";
 
 export default function SettingsPage() {
   const [aliases, setAliases] = useState<string[]>([]);
   const [newAlias, setNewAlias] = useState("");
   const [dashboardTitle, setDashboardTitle] = useState("ESL Teacher's Private Class Dashboard");
+  
+  // Password state
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordMessage, setPasswordMessage] = useState("");
+  const [passwordSuccess, setPasswordSuccess] = useState(false);
+  const [updatingPassword, setUpdatingPassword] = useState(false);
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -69,6 +76,40 @@ export default function SettingsPage() {
     }
   }
 
+  async function handleUpdatePassword(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newPassword) return;
+
+    if (newPassword !== confirmPassword) {
+      setPasswordMessage("Passwords do not match.");
+      setPasswordSuccess(false);
+      return;
+    }
+
+    setUpdatingPassword(true);
+    setPasswordMessage("");
+
+    const { error } = await supabase.auth.updateUser({
+      password: newPassword,
+    });
+
+    setUpdatingPassword(false);
+
+    if (error) {
+      setPasswordMessage("Error: " + error.message);
+      setPasswordSuccess(false);
+    } else {
+      setPasswordSuccess(true);
+      setPasswordMessage("Password updated successfully!");
+      setNewPassword("");
+      setConfirmPassword("");
+      setTimeout(() => {
+        setPasswordMessage("");
+        setPasswordSuccess(false);
+      }, 3000);
+    }
+  }
+
   function addAlias(e: React.FormEvent) {
     e.preventDefault();
     if (!newAlias.trim()) return;
@@ -87,14 +128,6 @@ export default function SettingsPage() {
 
   return (
     <div className="p-8 max-w-2xl mx-auto space-y-6">
-      <Link
-        href="/students"
-        className="text-xs font-semibold text-pink-600 hover:text-pink-700 flex items-center gap-1.5 transition"
-      >
-        <ArrowLeft size={16} />
-        <span>Back to Dashboard</span>
-      </Link>
-
       <div className="bg-white border border-pink-100 rounded-3xl p-6 shadow-xs space-y-6">
         <div className="flex items-center gap-3 border-b border-pink-100 pb-4">
           <span className="p-2 bg-pink-50 text-pink-600 rounded-xl">
@@ -168,6 +201,62 @@ export default function SettingsPage() {
             </button>
           </div>
         </div>
+      </div>
+
+      {/* Password Update Section */}
+      <div className="bg-white border border-pink-100 rounded-3xl p-6 shadow-xs space-y-6">
+        <div className="flex items-center gap-3 border-b border-pink-100 pb-4">
+          <span className="p-2 bg-pink-50 text-pink-600 rounded-xl">
+            <Lock size={20} />
+          </span>
+          <div>
+            <h1 className="text-xl font-bold text-pink-950">Security</h1>
+            <p className="text-xs text-gray-500">Update your account password.</p>
+          </div>
+        </div>
+
+        <form onSubmit={handleUpdatePassword} className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-pink-950">New Password</label>
+            <input
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="Enter new password"
+              className="w-full p-2.5 text-xs rounded-xl border border-pink-200 focus:outline-hidden focus:ring-2 focus:ring-pink-400"
+              required
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-pink-950">Confirm New Password</label>
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Confirm new password"
+              className="w-full p-2.5 text-xs rounded-xl border border-pink-200 focus:outline-hidden focus:ring-2 focus:ring-pink-400"
+              required
+            />
+          </div>
+
+          <div className="flex items-center justify-between pt-2">
+            {passwordMessage && (
+              <span className={`text-xs font-bold flex items-center gap-1 ${passwordSuccess ? "text-emerald-600" : "text-red-600"}`}>
+                {passwordSuccess && <Check size={14} />} {passwordMessage}
+              </span>
+            )}
+            <div className="ml-auto">
+              <button
+                type="submit"
+                disabled={updatingPassword}
+                className="bg-pink-600 hover:bg-pink-700 text-white text-xs font-semibold px-6 py-2.5 rounded-xl cursor-pointer shadow-xs transition"
+              >
+                {updatingPassword ? "Updating..." : "Update Password"}
+              </button>
+            </div>
+          </div>
+        </form>
       </div>
     </div>
   );

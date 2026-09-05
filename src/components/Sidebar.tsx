@@ -124,7 +124,7 @@ export default function Sidebar() {
             }`}
           >
             <Settings size={16} />
-            <span>Teacher Aliases</span>
+            <span>Account Settings</span>
           </Link>
         </nav>
       </div>

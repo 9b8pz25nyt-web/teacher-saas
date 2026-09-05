@@ -248,6 +248,23 @@ export default function DashboardPage() {
             <h2 className="text-2xl font-bold text-pink-950">
               {monthNames[selectedMonth]} {selectedYear}
             </h2>
+
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setCurrentDate(new Date(selectedYear, selectedMonth - 1, 1))}
+                className="p-2 hover:bg-pink-50 rounded-xl text-pink-700 transition cursor-pointer border border-pink-100"
+                title="Previous Month"
+              >
+                <ChevronLeft size={18} />
+              </button>
+              <button
+                onClick={() => setCurrentDate(new Date(selectedYear, selectedMonth + 1, 1))}
+                className="p-2 hover:bg-pink-50 rounded-xl text-pink-700 transition cursor-pointer border border-pink-100"
+                title="Next Month"
+              >
+                <ChevronRight size={18} />
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-7 gap-3 text-center mb-4">
