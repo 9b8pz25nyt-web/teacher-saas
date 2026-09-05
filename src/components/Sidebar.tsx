@@ -4,12 +4,12 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { LogOut } from "lucide-react";
+import { LogOut, Settings } from "lucide-react";
 
 export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  const [activeAlias, setActiveAlias] = useState("Teacher");
+  const [dashboardTitle, setDashboardTitle] = useState("ESL Teacher's Private Class Dashboard");
 
   useEffect(() => {
     async function loadTeacherProfile() {
@@ -18,14 +18,12 @@ export default function Sidebar() {
 
       const { data: profile } = await supabase
         .from("profiles")
-        .select("teacher_aliases, default_display_name")
+        .select("dashboard_title")
         .eq("user_id", user.id)
         .maybeSingle();
 
-      if (profile?.default_display_name) {
-        setActiveAlias(profile.default_display_name);
-      } else if (profile?.teacher_aliases && profile.teacher_aliases.length > 0) {
-        setActiveAlias(profile.teacher_aliases[0]);
+      if (profile?.dashboard_title) {
+        setDashboardTitle(profile.dashboard_title);
       }
     }
 
@@ -43,11 +41,7 @@ export default function Sidebar() {
         {/* Title and Sign Out Row */}
         <div className="mb-8 flex items-start justify-between gap-2">
           <h1 className="text-xl font-bold leading-tight">
-            ESL {activeAlias}&apos;s
-            <br />
-            Private Class
-            <br />
-            Dashboard
+            {dashboardTitle}
           </h1>
           <button
             onClick={handleSignOut}
@@ -110,6 +104,7 @@ export default function Sidebar() {
           >
             💳 Payments
           </Link>
+          
           <Link
             href="/reports"
             className={`block w-full text-left rounded-lg px-4 py-2.5 text-sm transition ${
@@ -119,6 +114,17 @@ export default function Sidebar() {
             }`}
           >
             📊 Reports
+          </Link>
+          <Link
+            href="/settings"
+            className={`block w-full text-left rounded-lg px-4 py-2.5 text-sm transition flex items-center gap-2 ${
+              pathname === "/settings"
+                ? "bg-pink-600 font-semibold"
+                : "hover:bg-pink-800"
+            }`}
+          >
+            <Settings size={16} />
+            <span>Teacher Aliases</span>
           </Link>
         </nav>
       </div>
