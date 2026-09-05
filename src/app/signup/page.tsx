@@ -1,66 +1,175 @@
-"use client";
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase-server";
+import RenewalAlertBanner from "@/components/RenewalAlertBanner";
+import ClassEvent from "@/components/ClassEvent";
 
-import { useState } from "react";
-import { supabase } from "@/app/lib/supabase";
+export default async function Dashboard() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
 
-export default function SignupPage() {
-
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [message, setMessage] = useState("");
-
-  async function handleSignup() {
-
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-    });
-
-    if (error) {
-      setMessage(error.message);
-    } else {
-      setMessage("Account created! Check your email.");
-    }
-
+  if (!user) {
+    redirect("/login");
   }
 
+  // Fetch schedules, students, and recorded lessons for September 2026
+  const [{ data: schedules }, { data: lessons }] = await Promise.all([
+    supabase
+      .from("schedules")
+      .select("*, students (id, name, book_id, books (title))"),
+    supabase
+      .from("lessons")
+      .select("*")
+      .eq("teacher_id", user.id)
+  ]);
+
   return (
-    <main className="min-h-screen flex items-center justify-center">
+    <div className="flex flex-col min-h-screen">
+      <RenewalAlertBanner />
+      
+      <main className="p-8 flex-1">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-2xl font-semibold text-[#6b0f3b]">
+            Good Morning, Teacher 👋
+          </h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Manage your classes and students
+          </p>
+        </div>
 
-      <div className="w-full max-w-md">
-
-        <h1 className="text-3xl font-bold mb-6">
-          Create Teacher Account
-        </h1>
-
-        <input
-          className="border p-3 w-full mb-3"
-          placeholder="Email"
-          value={email}
-          onChange={(e)=>setEmail(e.target.value)}
-        />
-
-        <input
-          className="border p-3 w-full mb-3"
-          placeholder="Password"
-          type="password"
-          value={password}
-          onChange={(e)=>setPassword(e.target.value)}
-        />
-
-        <button
-          onClick={handleSignup}
-          className="bg-black text-white p-3 w-full"
+        {/* Calendar */}
+        <div
+          className="
+            bg-white
+            rounded-3xl
+            border
+            border-pink-200
+            shadow-sm
+            p-6
+            max-w-7xl
+            mx-auto
+          "
         >
-          Sign Up
-        </button>
+          <div className="
+            flex
+            justify-between
+            items-center
+            mb-6
+          ">
+            <h2 className="
+              text-2xl
+              font-bold
+              text-[#6b0f3b]
+            ">
+              September 2026
+            </h2>
 
-        <p className="mt-4">
-          {message}
-        </p>
+            <button className="
+              bg-pink-600
+              text-white
+              px-5
+              py-2
+              rounded-xl
+              hover:bg-pink-700
+              transition
+              cursor-pointer
+            ">
+              + Add Class
+            </button>
+          </div>
 
-      </div>
+          {/* Week Days */}
+          <div className="
+            grid
+            grid-cols-7
+            gap-3
+            text-center
+            mb-3
+          ">
+            {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => (
+              <div
+                key={day}
+                className="
+                  font-semibold
+                  text-pink-600
+                "
+              >
+                {day}
+              </div>
+            ))}
+          </div>
 
-    </main>
+          {/* Dates */}
+          <div className="
+            grid
+            grid-cols-7
+            gap-3
+          ">
+            {/* September 1, 2026 starts on a Tuesday, so offset by 1 empty cell */}
+            <div className="min-h-[120px] bg-gray-50/50 border border-gray-100 rounded-2xl p-3 opacity-40"></div>
+
+            {Array.from({ length: 30 }).map((_, index) => {
+              const dayNum = index + 1;
+              const dateObj = new Date(2026, 8, dayNum);
+              const dayOfWeekName = dateObj.toLocaleDateString("en-US", { weekday: "long" });
+              const dateString = `2026-09-${String(dayNum).padStart(2, "0")}`;
+
+              return (
+                <div
+                  key={dayNum}
+                  className="
+                    min-h-[120px]
+                    bg-white
+                    border
+                    border-pink-100
+                    rounded-2xl
+                    p-3
+                    hover:bg-pink-50/30
+                    transition
+                    flex
+                    flex-col
+                    gap-2
+                  "
+                >
+                  <p className="
+                    font-bold
+                    text-gray-700
+                    text-sm
+                  ">
+                    {dayNum}
+                  </p>
+
+                  <div className="space-y-1.5 overflow-y-auto max-h-[150px]">
+                    {schedules
+                      ?.filter((schedule) => schedule.day_of_week === dayOfWeekName)
+                      .map((schedule) => {
+                        const matchingLesson = lessons?.find(
+                          (l) => l.student_id === schedule.student_id && l.lesson_date === dateString
+                        );
+                        const status = matchingLesson ? matchingLesson.status : "Scheduled";
+
+                        return (
+                          <ClassEvent
+                            key={`${schedule.id}-${dayNum}`}
+                            time={schedule.schedule_time}
+                            student={schedule.students?.name || ""}
+                            studentId={schedule.student_id}
+                            book={schedule.students?.books?.title || ""}
+                            bookId={schedule.students?.book_id}
+                            status={status}
+                            dateString={dateString}
+                            duration={schedule.duration}
+                            topic={schedule.topic}
+                          />
+                        );
+                      })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </main>
+    </div>
   );
 }

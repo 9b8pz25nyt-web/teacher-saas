@@ -845,120 +845,120 @@ ${currentTeacherAlias}`;
         </div>
       </div>
 
-     {/* Class Reports & Homework Log History */}
-<div className="bg-white border border-pink-100 rounded-3xl p-6 shadow-xs space-y-4">
-  <div className="flex items-center justify-between">
-    <div className="flex items-center gap-2">
-      <h3 className="text-sm font-bold text-gray-900">
-        Logged Lessons & Reports
-      </h3>
-      <span className="text-[11px] font-bold text-pink-600 bg-pink-50 px-2 py-0.5 rounded-lg border border-pink-200">
-        {reports.length}
-      </span>
-    </div>
-    <button
-      onClick={() => setIsReportModalOpen(true)}
-      className="text-xs font-bold text-pink-600 hover:text-pink-700 flex items-center gap-1 cursor-pointer"
-    >
-      <Plus size={14} />
-      <span>Add Report</span>
-    </button>
-  </div>
-
-  {reports.length === 0 ? (
-    <p className="text-xs text-gray-400 italic">
-      No lessons logged yet for this student.
-    </p>
-  ) : (
-    <div className="space-y-3">
-      {reports.map((rep) => (
-        <div
-          key={rep.id}
-          className="p-4 bg-pink-50/30 rounded-2xl border border-pink-100 space-y-2.5 text-xs"
-        >
-          {/* Header Row with Date & Delete */}
-          <div className="flex justify-between items-center">
-            <span className="font-bold text-gray-900 text-sm">
-              {rep.lesson_title}
+      {/* Class Reports & Homework Log History */}
+      <div className="bg-white border border-pink-100 rounded-3xl p-6 shadow-xs space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-bold text-gray-900">
+              Logged Lessons & Reports
+            </h3>
+            <span className="text-[11px] font-bold text-pink-600 bg-pink-50 px-2 py-0.5 rounded-lg border border-pink-200">
+              {reports.length}
             </span>
-            <div className="flex items-center gap-3">
-              <span className="text-gray-400 text-[11px]">
-                {rep.report_date}
-              </span>
-              <button
-                type="button"
-                onClick={() =>
-                  handleDeleteReport(rep.id, rep.homework_file_url)
-                }
-                className="text-gray-400 hover:text-red-600 transition p-1 cursor-pointer"
-                title="Delete Lesson Report"
-              >
-                <Trash2 size={14} />
-              </button>
-            </div>
           </div>
-
-          {/* Vocabulary */}
-          {rep.vocabulary && (
-            <p className="text-gray-600 font-mono text-[11px] bg-white/70 p-2 rounded-lg border border-pink-50">
-              <strong>Vocab/Structures:</strong> {rep.vocabulary}
-            </p>
-          )}
-
-          {/* Homework Instructions */}
-          {rep.homework && (
-            <div className="p-2.5 bg-pink-100/50 rounded-xl border border-pink-200 text-pink-950 flex items-start gap-1.5">
-              <FileCheck
-                size={14}
-                className="text-pink-600 mt-0.5 shrink-0"
-              />
-              <div>
-                <strong className="text-pink-900 text-[11px]">
-                  Homework:
-                </strong>
-                <p className="text-[11px] text-gray-800">{rep.homework}</p>
-              </div>
-            </div>
-          )}
-
-          {/* 1. Teacher Uploaded Worksheet / Page */}
-          {rep.homework_file_url && (
-            <div className="p-2 bg-white rounded-xl border border-pink-200 flex items-center justify-between text-xs">
-              <span className="text-pink-950 font-bold flex items-center gap-1.5">
-                📄 <span>Attached Worksheet:</span>
-              </span>
-              <a
-                href={rep.homework_file_url}
-                target="_blank"
-                rel="noreferrer"
-                className="text-pink-600 font-bold hover:underline"
-              >
-                View / Open Worksheet ↗
-              </a>
-            </div>
-          )}
-
-          {/* 2. Student Submitted Homework File */}
-          {rep.homework_submission_url && (
-            <div className="p-2 bg-emerald-50 rounded-xl border border-emerald-200 flex items-center justify-between text-xs">
-              <span className="text-emerald-800 font-bold flex items-center gap-1.5">
-                ✓ <span>Student Homework Submission:</span>
-              </span>
-              <a
-                href={rep.homework_submission_url}
-                target="_blank"
-                rel="noreferrer"
-                className="text-pink-600 font-bold hover:underline"
-              >
-                View Submission ↗
-              </a>
-            </div>
-          )}
+          <button
+            onClick={() => setIsReportModalOpen(true)}
+            className="text-xs font-bold text-pink-600 hover:text-pink-700 flex items-center gap-1 cursor-pointer"
+          >
+            <Plus size={14} />
+            <span>Add Report</span>
+          </button>
         </div>
-      ))}
-    </div>
-  )}
-</div>
+
+        {reports.length === 0 ? (
+          <p className="text-xs text-gray-400 italic">
+            No lessons logged yet for this student.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {reports.map((rep) => (
+              <div
+                key={rep.id}
+                className="p-4 bg-pink-50/30 rounded-2xl border border-pink-100 space-y-2.5 text-xs"
+              >
+                {/* Header Row with Date & Delete */}
+                <div className="flex justify-between items-center">
+                  <span className="font-bold text-gray-900 text-sm">
+                    {rep.lesson_title}
+                  </span>
+                  <div className="flex items-center gap-3">
+                    <span className="text-gray-400 text-[11px]">
+                      {rep.report_date}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleDeleteReport(rep.id, rep.homework_file_url)
+                      }
+                      className="text-gray-400 hover:text-red-600 transition p-1 cursor-pointer"
+                      title="Delete Lesson Report"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Vocabulary */}
+                {rep.vocabulary && (
+                  <p className="text-gray-600 font-mono text-[11px] bg-white/70 p-2 rounded-lg border border-pink-50">
+                    <strong>Vocab/Structures:</strong> {rep.vocabulary}
+                  </p>
+                )}
+
+                {/* Homework Instructions */}
+                {rep.homework && (
+                  <div className="p-2.5 bg-pink-100/50 rounded-xl border border-pink-200 text-pink-950 flex items-start gap-1.5">
+                    <FileCheck
+                      size={14}
+                      className="text-pink-600 mt-0.5 shrink-0"
+                    />
+                    <div>
+                      <strong className="text-pink-900 text-[11px]">
+                        Homework:
+                      </strong>
+                      <p className="text-[11px] text-gray-800">{rep.homework}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* 1. Teacher Uploaded Worksheet / Page */}
+                {rep.homework_file_url && (
+                  <div className="p-2 bg-white rounded-xl border border-pink-200 flex items-center justify-between text-xs">
+                    <span className="text-pink-950 font-bold flex items-center gap-1.5">
+                      📄 <span>Attached Worksheet:</span>
+                    </span>
+                    <a
+                      href={rep.homework_file_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-pink-600 font-bold hover:underline"
+                    >
+                      View / Open Worksheet ↗
+                    </a>
+                  </div>
+                )}
+
+                {/* 2. Student Submitted Homework File */}
+                {rep.homework_submission_url && (
+                  <div className="p-2 bg-emerald-50 rounded-xl border border-emerald-200 flex items-center justify-between text-xs">
+                    <span className="text-emerald-800 font-bold flex items-center gap-1.5">
+                      ✓ <span>Student Homework Submission:</span>
+                    </span>
+                    <a
+                      href={rep.homework_submission_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-pink-600 font-bold hover:underline"
+                    >
+                      View Submission ↗
+                    </a>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* MODAL: RENEWAL NOTICE PDF & PREVIEW */}
       {isRenewalModalOpen && (
