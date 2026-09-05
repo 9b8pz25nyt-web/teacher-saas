@@ -208,9 +208,9 @@ export default function StudentsPage() {
               <div className="bg-pink-50/40 p-3 rounded-2xl border border-pink-50 text-xs space-y-1">
                 <div className="flex justify-between">
                   <span className="text-gray-500">Package:</span>
-                  <span className="font-bold text-gray-800">
-                    {student.classes_included || 30} {student.free_classes ? `(+${student.free_classes} free)` : ""} Classes ({student.class_duration || 40}m)
-                  </span>
+                  <span>
+  {student.classes_included || 5} {student.free_classes ? `(+${student.free_classes} free)` : ""} Classes ({student.class_duration || 40}m)
+</span>
                 </div>
                 <div className="flex justify-between font-medium">
                   <span className="text-gray-500">Rate:</span>
