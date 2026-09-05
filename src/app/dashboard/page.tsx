@@ -101,7 +101,7 @@ export default function DashboardPage() {
   const startDayOffset = (firstDayWeekdayIndex + 6) % 7;
   const totalCalendarSlots = Math.ceil((startDayOffset + daysInMonth) / 7) * 7;
 
-  // Strict date mapping to cap appearances at package limit (classes_included + free_classes)
+  // Rollover mapping: skips cancelled/absent slots to push quota forward, but retains them visually
   const studentValidDatesMap = (() => {
     const map: Record<string, string[]> = {};
     
@@ -112,6 +112,12 @@ export default function DashboardPage() {
       const totalAllowed = (student.classes_included || 0) + (student.free_classes || 0);
       if (totalAllowed <= 0) return;
 
+      const skippedDatesSet = new Set(
+        recordedLessons
+          .filter((l) => l.student_id === student.id && (l.status === "Cancelled" || l.status === "Absent"))
+          .map((l) => l.lesson_date)
+      );
+
       const startDateStr = student.contract_start_date || `${selectedYear}-01-01`;
       const startDate = new Date(startDateStr);
       const dates: string[] = [];
@@ -119,24 +125,34 @@ export default function DashboardPage() {
       let curr = new Date(startDate);
       let safetyCounter = 0;
 
-      while (dates.length < totalAllowed && safetyCounter < 365) {
+      while (dates.length < totalAllowed && safetyCounter < 730) {
+        const y = curr.getFullYear();
+        const m = String(curr.getMonth() + 1).padStart(2, "0");
+        const d = String(curr.getDate()).padStart(2, "0");
+        const dateString = `${y}-${m}-${d}`;
+
         const weekday = curr.toLocaleDateString("en-US", { weekday: "long" });
         const matchesSchedule = studentSchedules.some(
           (s) => s.day_of_week?.toLowerCase() === weekday.toLowerCase()
         );
 
         if (matchesSchedule) {
-          const y = curr.getFullYear();
-          const m = String(curr.getMonth() + 1).padStart(2, "0");
-          const d = String(curr.getDate()).padStart(2, "0");
-          dates.push(`${y}-${m}-${d}`);
+          // If this date wasn't skipped due to cancellation/absence, count it towards quota
+          if (!skippedDatesSet.has(dateString)) {
+            dates.push(dateString);
+          }
         }
 
         curr.setDate(curr.getDate() + 1);
         safetyCounter++;
       }
 
-      map[student.id] = dates;
+      // Ensure cancelled/absent dates remain visible on the calendar even though they rolled over
+      const allRecordedDates = recordedLessons
+        .filter((l) => l.student_id === student.id)
+        .map((l) => l.lesson_date);
+
+      map[student.id] = Array.from(new Set([...dates, ...allRecordedDates]));
     });
 
     return map;

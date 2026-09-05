@@ -84,9 +84,11 @@ export default function ReportsPage() {
       ? monthlyTarget * 12
       : monthlyTarget;
 
- // Breakdown per student incorporating free classes (0 income) vs regular paid classes
+ // Breakdown per student incorporating free classes (0 income) vs regular paid classes, excluding cancelled lessons
   const studentBreakdown = students.map((s) => {
-    const studentLessons = lessons.filter((l) => l.student_id === s.id);
+    const studentLessons = lessons.filter(
+      (l) => l.student_id === s.id && l.status !== "Cancelled"
+    );
     const studentPayments = payments.filter((p) => p.student_id === s.id && p.payment_status === "Paid");
 
     const totalFeesForStudent = studentPayments.reduce(
@@ -133,7 +135,6 @@ export default function ReportsPage() {
       totalHoursTaught,
     };
   });
-
   // Operating Expenses (Internet, Zoom, Tools)
   const totalTelecomSoftwareExpense = expenses.reduce(
     (acc, curr) => acc + (Number(curr.amount_php) || 0),
