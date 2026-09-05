@@ -40,7 +40,8 @@ export default function Sidebar() {
   return (
     <aside className="w-64 min-h-screen bg-[#6b0f3b] text-white p-5 flex flex-col justify-between">
       <div>
-        <div className="mb-8">
+        {/* Title and Sign Out Row */}
+        <div className="mb-8 flex items-start justify-between gap-2">
           <h1 className="text-xl font-bold leading-tight">
             ESL {activeAlias}&apos;s
             <br />
@@ -48,6 +49,13 @@ export default function Sidebar() {
             <br />
             Dashboard
           </h1>
+          <button
+            onClick={handleSignOut}
+            title="Sign Out"
+            className="p-2 rounded-lg bg-pink-800/60 hover:bg-pink-700 text-pink-200 hover:text-white transition cursor-pointer shrink-0"
+          >
+            <LogOut size={16} />
+          </button>
         </div>
 
         {/* Navigation links */}
@@ -113,17 +121,6 @@ export default function Sidebar() {
             📊 Reports
           </Link>
         </nav>
-      </div>
-
-      {/* Sign Out Button pinned at the bottom */}
-      <div className="pt-4 border-t border-pink-900/50">
-        <button
-          onClick={handleSignOut}
-          className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-pink-200 hover:bg-pink-800 hover:text-white transition cursor-pointer font-medium"
-        >
-          <LogOut size={16} />
-          <span>Sign Out</span>
-        </button>
       </div>
     </aside>
   );
