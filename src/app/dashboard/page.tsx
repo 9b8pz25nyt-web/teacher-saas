@@ -90,6 +90,14 @@ export default function DashboardPage() {
     }
   }
 
+  // Today calculations for "Classes for Today"
+  const todayObj = new Date();
+  const todayWeekday = todayObj.toLocaleDateString("en-US", { weekday: "long" });
+  const todayDateStr = todayObj.toISOString().split("T")[0]; // "YYYY-MM-DD"
+  const todaysSchedules = schedules.filter(
+    (sched) => sched.day_of_week?.toLowerCase() === todayWeekday.toLowerCase()
+  );
+
   // Calendar Math for Any Month & Year
   const daysInMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate();
   const firstDayWeekdayIndex = new Date(selectedYear, selectedMonth, 1).getDay();
@@ -154,6 +162,55 @@ export default function DashboardPage() {
               Today
             </button>
           </div>
+        </div>
+
+        {/* Classes For Today Card */}
+        <div className="bg-white p-6 rounded-3xl border border-pink-100 shadow-xs space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-bold text-pink-950">
+              📅 Classes for Today ({todayObj.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })})
+            </h2>
+            <span className="bg-pink-100 text-pink-700 text-xs font-bold px-3 py-1 rounded-full">
+              {todaysSchedules.length} {todaysSchedules.length === 1 ? "Class" : "Classes"}
+            </span>
+          </div>
+
+          {todaysSchedules.length === 0 ? (
+            <p className="text-xs text-gray-400 italic">No classes scheduled for today. Enjoy your day off! ✨</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {todaysSchedules.map((sched) => {
+                const matchingLesson = recordedLessons.find(
+                  (l) => l.student_id === sched.student_id && l.lesson_date === todayDateStr
+                );
+                const status = matchingLesson ? matchingLesson.status : "Scheduled";
+
+                return (
+                  <div
+                    key={`today-${sched.id}`}
+                    className="p-4 rounded-2xl border border-pink-100 bg-pink-50/30 flex flex-col justify-between gap-3 shadow-2xs"
+                  >
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="text-xs font-bold text-pink-900">{sched.schedule_time} ({sched.duration || 50}m)</p>
+                        <p className="text-sm font-extrabold text-pink-950 mt-0.5">{sched.students?.name || "Student"}</p>
+                      </div>
+                      <span className={`text-[10px] font-bold px-2.5 py-1 rounded-xl ${
+                        status === "Completed" ? "bg-green-100 text-green-700" : "bg-pink-100 text-pink-700"
+                      }`}>
+                        {status}
+                      </span>
+                    </div>
+                    {sched.topic && (
+                      <p className="text-xs text-gray-600 bg-white p-2 rounded-xl border border-pink-100">
+                        <span className="font-semibold">Topic:</span> {sched.topic}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Calendar Grid Box */}
