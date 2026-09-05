@@ -80,6 +80,7 @@ export default function StudentDetailsPage({
   const [endDate, setEndDate] = useState("");
   const [assignedBookId, setAssignedBookId] = useState("");
   const [notes, setNotes] = useState("");
+  const [savingBook, setSavingBook] = useState(false);
 
   // Schedule Modal State
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
@@ -135,7 +136,7 @@ export default function StudentDetailsPage({
 
       const { data: studentData, error } = await supabase
         .from("students")
-        .select("*")
+        .select("*, books(id, title, level)")
         .eq("id", studentId)
         .single();
 
@@ -189,7 +190,7 @@ export default function StudentDetailsPage({
       const [{ data: scheds }, { data: bks }, { data: repList }] =
         await Promise.all([
           supabase.from("schedules").select("*").eq("student_id", studentId),
-          supabase.from("books").select("*"),
+          supabase.from("books").select("*").eq("teacher_id", user.id).order("title", { ascending: true }),
           supabase
             .from("class_reports")
             .select("*")
@@ -240,6 +241,27 @@ export default function StudentDetailsPage({
     } catch (error) {
       console.error("Currency conversion failed:", error);
       setPhpEquivalent("");
+    }
+  }
+
+  async function handleBookChange(newBookId: string) {
+    setAssignedBookId(newBookId);
+    setSavingBook(true);
+
+    const { error } = await supabase
+      .from("students")
+      .update({ 
+        assigned_book_id: newBookId || null,
+        book_id: newBookId || null 
+      })
+      .eq("id", studentId);
+
+    setSavingBook(false);
+
+    if (error) {
+      alert("Failed to update assigned book: " + error.message);
+    } else {
+      fetchStudentData();
     }
   }
 
@@ -721,26 +743,34 @@ ${currentTeacherAlias}`;
           </div>
         </div>
 
-        {/* Assigned Curriculum / Book Card */}
+        {/* Assigned Curriculum / Book Card with Dropdown */}
         <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs space-y-3">
-          <div className="flex items-center gap-2 text-pink-600 font-bold text-sm">
-            <BookOpen size={16} />
-            <span>Assigned Curriculum / Book</span>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-pink-600 font-bold text-sm">
+              <BookOpen size={16} />
+              <span>Assigned Curriculum / Book</span>
+            </div>
+            {savingBook && <span className="text-[10px] text-gray-400">Saving...</span>}
           </div>
-          <div className="p-3 bg-pink-50/50 rounded-2xl border border-pink-100">
-            <p className="font-bold text-gray-900 text-xs">
-              {student.assigned_book_id === "free_talk"
-                ? "🗣️ Free Talk / Daily Conversation (No Book)"
-                : student.assigned_book_id === "to_follow"
-                ? "⏳ To Follow / Level Assessment in Progress"
-                : assignedBook
-                ? assignedBook.title
-                : "No Book Assigned Yet"}
-            </p>
-            <p className="text-[10px] text-gray-400 mt-0.5">
+          <div className="p-3 bg-pink-50/50 rounded-2xl border border-pink-100 space-y-2">
+            <select
+              className="w-full bg-white border border-pink-200 rounded-xl px-3 py-2 text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-pink-500 cursor-pointer"
+              value={assignedBookId}
+              onChange={(e) => handleBookChange(e.target.value)}
+            >
+              <option value="">No Book Assigned</option>
+              <option value="free_talk">🗣️ Free Talk / Daily Conversation</option>
+              <option value="to_follow">⏳ To Follow / Level Assessment</option>
+              {books.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.title} {b.level ? `(${b.level})` : ""}
+                </option>
+              ))}
+            </select>
+            <p className="text-[10px] text-gray-400 px-1">
               {assignedBook?.level
                 ? `Level: ${assignedBook.level}`
-                : "Primary Study Material"}
+                : "Select or switch primary study material"}
             </p>
           </div>
         </div>
@@ -994,7 +1024,7 @@ ${currentTeacherAlias}`;
               </button>
             </div>
 
-            {/* Printable Preview Sheet (Strict Safe Hex Styling) */}
+            {/* Printable Preview Sheet */}
             <div className="flex-1 overflow-y-auto border border-gray-200 rounded-2xl p-6 bg-white shadow-inner">
               <div
                 ref={renewalPdfRef}

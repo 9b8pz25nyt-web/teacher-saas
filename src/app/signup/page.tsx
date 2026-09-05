@@ -1,175 +1,136 @@
-import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase-server";
-import RenewalAlertBanner from "@/components/RenewalAlertBanner";
-import ClassEvent from "@/components/ClassEvent";
+"use client";
 
-export default async function Dashboard() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 
-  if (!user) {
-    redirect("/login");
+export default function SignupPage() {
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [message, setMessage] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  async function handleSignup(e: React.FormEvent) {
+    e.preventDefault();
+
+    if (!email.trim() || !password || !confirmPassword) {
+      setMessage("Please fill in all fields.");
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setMessage("Passwords do not match. Please check and try again.");
+      return;
+    }
+
+    if (password.length < 6) {
+      setMessage("Password must be at least 6 characters long.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setMessage("");
+
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/dashboard`,
+        },
+      });
+
+      if (error) {
+        setMessage(error.message);
+      } else {
+        setMessage("Account created successfully! Please check your email inbox for the confirmation link.");
+        setTimeout(() => {
+          router.push("/login");
+        }, 4000);
+      }
+    } catch (err: any) {
+      console.error("Signup error:", err);
+      setMessage("An unexpected error occurred. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
-  // Fetch schedules, students, and recorded lessons for September 2026
-  const [{ data: schedules }, { data: lessons }] = await Promise.all([
-    supabase
-      .from("schedules")
-      .select("*, students (id, name, book_id, books (title))"),
-    supabase
-      .from("lessons")
-      .select("*")
-      .eq("teacher_id", user.id)
-  ]);
-
   return (
-    <div className="flex flex-col min-h-screen">
-      <RenewalAlertBanner />
-      
-      <main className="p-8 flex-1">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-2xl font-semibold text-[#6b0f3b]">
-            Good Morning, Teacher 👋
+    <main className="min-h-screen flex items-center justify-center bg-gray-50 p-6">
+      <div className="w-full max-w-md bg-white p-8 rounded-3xl border border-pink-100 shadow-sm space-y-4">
+        <div>
+          <h1 className="text-2xl font-bold text-pink-950">
+            Create Teacher Account
           </h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Manage your classes and students
+          <p className="text-xs text-gray-500 mt-1">
+            Enter your details to register your private teaching platform.
           </p>
         </div>
 
-        {/* Calendar */}
-        <div
-          className="
-            bg-white
-            rounded-3xl
-            border
-            border-pink-200
-            shadow-sm
-            p-6
-            max-w-7xl
-            mx-auto
-          "
-        >
-          <div className="
-            flex
-            justify-between
-            items-center
-            mb-6
-          ">
-            <h2 className="
-              text-2xl
-              font-bold
-              text-[#6b0f3b]
-            ">
-              September 2026
-            </h2>
-
-            <button className="
-              bg-pink-600
-              text-white
-              px-5
-              py-2
-              rounded-xl
-              hover:bg-pink-700
-              transition
-              cursor-pointer
-            ">
-              + Add Class
-            </button>
+        <form onSubmit={handleSignup} className="space-y-3.5">
+          <div>
+            <label className="block mb-1 text-xs font-semibold text-gray-700">Email Address *</label>
+            <input
+              type="email"
+              required
+              className="border border-pink-200 p-3 w-full rounded-xl text-xs focus:outline-none focus:border-pink-500"
+              placeholder="teacher@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
           </div>
 
-          {/* Week Days */}
-          <div className="
-            grid
-            grid-cols-7
-            gap-3
-            text-center
-            mb-3
-          ">
-            {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => (
-              <div
-                key={day}
-                className="
-                  font-semibold
-                  text-pink-600
-                "
-              >
-                {day}
-              </div>
-            ))}
+          <div>
+            <label className="block mb-1 text-xs font-semibold text-gray-700">Password *</label>
+            <input
+              type="password"
+              required
+              className="border border-pink-200 p-3 w-full rounded-xl text-xs focus:outline-none focus:border-pink-500"
+              placeholder="At least 6 characters"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
           </div>
 
-          {/* Dates */}
-          <div className="
-            grid
-            grid-cols-7
-            gap-3
-          ">
-            {/* September 1, 2026 starts on a Tuesday, so offset by 1 empty cell */}
-            <div className="min-h-[120px] bg-gray-50/50 border border-gray-100 rounded-2xl p-3 opacity-40"></div>
-
-            {Array.from({ length: 30 }).map((_, index) => {
-              const dayNum = index + 1;
-              const dateObj = new Date(2026, 8, dayNum);
-              const dayOfWeekName = dateObj.toLocaleDateString("en-US", { weekday: "long" });
-              const dateString = `2026-09-${String(dayNum).padStart(2, "0")}`;
-
-              return (
-                <div
-                  key={dayNum}
-                  className="
-                    min-h-[120px]
-                    bg-white
-                    border
-                    border-pink-100
-                    rounded-2xl
-                    p-3
-                    hover:bg-pink-50/30
-                    transition
-                    flex
-                    flex-col
-                    gap-2
-                  "
-                >
-                  <p className="
-                    font-bold
-                    text-gray-700
-                    text-sm
-                  ">
-                    {dayNum}
-                  </p>
-
-                  <div className="space-y-1.5 overflow-y-auto max-h-[150px]">
-                    {schedules
-                      ?.filter((schedule) => schedule.day_of_week === dayOfWeekName)
-                      .map((schedule) => {
-                        const matchingLesson = lessons?.find(
-                          (l) => l.student_id === schedule.student_id && l.lesson_date === dateString
-                        );
-                        const status = matchingLesson ? matchingLesson.status : "Scheduled";
-
-                        return (
-                          <ClassEvent
-                            key={`${schedule.id}-${dayNum}`}
-                            time={schedule.schedule_time}
-                            student={schedule.students?.name || ""}
-                            studentId={schedule.student_id}
-                            book={schedule.students?.books?.title || ""}
-                            bookId={schedule.students?.book_id}
-                            status={status}
-                            dateString={dateString}
-                            duration={schedule.duration}
-                            topic={schedule.topic}
-                          />
-                        );
-                      })}
-                  </div>
-                </div>
-              );
-            })}
+          <div>
+            <label className="block mb-1 text-xs font-semibold text-gray-700">Confirm Password *</label>
+            <input
+              type="password"
+              required
+              className="border border-pink-200 p-3 w-full rounded-xl text-xs focus:outline-none focus:border-pink-500"
+              placeholder="Re-enter your password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+            />
           </div>
+
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="bg-pink-600 hover:bg-pink-700 text-white font-bold p-3 w-full rounded-xl text-xs transition cursor-pointer disabled:opacity-50 mt-2"
+          >
+            {isSubmitting ? "Creating Account & Sending Email..." : "Sign Up"}
+          </button>
+        </form>
+
+        {message && (
+          <p className={`text-xs text-center font-medium p-3 rounded-xl ${message.includes("success") ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-pink-50 text-pink-700 border border-pink-200"}`}>
+            {message}
+          </p>
+        )}
+
+        <div className="text-center pt-2">
+          <p className="text-xs text-gray-500">
+            Already have an account?{" "}
+            <Link href="/login" className="text-pink-600 font-bold hover:underline">
+              Log In
+            </Link>
+          </p>
         </div>
-      </main>
-    </div>
+      </div>
+    </main>
   );
 }
