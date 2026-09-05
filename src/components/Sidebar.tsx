@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { LogOut } from "lucide-react";
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const [activeAlias, setActiveAlias] = useState("Teacher");
 
   useEffect(() => {
@@ -29,6 +31,11 @@ export default function Sidebar() {
 
     loadTeacherProfile();
   }, []);
+
+  async function handleSignOut() {
+    await supabase.auth.signOut();
+    router.push("/login");
+  }
 
   return (
     <aside className="w-64 min-h-screen bg-[#6b0f3b] text-white p-5 flex flex-col justify-between">
@@ -106,6 +113,17 @@ export default function Sidebar() {
             📊 Reports
           </Link>
         </nav>
+      </div>
+
+      {/* Sign Out Button pinned at the bottom */}
+      <div className="pt-4 border-t border-pink-900/50">
+        <button
+          onClick={handleSignOut}
+          className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-pink-200 hover:bg-pink-800 hover:text-white transition cursor-pointer font-medium"
+        >
+          <LogOut size={16} />
+          <span>Sign Out</span>
+        </button>
       </div>
     </aside>
   );
