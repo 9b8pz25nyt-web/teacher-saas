@@ -103,7 +103,6 @@ export default function StudentDetailsPage({
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
   const [homeworkFile, setHomeworkFile] = useState<File | null>(null);
 
-  // Auto-open modal if redirected with action=log_lesson
   useEffect(() => {
     const action = searchParams.get("action");
     const dateParam = searchParams.get("date");
@@ -212,7 +211,6 @@ export default function StudentDetailsPage({
     fetchStudentData();
   }, [fetchStudentData]);
 
-  // Generate QR code for Student Portal
   useEffect(() => {
     if (student?.access_token) {
       const portal = `${window.location.origin}/portal/${student.access_token}`;
@@ -448,7 +446,9 @@ export default function StudentDetailsPage({
 
       if (reportError) throw reportError;
 
-      const newCompletedCount = (student.classes_completed || 0) + 1;
+      const currentCompleted = student.classes_completed || 0;
+      const newCompletedCount = currentCompleted + 1;
+
       await supabase
         .from("students")
         .update({ classes_completed: newCompletedCount })
@@ -491,7 +491,6 @@ export default function StudentDetailsPage({
     setTimeout(() => setCopiedPortal(false), 2000);
   }
 
-  // Safe PDF Exporter
   async function downloadRenewalPdf() {
     if (!renewalPdfRef.current) return;
     setIsGeneratingPdf(true);
@@ -522,9 +521,11 @@ export default function StudentDetailsPage({
     }
   }
 
+  const combinedTotalClasses = Number(student?.classes_included || 5) + Number(student?.free_classes || 1);
+
   function handleCopyRenewalNoticeText() {
     const remaining = Math.max(
-      (student?.classes_included || 0) - (student?.classes_completed || 0),
+      combinedTotalClasses - (student?.classes_completed || 0),
       0
     );
     const portalUrl = student?.access_token
@@ -549,14 +550,14 @@ Dear ${student?.name || "Parent"},
 
 I hope you are having a wonderful week!
 
-This is a gentle update regarding ${student?.name}'s English learning package. We have completed ${student?.classes_completed || 0} out of ${student?.classes_included || 0} scheduled sessions, with only ${remaining} class${remaining === 1 ? "" : "es"} remaining in the current cycle.
+This is a gentle update regarding ${student?.name}'s English learning package. We have completed ${student?.classes_completed || 0} out of ${combinedTotalClasses} scheduled sessions, with only ${remaining} class${remaining === 1 ? "" : "es"} remaining in the current cycle.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📋 RENEWAL & PACKAGE DETAILS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 • Student: ${student?.name}
 • Course Material: ${assignedBook?.title || "Custom Curriculum"}
-• Upcoming Package: ${student?.classes_included || 30} Sessions (${student?.class_duration || 40} mins / class)
+• Upcoming Package: ${combinedTotalClasses} Sessions (${student?.class_duration || 40} mins / class)
 • Schedule: ${scheduleSummary}
 • Renewal Fee: ${currencyObj?.symbol || ""}${Number(student?.payment_amount || 0).toLocaleString()} ${student?.payment_currency || "PHP"}${student?.php_equivalent ? ` (≈ ₱${Number(student?.php_equivalent || 0).toLocaleString()} PHP)` : ""}
 
@@ -589,12 +590,12 @@ ${currentTeacherAlias}`;
     (b) => b.id === (student.assigned_book_id || student.book_id)
   );
   const remainingCount = Math.max(
-    (student.classes_included || 0) - (student.classes_completed || 0),
+    combinedTotalClasses - (student.classes_completed || 0),
     0
   );
   const progressPercent = Math.min(
     Math.round(
-      ((student.classes_completed || 0) / (student.classes_included || 1)) * 100
+      ((student.classes_completed || 0) / (combinedTotalClasses || 1)) * 100
     ),
     100
   );
@@ -1073,7 +1074,7 @@ ${currentTeacherAlias}`;
                     Dear <strong>{student?.name || "Parent"}</strong>,<br />
                     This is a gentle update regarding your English learning cycle. We have completed{" "}
                     <strong>{student?.classes_completed || 0}</strong> out of{" "}
-                    <strong>{student?.classes_included || 0}</strong> scheduled sessions, with only{" "}
+                    <strong>{combinedTotalClasses}</strong> scheduled sessions, with only{" "}
                     <strong style={{ color: "#db2777" }}>{remainingCount} class{remainingCount === 1 ? "" : "es"} remaining</strong>.
                   </p>
                 </div>
@@ -1105,15 +1106,8 @@ ${currentTeacherAlias}`;
                     >
                       Upcoming Package
                     </p>
-                    <p
-                      style={{
-                        fontWeight: "bold",
-                        color: "#1f2937",
-                        fontSize: "14px",
-                        margin: "0 0 2px 0",
-                      }}
-                    >
-                      {student?.classes_included || 30} Sessions
+                    <p style={{ fontWeight: "bold", color: "#1f2937", fontSize: "14px", margin: "0 0 2px 0" }}>
+                      {combinedTotalClasses} Sessions
                     </p>
                     <p
                       style={{

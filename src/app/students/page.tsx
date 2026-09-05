@@ -27,7 +27,10 @@ export default function StudentsPage() {
   const [paymentAmount, setPaymentAmount] = useState("");
   const [phpEquivalent, setPhpEquivalent] = useState("");
   const [classesIncluded, setClassesIncluded] = useState("30");
+  const [freeClasses, setFreeClasses] = useState("0");
   const [classesCompleted, setClassesCompleted] = useState("0");
+  const [contractStartDate, setContractStartDate] = useState("");
+  const [contractEndDate, setContractEndDate] = useState("");
   const [classDuration, setClassDuration] = useState("40");
   const [customDuration, setCustomDuration] = useState("");
   const [paymentStatus, setPaymentStatus] = useState("Active");
@@ -51,6 +54,21 @@ export default function StudentsPage() {
     }
   }
 
+  function calculateEndDate(startDateStr: string, included: string, free: string) {
+    if (!startDateStr) return;
+    
+    const totalClasses = (Number(included) || 0) + (Number(free) || 0);
+    if (totalClasses <= 0) return;
+
+    // Baseline estimation of 2 classes per week
+    const estimatedWeeks = Math.ceil(totalClasses / 2); 
+    
+    const startDate = new Date(startDateStr);
+    startDate.setDate(startDate.getDate() + estimatedWeeks * 7);
+    
+    setContractEndDate(startDate.toISOString().split("T")[0]);
+  }
+
   function resetForm() {
     setName("");
     setTeacherAlias(teacherAliases[0] || "Teacher Gabi");
@@ -64,7 +82,10 @@ export default function StudentsPage() {
     setPaymentAmount("");
     setPhpEquivalent("");
     setClassesIncluded("30");
+    setFreeClasses("0");
     setClassesCompleted("0");
+    setContractStartDate("");
+    setContractEndDate("");
     setClassDuration("40");
     setCustomDuration("");
     setPaymentStatus("Active");
@@ -134,7 +155,10 @@ export default function StudentsPage() {
       payment_amount: Number(paymentAmount.replace(/,/g, "")),
       php_equivalent: phpEquivalent ? Number(phpEquivalent.replace(/,/g, "")) : null,
       classes_included: Number(classesIncluded) || 0,
+      free_classes: Number(freeClasses) || 0,
       classes_completed: Number(classesCompleted) || 0,
+      contract_start_date: contractStartDate || null,
+      contract_end_date: contractEndDate || null,
       class_duration: Number(duration) || 40,
       payment_status: paymentStatus,
       notes: notes.trim() || null,
@@ -185,7 +209,7 @@ export default function StudentsPage() {
                 <div className="flex justify-between">
                   <span className="text-gray-500">Package:</span>
                   <span className="font-bold text-gray-800">
-                    {student.classes_included || 30} Classes ({student.class_duration || 40}m)
+                    {student.classes_included || 30} {student.free_classes ? `(+${student.free_classes} free)` : ""} Classes ({student.class_duration || 40}m)
                   </span>
                 </div>
                 <div className="flex justify-between font-medium">
@@ -382,10 +406,31 @@ export default function StudentsPage() {
                     type="number"
                     className="input w-full text-xs"
                     value={classesIncluded}
-                    onChange={(e) => setClassesIncluded(e.target.value)}
+                    onChange={(e) => {
+                      setClassesIncluded(e.target.value);
+                      calculateEndDate(contractStartDate, e.target.value, freeClasses);
+                    }}
                   />
                 </div>
 
+                <div>
+                  <label className="block mb-1 text-xs font-semibold text-gray-700">
+                    Free Classes
+                  </label>
+                  <input
+                    type="number"
+                    placeholder="0"
+                    className="input w-full text-xs"
+                    value={freeClasses}
+                    onChange={(e) => {
+                      setFreeClasses(e.target.value);
+                      calculateEndDate(contractStartDate, classesIncluded, e.target.value);
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3">
                 <div>
                   <label className="block mb-1 text-xs font-semibold text-gray-700">
                     Classes Completed
@@ -395,6 +440,35 @@ export default function StudentsPage() {
                     className="input w-full text-xs"
                     value={classesCompleted}
                     onChange={(e) => setClassesCompleted(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* Contract Dates */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block mb-1 text-xs font-semibold text-gray-700">
+                    Contract Start Date
+                  </label>
+                  <input
+                    type="date"
+                    className="input w-full text-xs"
+                    value={contractStartDate}
+                    onChange={(e) => {
+                      setContractStartDate(e.target.value);
+                      calculateEndDate(e.target.value, classesIncluded, freeClasses);
+                    }}
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1 text-xs font-semibold text-gray-700">
+                    Contract End Date (Auto-calculated)
+                  </label>
+                  <input
+                    type="date"
+                    className="input w-full text-xs bg-gray-50"
+                    value={contractEndDate}
+                    onChange={(e) => setContractEndDate(e.target.value)}
                   />
                 </div>
               </div>

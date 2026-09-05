@@ -84,7 +84,7 @@ export default function ReportsPage() {
       ? monthlyTarget * 12
       : monthlyTarget;
 
-  // Breakdown per student with fee deductions
+ // Breakdown per student incorporating free classes (0 income) vs regular paid classes
   const studentBreakdown = students.map((s) => {
     const studentLessons = lessons.filter((l) => l.student_id === s.id);
     const studentPayments = payments.filter((p) => p.student_id === s.id && p.payment_status === "Paid");
@@ -95,16 +95,23 @@ export default function ReportsPage() {
     );
 
     const completedClasses = Number(s.classes_completed || studentLessons.length || 0);
-    const totalClasses = Number(s.classes_included || 30);
+    const freeClassesCount = Number(s.free_classes || 0);
+    const regularClassesCount = Number(s.classes_included || 30);
     const grossPackagePhp = Number(s.php_equivalent || 0);
 
-    const pricePerClassGross = totalClasses > 0 ? grossPackagePhp / totalClasses : 0;
-    const realizedGrossPhp = Math.round(completedClasses * pricePerClassGross);
+    // Free classes yield 0 value; gross price per class is distributed across regular paid classes only
+    const pricePerRegularClass = regularClassesCount > 0 ? grossPackagePhp / regularClassesCount : 0;
+
+    // Determine how many free vs regular classes have been completed
+    const completedFree = Math.min(completedClasses, freeClassesCount);
+    const completedRegular = Math.max(completedClasses - freeClassesCount, 0);
+
+    const realizedGrossPhp = Math.round(completedRegular * pricePerRegularClass);
     const unrealizedGrossPhp = Math.max(0, grossPackagePhp - realizedGrossPhp);
 
     const netPackagePhp = Math.max(0, grossPackagePhp - totalFeesForStudent);
-    const pricePerClassNet = totalClasses > 0 ? netPackagePhp / totalClasses : 0;
-    const realizedNetPhp = Math.round(completedClasses * pricePerClassNet);
+    const pricePerRegularNet = regularClassesCount > 0 ? netPackagePhp / regularClassesCount : 0;
+    const realizedNetPhp = Math.round(completedRegular * pricePerRegularNet);
     const unrealizedNetPhp = Math.max(0, netPackagePhp - realizedNetPhp);
 
     const minutesPerClass = Number(s.class_duration || 40);
@@ -113,7 +120,9 @@ export default function ReportsPage() {
     return {
       ...s,
       completedClasses,
-      totalClasses,
+      completedFree,
+      completedRegular,
+      totalClasses: freeClassesCount + regularClassesCount,
       grossPackagePhp,
       totalFeesForStudent,
       realizedGrossPhp,

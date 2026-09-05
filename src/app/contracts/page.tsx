@@ -177,7 +177,7 @@ export default function ContractsPage() {
     const text =
       `🌟 Welcome to Class with ${teacherName}! 🌟\n\n` +
       `👤 Student: ${student.name}\n` +
-      `📚 Package: ${student.classes_included || 30} Classes (${student.class_duration || 40} mins each)\n` +
+      `📚 Package: ${Number(student?.classes_included || 5) + Number(student?.free_classes || 1)} Classes (${student?.class_duration || 40} mins each)\n` +
       `🗓 Schedule: ${sched}\n` +
       `💻 Classroom Platform: ${classroomPlatform}\n` +
       `🔗 Direct Class Link: ${activeLink}\n` +
@@ -376,7 +376,7 @@ export default function ContractsPage() {
                   <div style={{ backgroundColor: "#f9fafb", border: "1px solid #f3f4f6", padding: "12px", borderRadius: "12px" }}>
                     <p style={{ fontSize: "10px", textTransform: "uppercase", fontWeight: "bold", color: "#9ca3af", margin: "0 0 4px 0" }}>Class Package</p>
                     <p style={{ fontWeight: "bold", color: "#1f2937", fontSize: "14px", margin: "0 0 2px 0" }}>
-                      {selectedStudentForWelcome.classes_included || 30} Sessions
+                      {Number(selectedStudentForWelcome?.classes_included || 5) + Number(selectedStudentForWelcome?.free_classes || 1)} Sessions
                     </p>
                     <p style={{ fontSize: "10px", color: "#db2777", fontWeight: "600", margin: 0 }}>
                       {selectedStudentForWelcome.class_duration || 40} minutes / class
@@ -591,8 +591,8 @@ export default function ContractsPage() {
                   <div className="flex items-start justify-between gap-4">
                     <div className="space-y-1 flex-1">
                       <h4 style={{ fontWeight: "bold", color: "#111827", margin: "0 0 4px 0" }}>1. Package & Student Learning Portal</h4>
-                      <p style={{ color: "#4b5563", margin: "0 0 3px 0" }}>
-                        • <strong>Total Package:</strong> {selectedStudentForAgreement.classes_included || 30} Sessions ({selectedStudentForAgreement.class_duration || 40} minutes per class)
+                     <p style={{ color: "#4b5563", margin: "0 0 3px 0" }}>
+                        • <strong>Total Package:</strong> {Number(selectedStudentForAgreement?.classes_included || 5) + Number(selectedStudentForAgreement?.free_classes || 1)} Sessions ({selectedStudentForAgreement.class_duration || 40} minutes per class)
                       </p>
                       <p style={{ color: "#4b5563", margin: "0 0 3px 0" }}>
                         • <strong>Class Schedule:</strong> {getStudentSchedules(selectedStudentForAgreement)}
