@@ -70,7 +70,9 @@ export default function ClassEvent({
       }
 
       if (onStatusUpdate) onStatusUpdate();
-      router.push(`/students/${studentId}?action=log_lesson&date=${dateString}`);
+      
+      // Redirect to the student profile with the action parameter to pop open the lesson log form
+      window.location.assign(`/students/${studentId}?action=log_lesson&date=${dateString}`);
     } catch (err: any) {
       console.error("Error marking present:", err);
     } finally {
