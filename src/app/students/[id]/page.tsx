@@ -83,11 +83,15 @@ export default function StudentDetailsPage({
   const [notes, setNotes] = useState("");
   const [savingBook, setSavingBook] = useState(false);
 const [editingReportId, setEditingReportId] = useState<string | null>(null);
+const [reportBookId, setReportBookId] = useState("");
+const [selectedChapterIndex, setSelectedChapterIndex] = useState<string>("");
+const [isChapterComplete, setIsChapterComplete] = useState(false);
 
 function handleOpenEditReport(rep: any) {
   setEditingReportId(rep.id);
   setLessonTitle(rep.lesson_title || "");
   setReportDate(rep.report_date || new Date().toISOString().split("T")[0]);
+  setReportBookId(rep.book_id || "");
   setVocabulary(rep.vocabulary || "");
   setStrengths(rep.strengths || "");
   setImprovements(rep.improvements || "");
@@ -103,6 +107,8 @@ function handleOpenEditReport(rep: any) {
   const [scheduleDuration, setScheduleDuration] = useState("40");
   const [scheduleTopic, setScheduleTopic] = useState("Regular Class");
   const [isSavingSchedule, setIsSavingSchedule] = useState(false);
+  const [startPage, setStartPage] = useState("");
+const [endPage, setEndPage] = useState("");
 
 // Report Modal State initialized instantly from window URL search params
   const [isReportModalOpen, setIsReportModalOpen] = useState(() => {
@@ -224,7 +230,7 @@ useEffect(() => {
             .order("report_date", { ascending: false }),
           supabase
             .from("student_books")
-            .select("book_id, books(*)")
+            .select("*")
             .eq("student_id", studentId),
         ]);
 
@@ -232,8 +238,18 @@ useEffect(() => {
       if (bks) setBooks(bks);
       if (repList) setReports(repList);
       if (studentBks) {
-        setStudentBooks(studentBks);
         setSelectedBookIds(studentBks.map((item) => item.book_id));
+        
+        if (studentBks.length > 0 && bks) {
+          const matchedBooks = studentBks.map((item) => ({
+            book_id: item.book_id,
+            completed_chapters: item.completed_chapters || [],
+            books: bks.find((b: any) => b.id === item.book_id),
+          }));
+          setStudentBooks(matchedBooks);
+        } else {
+          setStudentBooks([]);
+        }
       }
     } catch (err) {
       console.error("Error fetching student details:", err);
@@ -311,14 +327,30 @@ useEffect(() => {
         return;
       }
 
-      // Update multiple books association in student_books table
-      await supabase.from("student_books").delete().eq("student_id", studentId);
+     // Update multiple books association in student_books table with error catching
+      const { error: deleteError } = await supabase
+        .from("student_books")
+        .delete()
+        .eq("student_id", studentId);
+
+      if (deleteError) {
+        console.error("Error deleting old student_books:", deleteError);
+      }
+
       if (selectedBookIds.length > 0) {
         const rows = selectedBookIds.map((bookId) => ({
           student_id: studentId,
           book_id: bookId,
         }));
-        await supabase.from("student_books").insert(rows);
+        const { error: bookInsertError } = await supabase
+          .from("student_books")
+          .insert(rows);
+
+        if (bookInsertError) {
+          console.error("Error inserting student_books:", bookInsertError);
+          alert("Failed to save books: " + bookInsertError.message);
+          return;
+        }
       }
 
       setIsEditModalOpen(false);
@@ -452,6 +484,7 @@ async function handleAddReport(e: React.FormEvent) {
     const payload: any = {
       lesson_title: lessonTitle.trim(),
       report_date: reportDate,
+      book_id: reportBookId || null,
       vocabulary: vocabulary.trim() || null,
       strengths: strengths.trim() || null,
       improvements: improvements.trim() || null,
@@ -459,12 +492,17 @@ async function handleAddReport(e: React.FormEvent) {
       teacher_alias: student?.teacher_alias || teacherAlias || "Teacher Gabi",
     };
 
+    const selectedBookItem = studentBooks.find((item: any) => item.books?.id === reportBookId);
+    if (selectedBookItem?.books?.book_type === "pages") {
+      payload.start_page = startPage ? Number(startPage) : null;
+      payload.end_page = endPage ? Number(endPage) : null;
+    }
+
     if (uploadedFileUrl) {
       payload.homework_file_url = uploadedFileUrl;
     }
 
     if (editingReportId) {
-      // Update existing report
       const { error: updateError } = await supabase
         .from("class_reports")
         .update(payload)
@@ -472,7 +510,6 @@ async function handleAddReport(e: React.FormEvent) {
 
       if (updateError) throw updateError;
     } else {
-      // Insert new report & increment completed classes
       payload.student_id = studentId;
       payload.teacher_id = user?.id;
 
@@ -481,6 +518,22 @@ async function handleAddReport(e: React.FormEvent) {
         .insert(payload);
 
       if (reportError) throw reportError;
+
+      // Handle Chapter Completion tracking in student_books
+      if (reportBookId && selectedChapterIndex !== "" && isChapterComplete) {
+        const currentCompletedChapters = selectedBookItem?.completed_chapters || [];
+        const chapterIdxNum = Number(selectedChapterIndex);
+        
+        if (!currentCompletedChapters.includes(chapterIdxNum)) {
+          const updatedChapters = [...currentCompletedChapters, chapterIdxNum];
+          
+          await supabase
+            .from("student_books")
+            .update({ completed_chapters: updatedChapters })
+            .eq("student_id", studentId)
+            .eq("book_id", reportBookId);
+        }
+      }
 
       const currentCompleted = student.classes_completed || 0;
       await supabase
@@ -497,6 +550,8 @@ async function handleAddReport(e: React.FormEvent) {
     setImprovements("");
     setHomework("");
     setHomeworkFile(null);
+    setSelectedChapterIndex("");
+    setIsChapterComplete(false);
     setIsReportModalOpen(false);
     fetchStudentData();
   } catch (err: any) {
@@ -735,27 +790,38 @@ async function handleAddReport(e: React.FormEvent) {
           </div>
           <div className="space-y-2 max-h-[160px] overflow-y-auto">
             {studentBooks.length > 0 ? (
-              studentBooks.map((item, index) => {
-                const book = item.books;
-                const totalBookLessons = book?.total_lessons || 20;
-                const completedForBook = student.classes_completed || 0;
-                const bookProgress = Math.min(100, Math.round((completedForBook / totalBookLessons) * 100));
+  studentBooks.map((item, index) => {
+    const book = item.books;
+    const isPageBased = book?.book_type === "pages";
+    
+    let bookProgress = 0;
+    if (isPageBased) {
+      // Find the highest end page reached by looking through reports for this book
+      const bookReports = reports.filter((r) => r.book_id === book?.id);
+      const maxPageReached = bookReports.reduce((max, r) => Math.max(max, r.end_page || 0), 0);
+      const totalPages = book?.total_pages || 1;
+      bookProgress = Math.min(100, Math.round((maxPageReached / totalPages) * 100));
+    } else {
+      const totalChapters = book?.chapters?.length || 1;
+      const completedChapters = item?.completed_chapters?.length || 0;
+      bookProgress = Math.min(100, Math.round((completedChapters / totalChapters) * 100));
+    }
 
-                return (
-                  <div key={book?.id || index} className="p-2.5 bg-pink-50/50 rounded-xl border border-pink-100 space-y-1">
-                    <div className="flex justify-between items-center text-xs font-bold text-pink-950">
-                      <span>📖 {book?.title || "Book"}</span>
-                      <span className="text-pink-600 text-[10px]">{bookProgress}%</span>
-                    </div>
-                    <div className="w-full bg-pink-100 rounded-full h-1.5 overflow-hidden">
-                      <div className="bg-pink-600 h-1.5 rounded-full" style={{ width: `${bookProgress}%` }} />
-                    </div>
-                  </div>
-                );
-              })
-            ) : (
-              <p className="text-xs text-gray-400 italic">No books assigned yet.</p>
-            )}
+    return (
+      <div key={book?.id || index} className="p-2.5 bg-pink-50/50 rounded-xl border border-pink-100 space-y-1">
+        <div className="flex justify-between items-center text-xs font-bold text-pink-950">
+          <span>📖 {book?.title || "Book"}</span>
+          <span className="text-pink-600 text-[10px]">{bookProgress}%</span>
+        </div>
+        <div className="w-full bg-pink-100 rounded-full h-1.5 overflow-hidden">
+          <div className="bg-pink-600 h-1.5 rounded-full transition-all duration-300" style={{ width: `${bookProgress}%` }} />
+        </div>
+      </div>
+    );
+  })
+) : (
+  <p className="text-xs text-gray-400 italic">No books assigned yet.</p>
+)}
           </div>
         </div>
 
@@ -1002,6 +1068,105 @@ async function handleAddReport(e: React.FormEvent) {
             </div>
 
             <form onSubmit={handleAddReport} className="space-y-3.5 text-xs">
+            <div className="grid grid-cols-1 gap-3">
+                <div>
+                  <label className="block mb-1 font-semibold text-pink-700">
+                    Select Book / Curriculum 📖
+                  </label>
+                  <select
+                    className="input w-full text-xs bg-white cursor-pointer"
+                    value={reportBookId}
+                    onChange={(e) => {
+                      setReportBookId(e.target.value);
+                      setSelectedChapterIndex("");
+                    }}
+                  >
+                    <option value="">-- Select Book --</option>
+                    {studentBooks.map((item: any) => (
+                      <option key={item.books?.id} value={item.books?.id}>
+                        {item.books?.title} {item.books?.level ? `(${item.books.level})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {reportBookId && (() => {
+  const currentBookItem = studentBooks.find((item: any) => item.books?.id === reportBookId);
+  const book = currentBookItem?.books;
+  const isPageBased = book?.book_type === "pages";
+
+  return isPageBased ? (
+    <div className="p-3 bg-pink-50/50 rounded-xl border border-pink-100 space-y-3">
+      <label className="block font-semibold text-pink-900 text-xs">
+        Page Range Covered 📄 (Total Book Pages: {book.total_pages || "N/A"})
+      </label>
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="block text-[10px] text-gray-500 mb-0.5">Start Page</label>
+          <input
+            type="number"
+            min="1"
+            max={book.total_pages || 999}
+            className="input w-full text-xs bg-white"
+            value={startPage}
+            onChange={(e) => setStartPage(e.target.value)}
+            placeholder="e.g. 1"
+          />
+        </div>
+        <div>
+          <label className="block text-[10px] text-gray-500 mb-0.5">End Page</label>
+          <input
+            type="number"
+            min="1"
+            max={book.total_pages || 999}
+            className="input w-full text-xs bg-white"
+            value={endPage}
+            onChange={(e) => setEndPage(e.target.value)}
+            placeholder="e.g. 5"
+          />
+        </div>
+      </div>
+    </div>
+  ) : (
+    <div className="p-3 bg-pink-50/50 rounded-xl border border-pink-100 space-y-2">
+      <label className="block mb-1 font-semibold text-pink-900 text-xs">
+        Chapter / Lesson Focus 📑
+      </label>
+      <select
+        className="input w-full text-xs bg-white cursor-pointer"
+        value={selectedChapterIndex}
+        onChange={(e) => setSelectedChapterIndex(e.target.value)}
+      >
+        <option value="">-- Select Chapter --</option>
+        {(() => {
+          const chapters = book?.chapters || [];
+          const completedList = currentBookItem?.completed_chapters || [];
+
+          return chapters
+            .map((chap: any, idx: number) => ({ ...chap, index: idx }))
+            .filter((chap: any) => !completedList.includes(chap.index))
+            .map((chap: any) => (
+              <option key={chap.index} value={chap.index}>
+                Chapter {chap.index + 1}: {chap.title || `Lesson ${chap.index + 1}`}
+              </option>
+            ));
+        })()}
+      </select>
+
+      <label className="flex items-center gap-2 cursor-pointer pt-1 text-xs text-pink-950 font-medium">
+        <input
+          type="checkbox"
+          checked={isChapterComplete}
+          onChange={(e) => setIsChapterComplete(e.target.checked)}
+          className="rounded border-pink-300 text-pink-600 focus:ring-pink-500 w-4 h-4"
+        />
+        <span>Mark this chapter as fully completed 🎯</span>
+      </label>
+    </div>
+  );
+})()}
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block mb-1 font-semibold text-gray-700">
@@ -1193,13 +1358,17 @@ async function handleAddReport(e: React.FormEvent) {
                     }}
                   >
                     <option value="">+ Add a book...</option>
-                    {books
-                      .filter((b) => !selectedBookIds.includes(b.id))
-                      .map((b) => (
-                        <option key={b.id} value={b.id}>
-                          {b.title} {b.level ? `(${b.level})` : ""}
-                        </option>
-                      ))}
+                    {books && books.length > 0 ? (
+                      books
+                        .filter((b) => !selectedBookIds.includes(b.id))
+                        .map((b) => (
+                          <option key={b.id} value={b.id}>
+                            {b.title} {b.level ? `(${b.level})` : ""}
+                          </option>
+                        ))
+                    ) : (
+                      <option disabled value="">No books found in database</option>
+                    )}
                   </select>
 
                   {/* Selected Books Tags */}

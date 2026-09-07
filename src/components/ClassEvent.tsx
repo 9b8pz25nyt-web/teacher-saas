@@ -121,21 +121,44 @@ export default function ClassEvent({
     }
   }
 
-  async function handleRedoStatus() {
+ async function handleRedoStatus() {
     if (isSubmitting || !studentId) return;
     setIsSubmitting(true);
     setCurrentStatus("Scheduled");
 
     try {
+      // 1. Delete the lesson record
       await supabase
         .from("lessons")
         .delete()
         .eq("student_id", studentId)
         .eq("lesson_date", dateString);
 
+      // 2. Delete the associated class report (lesson log) for this date
+      await supabase
+        .from("class_reports")
+        .delete()
+        .eq("student_id", studentId)
+        .eq("report_date", dateString);
+
+      // 3. Decrement the student's completed classes count safely
+      const { data: studentData } = await supabase
+        .from("students")
+        .select("classes_completed")
+        .eq("id", studentId)
+        .single();
+
+      if (studentData) {
+        const newCompleted = Math.max((studentData.classes_completed || 1) - 1, 0);
+        await supabase
+          .from("students")
+          .update({ classes_completed: newCompleted })
+          .eq("id", studentId);
+      }
+
       if (onStatusUpdate) onStatusUpdate();
     } catch (err: any) {
-      console.error("Error resetting status:", err);
+      console.error("Error resetting status and reports:", err);
     } finally {
       setIsSubmitting(false);
     }
