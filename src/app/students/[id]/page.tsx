@@ -243,19 +243,39 @@ export default function StudentDetailsPage({
       if (scheds) setSchedules(scheds);
       if (bks) setBooks(bks);
       if (repList) setReports(repList);
-      if (studentBks) {
+      
+      if (studentBks && studentBks.length > 0 && bks) {
+        const matchedBooks = studentBks.map((item) => ({
+          book_id: item.book_id,
+          completed_chapters: item.completed_chapters || [],
+          books: bks.find((b: any) => b.id === item.book_id),
+        }));
+        setStudentBooks(matchedBooks);
+      } else {
+        // Fallback: if no student_books rows exist yet, show all available books or allow assigning them
+        setStudentBooks(bks ? bks.map(b => ({ book_id: b.id, completed_chapters: [], books: b })) : []);
+      }
+
+      if (scheds) setSchedules(scheds);
+     if (bks) {
+        setBooks(bks);
+      }
+
+      if (studentBks && studentBks.length > 0 && bks) {
         setSelectedBookIds(studentBks.map((item) => item.book_id));
-        
-        if (studentBks.length > 0 && bks) {
-          const matchedBooks = studentBks.map((item) => ({
-            book_id: item.book_id,
-            completed_chapters: item.completed_chapters || [],
-            books: bks.find((b: any) => b.id === item.book_id),
-          }));
-          setStudentBooks(matchedBooks);
-        } else {
-          setStudentBooks([]);
-        }
+        const matchedBooks = studentBks.map((item) => ({
+          book_id: item.book_id,
+          completed_chapters: item.completed_chapters || [],
+          books: bks.find((b: any) => b.id === item.book_id),
+        }));
+        setStudentBooks(matchedBooks);
+      } else if (bks) {
+        // Fallback: if no student_books rows exist yet, make all books available to select
+        setStudentBooks(bks.map((b) => ({
+          book_id: b.id,
+          completed_chapters: [],
+          books: b,
+        })));
       }
     } catch (err) {
       console.error("Error fetching student details:", err);

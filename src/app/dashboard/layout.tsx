@@ -1,13 +1,13 @@
-export default function RootLayout({
+export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body>
-        <main className="min-h-screen">{children}</main>
-      </body>
-    </html>
+    <div className="flex min-h-screen bg-[#fff7fb]">
+      <main className="flex-1 overflow-y-auto">
+        {children}
+      </main>
+    </div>
   );
 }
