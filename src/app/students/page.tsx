@@ -60,9 +60,7 @@ export default function StudentsPage() {
     const totalClasses = (Number(included) || 0) + (Number(free) || 0);
     if (totalClasses <= 0) return;
 
-    // Baseline estimation of 2 classes per week
     const estimatedWeeks = Math.ceil(totalClasses / 2); 
-    
     const startDate = new Date(startDateStr);
     startDate.setDate(startDate.getDate() + estimatedWeeks * 7);
     
@@ -99,7 +97,6 @@ export default function StudentsPage() {
 
     if (!user) return;
 
-    // Fetch Teacher Profile Aliases
     const { data: profile } = await supabase
       .from("profiles")
       .select("teacher_aliases")
@@ -111,7 +108,6 @@ export default function StudentsPage() {
       setTeacherAlias(profile.teacher_aliases[0]);
     }
 
-    // Fetch Students
     const { data: studentList, error } = await supabase
       .from("students")
       .select("*")
@@ -140,33 +136,57 @@ export default function StudentsPage() {
     if (!user) return;
 
     const duration = classDuration === "" ? customDuration : classDuration;
+    const cleanAmount = Number(paymentAmount.replace(/,/g, ""));
+    const cleanPhpEquivalent = phpEquivalent ? Number(phpEquivalent.replace(/,/g, "")) : null;
 
-    const { error } = await supabase.from("students").insert({
-      teacher_id: user.id,
-      name,
-      teacher_alias: teacherAlias || "Teacher Gabi",
-      meeting_link: meetingLink.trim() || null,
-      email: email.trim() || null,
-      phone: phone.trim() || null,
-      age: age ? Number(age) : null,
-      country,
-      payment_type: paymentType,
-      payment_currency: paymentCurrency,
-      payment_amount: Number(paymentAmount.replace(/,/g, "")),
-      php_equivalent: phpEquivalent ? Number(phpEquivalent.replace(/,/g, "")) : null,
-      classes_included: Number(classesIncluded) || 0,
-      free_classes: Number(freeClasses) || 0,
-      classes_completed: Number(classesCompleted) || 0,
-      contract_start_date: contractStartDate || null,
-      contract_end_date: contractEndDate || null,
-      class_duration: Number(duration) || 40,
-      payment_status: paymentStatus,
-      notes: notes.trim() || null,
+    // 1. Insert Student and return the newly created row ID
+    const { data: newStudent, error: studentError } = await supabase
+      .from("students")
+      .insert({
+        teacher_id: user.id,
+        name,
+        teacher_alias: teacherAlias || "Teacher Gabi",
+        meeting_link: meetingLink.trim() || null,
+        email: email.trim() || null,
+        phone: phone.trim() || null,
+        age: age ? Number(age) : null,
+        country,
+        payment_type: paymentType,
+        payment_currency: paymentCurrency,
+        payment_amount: cleanAmount,
+        php_equivalent: cleanPhpEquivalent,
+        classes_included: Number(classesIncluded) || 0,
+        free_classes: Number(freeClasses) || 0,
+        classes_completed: Number(classesCompleted) || 0,
+        contract_start_date: contractStartDate || null,
+        contract_end_date: contractEndDate || null,
+        class_duration: Number(duration) || 40,
+        payment_status: "Pending",
+        notes: notes.trim() || null,
+      })
+      .select()
+      .single();
+
+    if (studentError || !newStudent) {
+      alert(studentError?.message || "Failed to create student.");
+      return;
+    }
+
+    // 2. Automatically create a Pending payment entry with matching table schema
+    const { error: paymentError } = await supabase.from("payments").insert({
+      student_id: newStudent.id,
+      amount: cleanAmount,
+      currency: paymentCurrency,
+      php_equivalent: cleanPhpEquivalent || cleanAmount,
+      transfer_fee_php: 0,
+      payment_date: contractStartDate || new Date().toISOString().split("T")[0],
+      payment_method: "Bank Transfer",
+      payment_status: "Pending",
+      notes: "Automatic pending payment entry generated from new contract.",
     });
 
-    if (error) {
-      alert(error.message);
-      return;
+    if (paymentError) {
+      console.error("Failed to generate initial payment record:", paymentError);
     }
 
     setShowModal(false);
@@ -188,7 +208,6 @@ export default function StudentsPage() {
         </button>
       </div>
 
-      {/* Student Cards Grid */}
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
         {students.map((student: any) => (
           <Link key={student.id} href={`/students/${student.id}`}>
@@ -209,8 +228,8 @@ export default function StudentsPage() {
                 <div className="flex justify-between">
                   <span className="text-gray-500">Package:</span>
                   <span>
-  {student.classes_included || 5} {student.free_classes ? `(+${student.free_classes} free)` : ""} Classes ({student.class_duration || 40}m)
-</span>
+                    {student.classes_included || 5} {student.free_classes ? `(+${student.free_classes} free)` : ""} Classes ({student.class_duration || 40}m)
+                  </span>
                 </div>
                 <div className="flex justify-between font-medium">
                   <span className="text-gray-500">Rate:</span>
@@ -232,14 +251,12 @@ export default function StudentsPage() {
         ))}
       </div>
 
-      {/* Add Student Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto">
           <div className="card bg-white w-full max-w-xl max-h-[90vh] overflow-y-auto p-6 rounded-3xl shadow-xl space-y-4">
             <h2 className="text-2xl font-bold text-pink-600">Add Student</h2>
 
             <div className="space-y-4">
-              {/* Name & Teacher Alias */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
                   <label className="block mb-1 text-xs font-semibold text-gray-700">
@@ -271,7 +288,6 @@ export default function StudentsPage() {
                 </div>
               </div>
 
-              {/* Classroom Video Link */}
               <div>
                 <label className="block mb-1 text-xs font-semibold text-gray-700">
                   Classroom Video Link (Zoom / Meet URL)
@@ -284,7 +300,6 @@ export default function StudentsPage() {
                 />
               </div>
 
-              {/* Contact Information */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
                   <label className="block mb-1 text-xs font-semibold text-gray-700">Email</label>
@@ -318,7 +333,6 @@ export default function StudentsPage() {
                   />
                 </div>
 
-                {/* Country Selection */}
                 <div>
                   <label className="block mb-1 text-xs font-semibold text-gray-700">Country *</label>
                   <select
@@ -345,7 +359,6 @@ export default function StudentsPage() {
                 </div>
               </div>
 
-              {/* Currency & Amount */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block mb-1 text-xs font-semibold text-gray-700">Currency</label>
@@ -396,7 +409,6 @@ export default function StudentsPage() {
                 </div>
               )}
 
-              {/* Classes Tracking */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block mb-1 text-xs font-semibold text-gray-700">
@@ -444,7 +456,6 @@ export default function StudentsPage() {
                 </div>
               </div>
 
-              {/* Contract Dates */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block mb-1 text-xs font-semibold text-gray-700">
@@ -473,7 +484,6 @@ export default function StudentsPage() {
                 </div>
               </div>
 
-              {/* Duration & Payment Status */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block mb-1 text-xs font-semibold text-gray-700">
@@ -536,7 +546,6 @@ export default function StudentsPage() {
               />
             </div>
 
-            {/* Modal Actions */}
             <div className="flex justify-end gap-3 pt-4 border-t border-pink-100">
               <button
                 onClick={() => {

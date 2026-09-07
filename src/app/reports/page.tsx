@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase";
-import { currencies } from "@/constants/currencies";
 import {
   TrendingUp,
   DollarSign,
@@ -11,7 +10,6 @@ import {
   Edit2,
   Check,
   Download,
-  FileText,
   X,
   Building2,
   Plus,
@@ -25,6 +23,7 @@ export default function ReportsPage() {
   const [payments, setPayments] = useState<any[]>([]);
   const [expenses, setExpenses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [businessName, setBusinessName] = useState("Private ESL Tutoring Services");
 
   // Timeframe filter: 'weekly' | 'monthly' | 'annual'
   const [timeframe, setTimeframe] = useState<"weekly" | "monthly" | "annual">("monthly");
@@ -50,6 +49,22 @@ export default function ReportsPage() {
 
   const fetchData = useCallback(async () => {
     try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (user) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("business_name")
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        if (profile?.business_name) {
+          setBusinessName(profile.business_name);
+        }
+      }
+
       const [
         { data: studentsData },
         { data: lessonsData },
@@ -84,72 +99,55 @@ export default function ReportsPage() {
       ? monthlyTarget * 12
       : monthlyTarget;
 
- // Breakdown per student incorporating free classes (0 income) vs regular paid classes, excluding cancelled lessons
+  // Pure Cash-Basis Breakdown per student based on collected payments
   const studentBreakdown = students.map((s) => {
-    const studentLessons = lessons.filter(
-      (l) => l.student_id === s.id && l.status !== "Cancelled"
+    const studentPayments = payments.filter(
+      (p) => p.student_id === s.id && p.payment_status === "Paid"
     );
-    const studentPayments = payments.filter((p) => p.student_id === s.id && p.payment_status === "Paid");
+
+    const grossPackagePhp = studentPayments.reduce(
+      (acc, curr) => acc + (Number(curr.php_equivalent) || Number(curr.payment_amount) || 0),
+      0
+    );
 
     const totalFeesForStudent = studentPayments.reduce(
       (acc, curr) => acc + (Number(curr.transfer_fee_php) || 0),
       0
     );
 
-    const completedClasses = Number(s.classes_completed || studentLessons.length || 0);
-    const freeClassesCount = Number(s.free_classes || 0);
-    const regularClassesCount = Number(s.classes_included || 30);
-    const grossPackagePhp = Number(s.php_equivalent || 0);
-
-    // Free classes yield 0 value; gross price per class is distributed across regular paid classes only
-    const pricePerRegularClass = regularClassesCount > 0 ? grossPackagePhp / regularClassesCount : 0;
-
-    // Determine how many free vs regular classes have been completed
-    const completedFree = Math.min(completedClasses, freeClassesCount);
-    const completedRegular = Math.max(completedClasses - freeClassesCount, 0);
-
-    const realizedGrossPhp = Math.round(completedRegular * pricePerRegularClass);
-    const unrealizedGrossPhp = Math.max(0, grossPackagePhp - realizedGrossPhp);
-
     const netPackagePhp = Math.max(0, grossPackagePhp - totalFeesForStudent);
-    const pricePerRegularNet = regularClassesCount > 0 ? netPackagePhp / regularClassesCount : 0;
-    const realizedNetPhp = Math.round(completedRegular * pricePerRegularNet);
-    const unrealizedNetPhp = Math.max(0, netPackagePhp - realizedNetPhp);
 
+    const studentLessons = lessons.filter(
+      (l) => l.student_id === s.id && l.status !== "Cancelled"
+    );
+    const completedClasses = Number(s.classes_completed || studentLessons.length || 0);
     const minutesPerClass = Number(s.class_duration || 40);
     const totalHoursTaught = (completedClasses * minutesPerClass) / 60;
 
     return {
       ...s,
       completedClasses,
-      completedFree,
-      completedRegular,
-      totalClasses: freeClassesCount + regularClassesCount,
       grossPackagePhp,
       totalFeesForStudent,
-      realizedGrossPhp,
-      unrealizedGrossPhp,
       netPackagePhp,
-      realizedNetPhp,
-      unrealizedNetPhp,
       totalHoursTaught,
     };
   });
+
   // Operating Expenses (Internet, Zoom, Tools)
   const totalTelecomSoftwareExpense = expenses.reduce(
     (acc, curr) => acc + (Number(curr.amount_php) || 0),
     0
   );
 
-  // Aggregated Totals
-  const totalGrossRevenue = studentBreakdown.reduce((acc, s) => acc + s.realizedGrossPhp, 0);
+  // Aggregated Cash-Basis Totals
+  const totalGrossRevenue = studentBreakdown.reduce((acc, s) => acc + s.grossPackagePhp, 0);
   const totalTransferFees = studentBreakdown.reduce((acc, s) => acc + s.totalFeesForStudent, 0);
   const totalOperatingExpenses = totalTransferFees + totalTelecomSoftwareExpense;
   const totalNetOperatingIncome = Math.max(0, totalGrossRevenue - totalOperatingExpenses);
+  const totalContractCommitment = totalGrossRevenue;
 
-  const totalUnrealizedGross = studentBreakdown.reduce((acc, s) => acc + s.unrealizedGrossPhp, 0);
-  const totalContractCommitment = studentBreakdown.reduce((acc, s) => acc + s.grossPackagePhp, 0);
-
+  // Total hours taught across all students
   const totalHoursTaught = studentBreakdown.reduce((acc, s) => acc + s.totalHoursTaught, 0);
   const totalClassesTaught = studentBreakdown.reduce((acc, s) => acc + s.completedClasses, 0);
 
@@ -228,7 +226,7 @@ export default function ReportsPage() {
       const element = statementPdfRef.current;
       const opt = {
         margin: 10,
-        filename: `PFRS_Income_Statement_${timeframe.toUpperCase()}_${new Date().toISOString().split("T")[0]}.pdf`,
+        filename: `Cash_Basis_Income_Statement_${timeframe.toUpperCase()}_${new Date().toISOString().split("T")[0]}.pdf`,
         image: { type: "jpeg" as const, quality: 0.98 },
         html2canvas: { scale: 2, useCORS: true, backgroundColor: "#ffffff" },
         jsPDF: { unit: "mm" as const, format: "a4" as const, orientation: "portrait" as const },
@@ -251,7 +249,7 @@ export default function ReportsPage() {
           <div>
             <h1 className="text-3xl font-bold text-pink-600">Financial & Teaching Reports</h1>
             <p className="text-xs text-gray-500 mt-0.5">
-              Philippine Financial Reporting System (PFRS) income statement & operational expenses.
+              Cash-basis income statement & operational expenses for BIR compliance.
             </p>
           </div>
 
@@ -284,14 +282,14 @@ export default function ReportsPage() {
               <span>Add Expense</span>
             </button>
 
-            {/* Philippine Income Statement Modal Button */}
+            {/* Cash-Basis Income Statement Modal Button */}
             <button
               type="button"
               onClick={() => setShowIncomeStatementModal(true)}
               className="btn-primary text-xs flex items-center gap-1.5 cursor-pointer shadow-xs"
             >
               <Building2 size={15} />
-              <span>PFRS Income Statement</span>
+              <span>Cash Receipts Statement</span>
             </button>
           </div>
         </div>
@@ -376,7 +374,7 @@ export default function ReportsPage() {
                 <span className="text-xs font-medium text-gray-400">PHP</span>
               </h3>
               <p className="text-[10px] text-gray-400">
-                Gross: ₱{totalGrossRevenue.toLocaleString()} | Exp: ₱{totalOperatingExpenses.toLocaleString()}
+                Gross Collected: ₱{totalGrossRevenue.toLocaleString()} | Exp: ₱{totalOperatingExpenses.toLocaleString()}
               </p>
             </div>
             <span className="p-3 bg-pink-50 rounded-2xl text-pink-600">
@@ -419,96 +417,95 @@ export default function ReportsPage() {
           </div>
         </div>
 
-        {/* Operating Expenses Ledger (Telecommunications & Software) */}
-<div className="bg-white border border-pink-100 rounded-3xl shadow-xs overflow-hidden">
-  <div className="p-5 border-b border-pink-100 flex items-center justify-between">
-    <div className="flex items-center gap-2">
-      <span className="p-2 bg-pink-50 text-pink-600 rounded-xl">
-        <Wifi size={16} />
-      </span>
-      <div>
-        <h3 className="text-sm font-bold text-pink-950">Operating & Software Expenses</h3>
-        <p className="text-xs text-gray-500">Internet connection, Zoom Pro, and teaching tools</p>
-      </div>
-    </div>
-    
-    <div className="flex items-center gap-3">
-      {/* ADD EXPENSE BUTTON */}
-      <button
-        type="button"
-        onClick={() => setShowExpenseModal(true)}
-        className="px-3.5 py-1.5 bg-pink-600 hover:bg-pink-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
-      >
-        <Plus size={14} />
-        <span>Add Expense</span>
-      </button>
+        {/* Operating Expenses Ledger */}
+        <div className="bg-white border border-pink-100 rounded-3xl shadow-xs overflow-hidden">
+          <div className="p-5 border-b border-pink-100 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="p-2 bg-pink-50 text-pink-600 rounded-xl">
+                <Wifi size={16} />
+              </span>
+              <div>
+                <h3 className="text-sm font-bold text-pink-950">Operating & Software Expenses</h3>
+                <p className="text-xs text-gray-500">Internet connection, Zoom Pro, and teaching tools</p>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setShowExpenseModal(true)}
+                className="px-3.5 py-1.5 bg-pink-600 hover:bg-pink-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
+              >
+                <Plus size={14} />
+                <span>Add Expense</span>
+              </button>
 
-      <span className="text-xs font-bold text-rose-600 bg-rose-50 px-3 py-1.5 rounded-xl border border-rose-100">
-        Total Recorded: ₱{totalTelecomSoftwareExpense.toLocaleString()} PHP
-      </span>
-    </div>
-  </div>
+              <span className="text-xs font-bold text-rose-600 bg-rose-50 px-3 py-1.5 rounded-xl border border-rose-100">
+                Total Recorded: ₱{totalTelecomSoftwareExpense.toLocaleString()} PHP
+              </span>
+            </div>
+          </div>
 
-  {expenses.length === 0 ? (
-    <div className="p-8 text-center text-xs text-gray-400 space-y-3">
-      <p className="italic">No operating expenses recorded yet.</p>
-      <button
-        type="button"
-        onClick={() => setShowExpenseModal(true)}
-        className="inline-flex items-center gap-1 px-4 py-2 bg-pink-50 hover:bg-pink-100 text-pink-700 border border-pink-200 rounded-xl text-xs font-bold transition cursor-pointer"
-      >
-        <Plus size={14} />
-        <span>+ Log First Operating Expense</span>
-      </button>
-    </div>
-  ) : (
-    <div className="overflow-x-auto">
-      <table className="w-full text-left text-xs border-collapse">
-        <thead>
-          <tr className="bg-pink-50/40 text-gray-500 font-bold uppercase tracking-wider text-[10px] border-b border-pink-100">
-            <th className="p-4">Expense Title</th>
-            <th className="p-4">Date</th>
-            <th className="p-4">Amount (PHP)</th>
-            <th className="p-4">Purpose / Notes</th>
-            <th className="p-4 text-right">Action</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-pink-50">
-          {expenses.map((exp) => (
-            <tr key={exp.id} className="hover:bg-pink-50/20 transition">
-              <td className="p-4 font-bold text-gray-800">{exp.title}</td>
-              <td className="p-4 text-gray-500 font-mono">{exp.expense_date}</td>
-              <td className="p-4 font-bold text-rose-600">
-                ₱{Number(exp.amount_php).toLocaleString()} PHP
-              </td>
-              <td className="p-4 text-gray-600">{exp.notes || "—"}</td>
-              <td className="p-4 text-right">
-                <button
-                  type="button"
-                  onClick={() => handleDeleteExpense(exp.id)}
-                  className="text-gray-400 hover:text-red-600 p-1 transition cursor-pointer"
-                  title="Delete Expense"
-                >
-                  <Trash2 size={14} />
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )}
-</div>
+          {expenses.length === 0 ? (
+            <div className="p-8 text-center text-xs text-gray-400 space-y-3">
+              <p className="italic">No operating expenses recorded yet.</p>
+              <button
+                type="button"
+                onClick={() => setShowExpenseModal(true)}
+                className="inline-flex items-center gap-1 px-4 py-2 bg-pink-50 hover:bg-pink-100 text-pink-700 border border-pink-200 rounded-xl text-xs font-bold transition cursor-pointer"
+              >
+                <Plus size={14} />
+                <span>+ Log First Operating Expense</span>
+              </button>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-pink-50/40 text-gray-500 font-bold uppercase tracking-wider text-[10px] border-b border-pink-100">
+                    <th className="p-4">Expense Title</th>
+                    <th className="p-4">Date</th>
+                    <th className="p-4">Amount (PHP)</th>
+                    <th className="p-4">Purpose / Notes</th>
+                    <th className="p-4 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-pink-50">
+                  {expenses.map((exp) => (
+                    <tr key={exp.id} className="hover:bg-pink-50/20 transition">
+                      <td className="p-4 font-bold text-gray-800">{exp.title}</td>
+                      <td className="p-4 text-gray-500 font-mono">{exp.expense_date}</td>
+                      <td className="p-4 font-bold text-rose-600">
+                        ₱{Number(exp.amount_php).toLocaleString()} PHP
+                      </td>
+                      <td className="p-4 text-gray-600">{exp.notes || "—"}</td>
+                      <td className="p-4 text-right">
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteExpense(exp.id)}
+                          className="text-gray-400 hover:text-red-600 p-1 transition cursor-pointer"
+                          title="Delete Expense"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
 
-        {/* Student Revenue Breakdown Table */}
+        {/* Student Revenue Ledger (Cash-Basis Realized) */}
         <div className="bg-white border border-pink-100 rounded-3xl shadow-xs overflow-hidden">
           <div className="p-5 border-b border-pink-100 flex items-center justify-between">
             <div>
-              <h3 className="text-sm font-bold text-pink-950">Student Revenue Ledger</h3>
-              <p className="text-xs text-gray-500">Gross billings, bank transfer fees, and net realized receipts</p>
+              <h3 className="text-sm font-bold text-pink-950">Student Revenue Ledger (Cash Basis)</h3>
+              <p className="text-xs text-gray-500">Gross collections, bank transfer fees, and net realized cash receipts</p>
             </div>
             <span className="text-xs font-bold text-pink-600 bg-pink-50 px-3 py-1.5 rounded-xl border border-pink-100">
-              Total Contract Portfolio: ₱{totalContractCommitment.toLocaleString()} PHP
+              Total Collections: ₱{totalContractCommitment.toLocaleString()} PHP
             </span>
           </div>
 
@@ -518,24 +515,22 @@ export default function ReportsPage() {
                 <tr className="bg-pink-50/50 text-gray-500 font-bold uppercase tracking-wider text-[10px] border-b border-pink-100">
                   <th className="p-4">Student</th>
                   <th className="p-4">Country</th>
-                  <th className="p-4">Gross Billings</th>
+                  <th className="p-4">Gross Collected</th>
                   <th className="p-4">Transfer / Bank Fee</th>
-                  <th className="p-4">Net Value</th>
-                  <th className="p-4">Realized Net</th>
-                  <th className="p-4">Unearned Revenue (Deferred)</th>
+                  <th className="p-4">Net Realized Cash</th>
                   <th className="p-4 text-right">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-pink-50">
                 {loading ? (
                   <tr>
-                    <td colSpan={8} className="p-8 text-center text-pink-600 font-medium">
+                    <td colSpan={6} className="p-8 text-center text-pink-600 font-medium">
                       Loading financial records...
                     </td>
                   </tr>
                 ) : studentBreakdown.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="p-8 text-center text-gray-400 text-xs">
+                    <td colSpan={6} className="p-8 text-center text-gray-400 text-xs">
                       No student records found.
                     </td>
                   </tr>
@@ -550,18 +545,12 @@ export default function ReportsPage() {
                       <td className="p-4 font-medium text-rose-600">
                         {s.totalFeesForStudent > 0 ? `-₱${s.totalFeesForStudent.toLocaleString()} PHP` : "₱0"}
                       </td>
-                      <td className="p-4 font-bold text-gray-900">
-                        ₱{s.netPackagePhp.toLocaleString()} PHP
-                      </td>
                       <td className="p-4 font-bold text-pink-600">
-                        ₱{s.realizedNetPhp.toLocaleString()} PHP
-                      </td>
-                      <td className="p-4 font-medium text-gray-500">
-                        ₱{s.unrealizedNetPhp.toLocaleString()} PHP
+                        ₱{s.netPackagePhp.toLocaleString()} PHP
                       </td>
                       <td className="p-4 text-right">
                         <span className="px-2.5 py-1 bg-pink-50 text-pink-700 border border-pink-200 text-[10px] font-bold rounded-lg uppercase">
-                          Active
+                          Paid
                         </span>
                       </td>
                     </tr>
@@ -642,7 +631,7 @@ export default function ReportsPage() {
                 </label>
                 <textarea
                   rows={2}
-                  placeholder="e.g. Primary broadband connection used for all online video lessons and interactive whiteboards."
+                  placeholder="e.g. Primary broadband connection used for all online video lessons."
                   className="input w-full text-xs"
                   value={expenseNotes}
                   onChange={(e) => setExpenseNotes(e.target.value)}
@@ -670,7 +659,7 @@ export default function ReportsPage() {
         </div>
       )}
 
-      {/* FORMAL PHILIPPINE INCOME STATEMENT MODAL */}
+      {/* CASH-BASIS INCOME STATEMENT MODAL */}
       {showIncomeStatementModal && (
         <div
           className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-50 p-4"
@@ -688,10 +677,10 @@ export default function ReportsPage() {
                 </span>
                 <div>
                   <h3 className="font-bold text-base text-pink-950">
-                    Statement of Comprehensive Income
+                    Statement of Cash Receipts & Disbursements
                   </h3>
                   <p className="text-xs text-gray-500">
-                    Prepared in accordance with the Philippine Financial Reporting Framework for Small Entities.
+                    BIR-compliant cash-basis financial report for professional tutoring services.
                   </p>
                 </div>
               </div>
@@ -704,84 +693,90 @@ export default function ReportsPage() {
               </button>
             </div>
 
-            {/* Printable PFRS Sheet */}
+            {/* Printable Statement Sheet */}
             <div className="flex-1 overflow-y-auto border border-gray-200 rounded-2xl p-6 bg-white shadow-inner">
               <div
                 ref={statementPdfRef}
-                style={{ backgroundColor: "#ffffff", color: "#1f2937", fontFamily: "serif" }}
+                style={{ backgroundColor: "#ffffff", color: "#000000", fontFamily: "serif" }}
                 className="space-y-6 text-xs p-4 bg-white"
               >
                 {/* Formal Entity Title */}
-                <div style={{ textAlign: "center", borderBottom: "2px solid #111827", paddingBottom: "12px" }}>
-                  <h2 style={{ fontSize: "16px", fontWeight: "bold", textTransform: "uppercase", margin: 0, letterSpacing: "1px" }}>
-                    Private ESL Tutoring Services
-                  </h2>
-                  <p style={{ fontSize: "12px", fontWeight: "600", margin: "2px 0" }}>
-                    STATEMENT OF COMPREHENSIVE INCOME (INCOME STATEMENT)
+                <div style={{ textAlign: "center", borderBottom: "2px solid #000000", paddingBottom: "12px" }}>
+                  <input
+                    type="text"
+                    value={businessName}
+                    onChange={(e) => setBusinessName(e.target.value)}
+                    style={{
+                      fontSize: "16px",
+                      fontWeight: "bold",
+                      textTransform: "uppercase",
+                      textAlign: "center",
+                      width: "100%",
+                      border: "1px dashed #d1d5db",
+                      padding: "4px",
+                      borderRadius: "4px",
+                      background: "transparent",
+                      color: "#000000",
+                    }}
+                    placeholder="Enter Business Name"
+                  />
+                  <p style={{ fontSize: "12px", fontWeight: "600", margin: "6px 0 2px 0", color: "#000000" }}>
+                    STATEMENT OF CASH RECEIPTS (CASH BASIS)
                   </p>
-                  <p style={{ fontSize: "10px", color: "#4b5563", margin: 0, fontStyle: "italic" }}>
+                  <p style={{ fontSize: "10px", color: "#000000", margin: 0, fontStyle: "italic" }}>
                     For the {timeframe === "weekly" ? "Week" : timeframe === "annual" ? "Year" : "Month"} Ended {new Date().toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" })}
                   </p>
-                  <p style={{ fontSize: "9px", color: "#6b7280", margin: "2px 0 0 0" }}>
+                  <p style={{ fontSize: "9px", color: "#000000", margin: "2px 0 0 0" }}>
                     (Amounts Expressed in Philippine Peso - PHP ₱)
                   </p>
                 </div>
 
                 {/* Structured Financial Rows */}
-                <div style={{ fontFamily: "sans-serif", fontSize: "11px" }} className="space-y-3">
+                <div style={{ fontFamily: "sans-serif", fontSize: "11px", color: "#000000" }} className="space-y-3">
                   {/* Revenue Section */}
                   <div>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "bold", borderBottom: "1px solid #e5e7eb", paddingBottom: "4px" }}>
-                      <span>SERVICE REVENUE (Gross Educational Receipts)</span>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "bold", borderBottom: "1px solid #000000", paddingBottom: "4px", color: "#000000" }}>
+                      <span>GROSS CASH RECEIPTS (Collections)</span>
                       <span>₱{totalGrossRevenue.toLocaleString("en-PH", { minimumFractionDigits: 2 })}</span>
                     </div>
-                    <p style={{ fontSize: "9.5px", color: "#6b7280", margin: "4px 0 0 0" }}>
-                      Note 1: Earned tutoring revenue recognized from delivered lesson hours ({totalHoursTaught.toFixed(1)} hours).
+                    <p style={{ fontSize: "9.5px", color: "#000000", margin: "4px 0 0 0" }}>
+                      Note 1: Total realized cash collections received upfront from active student packages.
                     </p>
                   </div>
 
-                  {/* Direct Costs Section */}
-                  <div style={{ paddingLeft: "12px" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", color: "#4b5563" }}>
-                      <span>Less: Direct Curriculum & Instructional Costs</span>
-                      <span>₱0.00</span>
-                    </div>
-                  </div>
-
-                  {/* Gross Operating Income */}
-                  <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "bold", backgroundColor: "#f9fafb", padding: "6px 8px", borderRadius: "6px" }}>
-                    <span>GROSS OPERATING PROFIT</span>
+                  {/* Gross Operating Profit */}
+                  <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "bold", backgroundColor: "#f9fafb", padding: "6px 8px", borderRadius: "6px", color: "#000000" }}>
+                    <span>TOTAL CASH INFLOWS</span>
                     <span>₱{totalGrossRevenue.toLocaleString("en-PH", { minimumFractionDigits: 2 })}</span>
                   </div>
 
                   {/* Operating Expenses */}
                   <div style={{ paddingTop: "6px" }}>
-                    <span style={{ fontWeight: "bold", display: "block", marginBottom: "4px" }}>
-                      OPERATING & ADMINISTRATIVE EXPENSES:
+                    <span style={{ fontWeight: "bold", display: "block", marginBottom: "4px", color: "#000000" }}>
+                      LESS: DISBURSEMENTS & OPERATING EXPENSES:
                     </span>
                     <div style={{ paddingLeft: "12px" }} className="space-y-1.5">
-                      <div style={{ display: "flex", justifyContent: "space-between", color: "#4b5563" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", color: "#000000" }}>
                         <span>International Remittance & Bank Transfer Fees</span>
-                        <span style={{ color: "#dc2626" }}>
+                        <span style={{ color: "#000000" }}>
                           (₱{totalTransferFees.toLocaleString("en-PH", { minimumFractionDigits: 2 })})
                         </span>
                       </div>
 
                       {/* Telecommunications, Software & Internet Access */}
                       <div>
-                        <div style={{ display: "flex", justifyContent: "space-between", color: "#4b5563" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", color: "#000000" }}>
                           <span>Telecommunications, Software & Internet Access</span>
-                          <span style={{ color: totalTelecomSoftwareExpense > 0 ? "#dc2626" : "#4b5563" }}>
+                          <span style={{ color: "#000000" }}>
                             {totalTelecomSoftwareExpense > 0
                               ? `(₱${totalTelecomSoftwareExpense.toLocaleString("en-PH", { minimumFractionDigits: 2 })})`
                               : "₱0.00"}
                           </span>
                         </div>
-                        {/* Itemized Notes for Expenses */}
                         {expenses.length > 0 && (
-                          <div style={{ marginTop: "4px", paddingLeft: "8px", borderLeft: "2px solid #fce7f3" }}>
+                          <div style={{ marginTop: "4px", paddingLeft: "8px", borderLeft: "2px solid #000000" }}>
                             {expenses.map((exp) => (
-                              <p key={exp.id} style={{ fontSize: "9px", color: "#6b7280", margin: "1px 0" }}>
+                              <p key={exp.id} style={{ fontSize: "9px", color: "#000000", margin: "1px 0" }}>
                                 • <strong>{exp.title}</strong>: ₱{Number(exp.amount_php).toLocaleString("en-PH", { minimumFractionDigits: 2 })} — {exp.notes || "Operational utility"}
                               </p>
                             ))}
@@ -789,55 +784,45 @@ export default function ReportsPage() {
                         )}
                       </div>
 
-                      <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "600", borderTop: "1px dashed #d1d5db", paddingTop: "4px" }}>
-                        <span>Total Operating Expenses</span>
-                        <span style={{ color: "#dc2626" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "600", borderTop: "1px dashed #000000", paddingTop: "4px", color: "#000000" }}>
+                        <span>Total Cash Disbursements</span>
+                        <span style={{ color: "#000000" }}>
                           (₱{totalOperatingExpenses.toLocaleString("en-PH", { minimumFractionDigits: 2 })})
                         </span>
                       </div>
                     </div>
                   </div>
 
-                  {/* Net Operating Income (Double Underline Standard) */}
+                  {/* Net Taxable Cash Receipts */}
                   <div
                     style={{
                       display: "flex",
                       justifyContent: "space-between",
                       fontWeight: "900",
                       fontSize: "13px",
-                      borderTop: "1.5px solid #111827",
-                      borderBottom: "4px double #111827",
+                      borderTop: "1.5px solid #000000",
+                      borderBottom: "4px double #000000",
                       padding: "8px 0",
                       marginTop: "12px",
-                      color: "#db2777",
+                      color: "#000000",
                     }}
                   >
-                    <span>NET OPERATING INCOME / TAKE-HOME</span>
+                    <span>NET TAXABLE CASH RECEIPTS / TAKE-HOME</span>
                     <span>₱{totalNetOperatingIncome.toLocaleString("en-PH", { minimumFractionDigits: 2 })}</span>
-                  </div>
-
-                  {/* Deferred Revenue Note (PFRS Requirement for Unearned Advance Billings) */}
-                  <div style={{ backgroundColor: "#fdf2f8", border: "1px solid #fce7f3", padding: "10px", borderRadius: "8px", marginTop: "12px" }}>
-                    <p style={{ fontSize: "9px", fontWeight: "bold", textTransform: "uppercase", color: "#db2777", margin: "0 0 2px 0" }}>
-                      PFRS Supplemental Disclosure — Unearned / Deferred Revenue:
-                    </p>
-                    <p style={{ fontSize: "9.5px", color: "#4b5563", margin: 0 }}>
-                      Contract commitments in the amount of <strong>₱{totalUnrealizedGross.toLocaleString("en-PH", { minimumFractionDigits: 2 })}</strong> represent prepaid student class balances awaiting service delivery, classified as unearned liabilities under standard accrual guidelines[cite: 1].
-                    </p>
                   </div>
                 </div>
 
                 {/* Sign-off Block */}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px", paddingTop: "24px", borderTop: "1px solid #e5e7eb" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px", paddingTop: "24px", borderTop: "1px solid #000000", color: "#000000" }}>
                   <div>
-                    <div style={{ borderBottom: "1px solid #9ca3af", height: "24px" }} />
-                    <p style={{ fontSize: "9px", color: "#6b7280", margin: "4px 0 0 0" }}>
-                      Prepared By: Instructor / Proprietor
+                    <div style={{ borderBottom: "1px solid #000000", height: "24px" }} />
+                    <p style={{ fontSize: "9px", color: "#000000", margin: "4px 0 0 0" }}>
+                      Certified Correct: Taxpayer / Proprietor
                     </p>
                   </div>
                   <div>
-                    <div style={{ borderBottom: "1px solid #9ca3af", height: "24px" }} />
-                    <p style={{ fontSize: "9px", color: "#6b7280", margin: "4px 0 0 0" }}>
+                    <div style={{ borderBottom: "1px solid #000000", height: "24px" }} />
+                    <p style={{ fontSize: "9px", color: "#000000", margin: "4px 0 0 0" }}>
                       Date Acknowledged
                     </p>
                   </div>
@@ -854,7 +839,7 @@ export default function ReportsPage() {
                 className="px-5 py-2.5 bg-pink-600 hover:bg-pink-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-xs cursor-pointer"
               >
                 <Download size={14} />
-                <span>{isGeneratingPdf ? "Exporting Statement..." : "Download PFRS PDF"}</span>
+                <span>{isGeneratingPdf ? "Exporting Statement..." : "Download Cash Statement PDF"}</span>
               </button>
 
               <button

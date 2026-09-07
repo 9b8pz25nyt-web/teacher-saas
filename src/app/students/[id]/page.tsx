@@ -74,6 +74,7 @@ export default function StudentDetailsPage({
   const [paymentAmount, setPaymentAmount] = useState("");
   const [phpEquivalent, setPhpEquivalent] = useState("");
   const [classesIncluded, setClassesIncluded] = useState("30");
+  const [freeClasses, setFreeClasses] = useState("0");
   const [classesCompleted, setClassesCompleted] = useState("0");
   const [classDuration, setClassDuration] = useState("40");
   const [paymentStatus, setPaymentStatus] = useState("Active");
@@ -82,23 +83,23 @@ export default function StudentDetailsPage({
   const [selectedBookIds, setSelectedBookIds] = useState<string[]>([]);
   const [notes, setNotes] = useState("");
   const [savingBook, setSavingBook] = useState(false);
-const [editingReportId, setEditingReportId] = useState<string | null>(null);
-const [reportBookId, setReportBookId] = useState("");
-const [selectedChapterIndex, setSelectedChapterIndex] = useState<string>("");
-const [isChapterComplete, setIsChapterComplete] = useState(false);
+  const [editingReportId, setEditingReportId] = useState<string | null>(null);
+  const [reportBookId, setReportBookId] = useState("");
+  const [selectedChapterIndex, setSelectedChapterIndex] = useState<string>("");
+  const [isChapterComplete, setIsChapterComplete] = useState(false);
 
-function handleOpenEditReport(rep: any) {
-  setEditingReportId(rep.id);
-  setLessonTitle(rep.lesson_title || "");
-  setReportDate(rep.report_date || new Date().toISOString().split("T")[0]);
-  setReportBookId(rep.book_id || "");
-  setVocabulary(rep.vocabulary || "");
-  setStrengths(rep.strengths || "");
-  setImprovements(rep.improvements || "");
-  setHomework(rep.homework || "");
-  setHomeworkFile(null);
-  setIsReportModalOpen(true);
-}
+  function handleOpenEditReport(rep: any) {
+    setEditingReportId(rep.id);
+    setLessonTitle(rep.lesson_title || "");
+    setReportDate(rep.report_date || new Date().toISOString().split("T")[0]);
+    setReportBookId(rep.book_id || "");
+    setVocabulary(rep.vocabulary || "");
+    setStrengths(rep.strengths || "");
+    setImprovements(rep.improvements || "");
+    setHomework(rep.homework || "");
+    setHomeworkFile(null);
+    setIsReportModalOpen(true);
+  }
 
   // Schedule Modal State
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
@@ -108,9 +109,9 @@ function handleOpenEditReport(rep: any) {
   const [scheduleTopic, setScheduleTopic] = useState("Regular Class");
   const [isSavingSchedule, setIsSavingSchedule] = useState(false);
   const [startPage, setStartPage] = useState("");
-const [endPage, setEndPage] = useState("");
+  const [endPage, setEndPage] = useState("");
 
-// Report Modal State initialized instantly from window URL search params
+  // Report Modal State initialized instantly from window URL search params
   const [isReportModalOpen, setIsReportModalOpen] = useState(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
@@ -138,7 +139,7 @@ const [endPage, setEndPage] = useState("");
   const [lessonDuration, setLessonDuration] = useState("40");
   const [lessonStatus, setLessonStatus] = useState("Completed");
 
-useEffect(() => {
+  useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const action = params.get("action");
     const dateParam = params.get("date");
@@ -204,6 +205,11 @@ useEffect(() => {
       setClassesIncluded(
         studentData.classes_included ? String(studentData.classes_included) : "30"
       );
+      setFreeClasses(
+        studentData.free_classes !== undefined && studentData.free_classes !== null 
+          ? String(studentData.free_classes) 
+          : "0"
+      );
       setClassesCompleted(
         studentData.classes_completed
           ? String(studentData.classes_completed)
@@ -222,7 +228,7 @@ useEffect(() => {
       const [{ data: scheds }, { data: bks }, { data: repList }, { data: studentBks }] =
         await Promise.all([
           supabase.from("schedules").select("*").eq("student_id", studentId),
-          supabase.from("books").select("*").order("title", { ascending: true }), // Removed .eq("teacher_id", user?.id) if books are global or shared
+          supabase.from("books").select("*").order("title", { ascending: true }),
           supabase
             .from("class_reports")
             .select("*")
@@ -312,6 +318,7 @@ useEffect(() => {
             ? Number(phpEquivalent.replace(/,/g, ""))
             : null,
           classes_included: Number(classesIncluded) || 0,
+          free_classes: Number(freeClasses) || 0,
           classes_completed: Number(classesCompleted) || 0,
           class_duration: Number(classDuration) || 40,
           payment_status: paymentStatus,
@@ -327,7 +334,6 @@ useEffect(() => {
         return;
       }
 
-     // Update multiple books association in student_books table with error catching
       const { error: deleteError } = await supabase
         .from("student_books")
         .delete()
@@ -455,112 +461,110 @@ useEffect(() => {
     }
   }
 
-async function handleAddReport(e: React.FormEvent) {
-  e.preventDefault();
-  if (!lessonTitle.trim()) return alert("Please enter a lesson title");
+  async function handleAddReport(e: React.FormEvent) {
+    e.preventDefault();
+    if (!lessonTitle.trim()) return alert("Please enter a lesson title");
 
-  setIsSubmittingReport(true);
-  try {
-    const { data: { user } } = await supabase.auth.getUser();
-    let uploadedFileUrl: string | null = null;
+    setIsSubmittingReport(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      let uploadedFileUrl: string | null = null;
 
-    if (homeworkFile) {
-      const fileExt = homeworkFile.name.split(".").pop();
-      const fileName = `${studentId}/${Date.now()}.${fileExt}`;
+      if (homeworkFile) {
+        const fileExt = homeworkFile.name.split(".").pop();
+        const fileName = `${studentId}/${Date.now()}.${fileExt}`;
 
-      const { error: uploadError } = await supabase.storage
-        .from("homework-files")
-        .upload(fileName, homeworkFile);
+        const { error: uploadError } = await supabase.storage
+          .from("homework-files")
+          .upload(fileName, homeworkFile);
 
-      if (uploadError) throw uploadError;
+        if (uploadError) throw uploadError;
 
-      const { data: publicUrlData } = supabase.storage
-        .from("homework-files")
-        .getPublicUrl(fileName);
+        const { data: publicUrlData } = supabase.storage
+          .from("homework-files")
+          .getPublicUrl(fileName);
 
-      uploadedFileUrl = publicUrlData.publicUrl;
-    }
-
-    const payload: any = {
-      lesson_title: lessonTitle.trim(),
-      report_date: reportDate,
-      book_id: reportBookId || null,
-      vocabulary: vocabulary.trim() || null,
-      strengths: strengths.trim() || null,
-      improvements: improvements.trim() || null,
-      homework: homework.trim() || null,
-      teacher_alias: student?.teacher_alias || teacherAlias || "Teacher Gabi",
-    };
-
-    const selectedBookItem = studentBooks.find((item: any) => item.books?.id === reportBookId);
-    if (selectedBookItem?.books?.book_type === "pages") {
-      payload.start_page = startPage ? Number(startPage) : null;
-      payload.end_page = endPage ? Number(endPage) : null;
-    }
-
-    if (uploadedFileUrl) {
-      payload.homework_file_url = uploadedFileUrl;
-    }
-
-    if (editingReportId) {
-      const { error: updateError } = await supabase
-        .from("class_reports")
-        .update(payload)
-        .eq("id", editingReportId);
-
-      if (updateError) throw updateError;
-    } else {
-      payload.student_id = studentId;
-      payload.teacher_id = user?.id;
-
-      const { error: reportError } = await supabase
-        .from("class_reports")
-        .insert(payload);
-
-      if (reportError) throw reportError;
-
-      // Handle Chapter Completion tracking in student_books
-      if (reportBookId && selectedChapterIndex !== "" && isChapterComplete) {
-        const currentCompletedChapters = selectedBookItem?.completed_chapters || [];
-        const chapterIdxNum = Number(selectedChapterIndex);
-        
-        if (!currentCompletedChapters.includes(chapterIdxNum)) {
-          const updatedChapters = [...currentCompletedChapters, chapterIdxNum];
-          
-          await supabase
-            .from("student_books")
-            .update({ completed_chapters: updatedChapters })
-            .eq("student_id", studentId)
-            .eq("book_id", reportBookId);
-        }
+        uploadedFileUrl = publicUrlData.publicUrl;
       }
 
-      const currentCompleted = student.classes_completed || 0;
-      await supabase
-        .from("students")
-        .update({ classes_completed: currentCompleted + 1 })
-        .eq("id", studentId);
-    }
+      const payload: any = {
+        lesson_title: lessonTitle.trim(),
+        report_date: reportDate,
+        book_id: reportBookId || null,
+        vocabulary: vocabulary.trim() || null,
+        strengths: strengths.trim() || null,
+        improvements: improvements.trim() || null,
+        homework: homework.trim() || null,
+        teacher_alias: student?.teacher_alias || teacherAlias || "Teacher Gabi",
+      };
 
-    // Reset form states
-    setEditingReportId(null);
-    setLessonTitle("");
-    setVocabulary("");
-    setStrengths("");
-    setImprovements("");
-    setHomework("");
-    setHomeworkFile(null);
-    setSelectedChapterIndex("");
-    setIsChapterComplete(false);
-    setIsReportModalOpen(false);
-    fetchStudentData();
-  } catch (err: any) {
-    console.error("Error saving report:", err);
-    alert(err.message || "Failed to save report");
-  } finally {
-    setIsSubmittingReport(false);
+      const selectedBookItem = studentBooks.find((item: any) => item.books?.id === reportBookId);
+      if (selectedBookItem?.books?.book_type === "pages") {
+        payload.start_page = startPage ? Number(startPage) : null;
+        payload.end_page = endPage ? Number(endPage) : null;
+      }
+
+      if (uploadedFileUrl) {
+        payload.homework_file_url = uploadedFileUrl;
+      }
+
+      if (editingReportId) {
+        const { error: updateError } = await supabase
+          .from("class_reports")
+          .update(payload)
+          .eq("id", editingReportId);
+
+        if (updateError) throw updateError;
+      } else {
+        payload.student_id = studentId;
+        payload.teacher_id = user?.id;
+
+        const { error: reportError } = await supabase
+          .from("class_reports")
+          .insert(payload);
+
+        if (reportError) throw reportError;
+
+        if (reportBookId && selectedChapterIndex !== "" && isChapterComplete) {
+          const currentCompletedChapters = selectedBookItem?.completed_chapters || [];
+          const chapterIdxNum = Number(selectedChapterIndex);
+          
+          if (!currentCompletedChapters.includes(chapterIdxNum)) {
+            const updatedChapters = [...currentCompletedChapters, chapterIdxNum];
+            
+            await supabase
+              .from("student_books")
+              .update({ completed_chapters: updatedChapters })
+              .eq("student_id", studentId)
+              .eq("book_id", reportBookId);
+          }
+        }
+
+        const currentCompleted = student.classes_completed || 0;
+        await supabase
+          .from("students")
+          .update({ classes_completed: currentCompleted + 1 })
+          .eq("id", studentId);
+      }
+
+      setEditingReportId(null);
+      setLessonTitle("");
+      setVocabulary("");
+      setStrengths("");
+      setImprovements("");
+      setHomework("");
+      setHomeworkFile(null);
+      setSelectedChapterIndex("");
+      setIsChapterComplete(false);
+      setIsReportModalOpen(false);
+      fetchStudentData();
+    } catch (err: any) {
+      console.error("Error saving report:", err);
+      alert(err.message || "Failed to save report");
+    } finally {
+      setIsSubmittingReport(false);
+    }
   }
-}
 
   async function handleDeleteStudent() {
     if (!confirm(`Are you sure you want to delete ${student?.name}?`)) return;
@@ -583,37 +587,7 @@ async function handleAddReport(e: React.FormEvent) {
     setTimeout(() => setCopiedPortal(false), 2000);
   }
 
-  async function downloadRenewalPdf() {
-    if (!renewalPdfRef.current) return;
-    setIsGeneratingPdf(true);
-
-    try {
-      // @ts-ignore
-      const html2pdf = (await import("html2pdf.js")).default;
-      const element = renewalPdfRef.current;
-      const opt = {
-        margin: 8,
-        filename: `Renewal_Notice_${student?.name || "Student"}.pdf`,
-        image: { type: "jpeg" as const, quality: 0.98 },
-        html2canvas: {
-          scale: 2,
-          useCORS: true,
-          backgroundColor: "#ffffff",
-          logging: false,
-        },
-        jsPDF: { unit: "mm" as const, format: "a5" as const, orientation: "portrait" as const },
-      };
-
-      await html2pdf().set(opt).from(element).save();
-    } catch (err) {
-      console.error("PDF export error:", err);
-      alert("Failed to export PDF. Please try again.");
-    } finally {
-      setIsGeneratingPdf(false);
-    }
-  }
-
-  const combinedTotalClasses = Number(student?.classes_included || 5) + Number(student?.free_classes || 1);
+  const combinedTotalClasses = Number(student?.classes_included || 0) + Number(student?.free_classes || 0);
 
   if (loading) {
     return (
@@ -623,22 +597,21 @@ async function handleAddReport(e: React.FormEvent) {
     );
   }
 
-  const countryObj = countries.find((c) => c.name === student.country);
-  const currencyObj = currencies[student.payment_currency];
+  const countryObj = countries.find((c) => c.name === student?.country);
+  const currencyObj = currencies[student?.payment_currency];
   const remainingCount = Math.max(
-    combinedTotalClasses - (student.classes_completed || 0),
+    combinedTotalClasses - (student?.classes_completed || 0),
     0
   );
   const progressPercent = Math.min(
     Math.round(
-      ((student.classes_completed || 0) / (combinedTotalClasses || 1)) * 100
+      ((student?.classes_completed || 0) / (combinedTotalClasses || 1)) * 100
     ),
     100
   );
 
   return (
     <div className="p-8 max-w-6xl mx-auto space-y-6">
-      {/* Top Navigation */}
       <div className="flex items-center justify-between">
         <Link
           href="/students"
@@ -665,7 +638,20 @@ async function handleAddReport(e: React.FormEvent) {
           )}
 
           <button
-            onClick={() => setIsReportModalOpen(true)}
+            onClick={() => {
+              const today = new Date().toISOString().split("T")[0];
+              setReportDate(today);
+              setEditingReportId(null);
+              setLessonTitle("");
+              setVocabulary("");
+              setStrengths("");
+              setImprovements("");
+              setHomework("");
+              setHomeworkFile(null);
+              setSelectedChapterIndex("");
+              setIsChapterComplete(false);
+              setIsReportModalOpen(true);
+            }}
             className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer"
           >
             <Plus size={14} />
@@ -689,7 +675,6 @@ async function handleAddReport(e: React.FormEvent) {
         </div>
       </div>
 
-      {/* Profile Overview Card */}
       <div className="bg-white border border-pink-100 rounded-3xl p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div className="space-y-2">
           <div className="flex items-center gap-3">
@@ -713,7 +698,6 @@ async function handleAddReport(e: React.FormEvent) {
           </div>
         </div>
 
-        {/* Video Classroom Access Box */}
         <div className="bg-pink-50/50 border border-pink-100 p-4 rounded-2xl flex items-center gap-3 min-w-[280px]">
           <div className="p-3 bg-pink-600 text-white rounded-xl shadow-xs">
             <Video size={20} />
@@ -736,9 +720,7 @@ async function handleAddReport(e: React.FormEvent) {
         </div>
       </div>
 
-      {/* Grid: Package Stats & Details */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-        {/* Class Package Progress */}
         <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold text-gray-900">Class Package</h3>
@@ -780,7 +762,6 @@ async function handleAddReport(e: React.FormEvent) {
           </div>
         </div>
 
-        {/* Assigned Curriculum / Books Progress Cards */}
         <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-pink-600 font-bold text-sm">
@@ -789,43 +770,42 @@ async function handleAddReport(e: React.FormEvent) {
             </div>
           </div>
           <div className="space-y-2 max-h-[160px] overflow-y-auto">
-            {studentBooks.length > 0 ? (
-  studentBooks.map((item, index) => {
-    const book = item.books;
-    const isPageBased = book?.book_type === "pages";
-    
-    let bookProgress = 0;
-    if (isPageBased) {
-      // Find the highest end page reached by looking through reports for this book
-      const bookReports = reports.filter((r) => r.book_id === book?.id);
-      const maxPageReached = bookReports.reduce((max, r) => Math.max(max, r.end_page || 0), 0);
-      const totalPages = book?.total_pages || 1;
-      bookProgress = Math.min(100, Math.round((maxPageReached / totalPages) * 100));
-    } else {
-      const totalChapters = book?.chapters?.length || 1;
-      const completedChapters = item?.completed_chapters?.length || 0;
-      bookProgress = Math.min(100, Math.round((completedChapters / totalChapters) * 100));
-    }
+           {studentBooks.length > 0 ? (
+              studentBooks.map((item, index) => {
+                const book = item.books;
+                const isPageBased = book?.book_type === "pages";
+                
+                const bookReports = reports.filter((r) => r.book_id === book?.id);
+                
+                let bookProgress = 0;
+                if (isPageBased) {
+                  const maxPageReached = bookReports.reduce((max, r) => Math.max(max, r.end_page || 0), 0);
+                  const totalPages = book?.total_pages || 1;
+                  bookProgress = Math.min(100, Math.round((maxPageReached / totalPages) * 100));
+                } else {
+                  const totalChapters = book?.chapters?.length || 1;
+                  const completedChapters = item?.completed_chapters?.length || 0;
+                  bookProgress = Math.min(100, Math.round((completedChapters / totalChapters) * 100));
+                }
 
-    return (
-      <div key={book?.id || index} className="p-2.5 bg-pink-50/50 rounded-xl border border-pink-100 space-y-1">
-        <div className="flex justify-between items-center text-xs font-bold text-pink-950">
-          <span>📖 {book?.title || "Book"}</span>
-          <span className="text-pink-600 text-[10px]">{bookProgress}%</span>
-        </div>
-        <div className="w-full bg-pink-100 rounded-full h-1.5 overflow-hidden">
-          <div className="bg-pink-600 h-1.5 rounded-full transition-all duration-300" style={{ width: `${bookProgress}%` }} />
-        </div>
-      </div>
-    );
-  })
-) : (
-  <p className="text-xs text-gray-400 italic">No books assigned yet.</p>
-)}
+                return (
+                  <div key={book?.id || index} className="p-2.5 bg-pink-50/50 rounded-xl border border-pink-100 space-y-1">
+                    <div className="flex justify-between items-center text-xs font-bold text-pink-950">
+                      <span>📖 {book?.title || "Book"}</span>
+                      <span className="text-pink-600 text-[10px]">{bookProgress}%</span>
+                    </div>
+                    <div className="w-full bg-pink-100 rounded-full h-1.5 overflow-hidden">
+                      <div className="bg-pink-600 h-1.5 rounded-full transition-all duration-300" style={{ width: `${bookProgress}%` }} />
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <p className="text-xs text-gray-400 italic">No books assigned yet.</p>
+            )}
           </div>
         </div>
 
-        {/* Tuition & Billing */}
         <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold text-gray-900">Tuition & Billing</h3>
@@ -833,7 +813,6 @@ async function handleAddReport(e: React.FormEvent) {
               type="button"
               onClick={() => setIsRenewalModalOpen(true)}
               className="text-[11px] font-bold text-pink-600 hover:text-pink-700 flex items-center gap-1 cursor-pointer"
-              title="Open and download Renewal Notice PDF"
             >
               <Sparkles size={13} className="text-pink-600" />
               <span>Renewal Notice</span>
@@ -866,9 +845,7 @@ async function handleAddReport(e: React.FormEvent) {
         </div>
       </div>
 
-      {/* Schedule & Notes */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        {/* Weekly Schedule */}
         <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold text-gray-900">Weekly Schedule</h3>
@@ -906,7 +883,6 @@ async function handleAddReport(e: React.FormEvent) {
                     type="button"
                     onClick={() => handleDeleteSchedule(s.id)}
                     className="text-gray-400 hover:text-red-600 p-1 transition cursor-pointer"
-                    title="Delete schedule slot"
                   >
                     <Trash2 size={13} />
                   </button>
@@ -916,7 +892,6 @@ async function handleAddReport(e: React.FormEvent) {
           )}
         </div>
 
-        {/* Student Notes */}
         <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs space-y-2">
           <h3 className="text-sm font-bold text-gray-900">Notes & Objectives</h3>
           <p className="text-xs text-gray-600 leading-relaxed">
@@ -925,25 +900,35 @@ async function handleAddReport(e: React.FormEvent) {
         </div>
       </div>
 
-      {/* Class Reports & Homework Log History */}
       <div className="bg-white border border-pink-100 rounded-3xl p-6 shadow-xs space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-bold text-gray-900">
               Logged Lessons & Reports
             </h3>
-            
             <span className="text-[11px] font-bold text-pink-600 bg-pink-50 px-2 py-0.5 rounded-lg border border-pink-200">
               {reports.length}
             </span>
           </div>
           <button
-            onClick={() => setIsReportModalOpen(true)}
+            onClick={() => {
+              const today = new Date().toISOString().split("T")[0];
+              setReportDate(today);
+              setEditingReportId(null);
+              setLessonTitle("");
+              setVocabulary("");
+              setStrengths("");
+              setImprovements("");
+              setHomework("");
+              setHomeworkFile(null);
+              setSelectedChapterIndex("");
+              setIsChapterComplete(false);
+              setIsReportModalOpen(true);
+            }}
             className="text-xs font-bold text-pink-600 hover:text-pink-700 flex items-center gap-1 cursor-pointer"
           >
             <Plus size={14} />
             <span>Add Report</span>
-            
           </button>
         </div>
 
@@ -967,20 +952,18 @@ async function handleAddReport(e: React.FormEvent) {
                       {rep.report_date}
                     </span>
                     <button
-    type="button"
-    onClick={() => handleOpenEditReport(rep)}
-    className="text-gray-400 hover:text-pink-600 transition p-1 cursor-pointer"
-    title="Edit Lesson Report"
-  >
-    <Edit size={14} />
-  </button>
+                      type="button"
+                      onClick={() => handleOpenEditReport(rep)}
+                      className="text-gray-400 hover:text-pink-600 transition p-1 cursor-pointer"
+                    >
+                      <Edit size={14} />
+                    </button>
                     <button
                       type="button"
                       onClick={() =>
                         handleDeleteReport(rep.id, rep.homework_file_url)
                       }
                       className="text-gray-400 hover:text-red-600 transition p-1 cursor-pointer"
-                      title="Delete Lesson Report"
                     >
                       <Trash2 size={14} />
                     </button>
@@ -1007,38 +990,6 @@ async function handleAddReport(e: React.FormEvent) {
                     </div>
                   </div>
                 )}
-
-                {rep.homework_file_url && (
-                  <div className="p-2 bg-white rounded-xl border border-pink-200 flex items-center justify-between text-xs">
-                    <span className="text-pink-950 font-bold flex items-center gap-1.5">
-                      📄 <span>Attached Worksheet:</span>
-                    </span>
-                    <a
-                      href={rep.homework_file_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-pink-600 font-bold hover:underline"
-                    >
-                      View / Open Worksheet ↗
-                    </a>
-                  </div>
-                )}
-
-                {rep.homework_submission_url && (
-                  <div className="p-2 bg-emerald-50 rounded-xl border border-emerald-200 flex items-center justify-between text-xs">
-                    <span className="text-emerald-800 font-bold flex items-center gap-1.5">
-                      ✓ <span>Student Homework Submission:</span>
-                    </span>
-                    <a
-                      href={rep.homework_submission_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-pink-600 font-bold hover:underline"
-                    >
-                      View Submission ↗
-                    </a>
-                  </div>
-                )}
               </div>
             ))}
           </div>
@@ -1052,10 +1003,10 @@ async function handleAddReport(e: React.FormEvent) {
             <div className="flex items-center justify-between border-b border-pink-100 pb-3">
               <div>
                 <h2 className="text-xl font-bold text-pink-950">
-                  Log Lesson & Homework
+                  {editingReportId ? "Edit Lesson Report" : "Log Lesson & Homework"}
                 </h2>
                 <p className="text-xs text-gray-500">
-                  Record daily lesson feedback and assign homework tasks.
+                  Record daily lesson feedback and track curriculum progress.
                 </p>
               </div>
               <button
@@ -1068,7 +1019,7 @@ async function handleAddReport(e: React.FormEvent) {
             </div>
 
             <form onSubmit={handleAddReport} className="space-y-3.5 text-xs">
-            <div className="grid grid-cols-1 gap-3">
+              <div className="grid grid-cols-1 gap-3">
                 <div>
                   <label className="block mb-1 font-semibold text-pink-700">
                     Select Book / Curriculum 📖
@@ -1091,80 +1042,80 @@ async function handleAddReport(e: React.FormEvent) {
                 </div>
 
                 {reportBookId && (() => {
-  const currentBookItem = studentBooks.find((item: any) => item.books?.id === reportBookId);
-  const book = currentBookItem?.books;
-  const isPageBased = book?.book_type === "pages";
+                  const currentBookItem = studentBooks.find((item: any) => item.books?.id === reportBookId);
+                  const book = currentBookItem?.books;
+                  const isPageBased = book?.book_type === "pages";
 
-  return isPageBased ? (
-    <div className="p-3 bg-pink-50/50 rounded-xl border border-pink-100 space-y-3">
-      <label className="block font-semibold text-pink-900 text-xs">
-        Page Range Covered 📄 (Total Book Pages: {book.total_pages || "N/A"})
-      </label>
-      <div className="grid grid-cols-2 gap-2">
-        <div>
-          <label className="block text-[10px] text-gray-500 mb-0.5">Start Page</label>
-          <input
-            type="number"
-            min="1"
-            max={book.total_pages || 999}
-            className="input w-full text-xs bg-white"
-            value={startPage}
-            onChange={(e) => setStartPage(e.target.value)}
-            placeholder="e.g. 1"
-          />
-        </div>
-        <div>
-          <label className="block text-[10px] text-gray-500 mb-0.5">End Page</label>
-          <input
-            type="number"
-            min="1"
-            max={book.total_pages || 999}
-            className="input w-full text-xs bg-white"
-            value={endPage}
-            onChange={(e) => setEndPage(e.target.value)}
-            placeholder="e.g. 5"
-          />
-        </div>
-      </div>
-    </div>
-  ) : (
-    <div className="p-3 bg-pink-50/50 rounded-xl border border-pink-100 space-y-2">
-      <label className="block mb-1 font-semibold text-pink-900 text-xs">
-        Chapter / Lesson Focus 📑
-      </label>
-      <select
-        className="input w-full text-xs bg-white cursor-pointer"
-        value={selectedChapterIndex}
-        onChange={(e) => setSelectedChapterIndex(e.target.value)}
-      >
-        <option value="">-- Select Chapter --</option>
-        {(() => {
-          const chapters = book?.chapters || [];
-          const completedList = currentBookItem?.completed_chapters || [];
+                  return isPageBased ? (
+                    <div className="p-3 bg-pink-50/50 rounded-xl border border-pink-100 space-y-3">
+                      <label className="block font-semibold text-pink-900 text-xs">
+                        Page Range Covered 📄 (Total Book Pages: {book.total_pages || "N/A"})
+                      </label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[10px] text-gray-500 mb-0.5">Start Page</label>
+                          <input
+                            type="number"
+                            min="1"
+                            max={book.total_pages || 999}
+                            className="input w-full text-xs bg-white"
+                            value={startPage}
+                            onChange={(e) => setStartPage(e.target.value)}
+                            placeholder="e.g. 1"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] text-gray-500 mb-0.5">End Page</label>
+                          <input
+                            type="number"
+                            min="1"
+                            max={book.total_pages || 999}
+                            className="input w-full text-xs bg-white"
+                            value={endPage}
+                            onChange={(e) => setEndPage(e.target.value)}
+                            placeholder="e.g. 5"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-pink-50/50 rounded-xl border border-pink-100 space-y-2">
+                      <label className="block mb-1 font-semibold text-pink-900 text-xs">
+                        Chapter / Lesson Focus 📑
+                      </label>
+                      <select
+                        className="input w-full text-xs bg-white cursor-pointer"
+                        value={selectedChapterIndex}
+                        onChange={(e) => setSelectedChapterIndex(e.target.value)}
+                      >
+                        <option value="">-- Select Chapter --</option>
+                        {(() => {
+                          const chapters = book?.chapters || [];
+                          const completedList = currentBookItem?.completed_chapters || [];
 
-          return chapters
-            .map((chap: any, idx: number) => ({ ...chap, index: idx }))
-            .filter((chap: any) => !completedList.includes(chap.index))
-            .map((chap: any) => (
-              <option key={chap.index} value={chap.index}>
-                Chapter {chap.index + 1}: {chap.title || `Lesson ${chap.index + 1}`}
-              </option>
-            ));
-        })()}
-      </select>
+                          return chapters
+                            .map((chap: any, idx: number) => ({ ...chap, index: idx }))
+                            .filter((chap: any) => !completedList.includes(chap.index))
+                            .map((chap: any) => (
+                              <option key={chap.index} value={chap.index}>
+                                Chapter {chap.index + 1}: {chap.title || `Lesson ${chap.index + 1}`}
+                              </option>
+                            ));
+                        })()}
+                      </select>
 
-      <label className="flex items-center gap-2 cursor-pointer pt-1 text-xs text-pink-950 font-medium">
-        <input
-          type="checkbox"
-          checked={isChapterComplete}
-          onChange={(e) => setIsChapterComplete(e.target.checked)}
-          className="rounded border-pink-300 text-pink-600 focus:ring-pink-500 w-4 h-4"
-        />
-        <span>Mark this chapter as fully completed 🎯</span>
-      </label>
-    </div>
-  );
-})()}
+                      <label className="flex items-center gap-2 cursor-pointer pt-1 text-xs text-pink-950 font-medium">
+                        <input
+                          type="checkbox"
+                          checked={isChapterComplete}
+                          onChange={(e) => setIsChapterComplete(e.target.checked)}
+                          className="rounded border-pink-300 text-pink-600 focus:ring-pink-500 w-4 h-4"
+                        />
+                        <span>Mark this chapter as fully completed 🎯</span>
+                      </label>
+                    </div>
+                  );
+                })()}
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -1254,9 +1205,7 @@ async function handleAddReport(e: React.FormEvent) {
                 <input
                   type="file"
                   accept="image/*,application/pdf"
-                  onChange={(e) =>
-                    setHomeworkFile(e.target.files?.[0] || null)
-                  }
+                  onChange={(e) => setHomeworkFile(e.target.files?.[0] || null)}
                   className="file:mr-3 file:py-1.5 file:px-3.5 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-pink-600 file:text-white hover:file:bg-pink-700 text-xs text-gray-500 w-full cursor-pointer"
                 />
                 {homeworkFile && (
@@ -1270,7 +1219,7 @@ async function handleAddReport(e: React.FormEvent) {
                 <button
                   type="button"
                   onClick={() => setIsReportModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-xs font-semibold text-gray-600 cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 font-semibold text-gray-600 cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -1299,32 +1248,42 @@ async function handleAddReport(e: React.FormEvent) {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
                   <label className="block mb-1 text-xs font-semibold text-gray-700">
-                    Student Name *
+                    Phone
                   </label>
                   <input
                     className="input w-full text-xs"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
                   />
                 </div>
                 <div>
                   <label className="block mb-1 text-xs font-semibold text-gray-700">
-                    Assigned Teacher Persona *
+                    Country *
                   </label>
                   <select
                     className="input w-full text-xs bg-white"
-                    value={teacherAlias}
-                    onChange={(e) => setTeacherAlias(e.target.value)}
+                    value={country}
+                    onChange={(e) => {
+                      const selected = e.target.value;
+                      const selectedCountry = countries.find(
+                        (item) => item.name === selected
+                      );
+                      setCountry(selected);
+                      if (selectedCountry) {
+                        setPaymentCurrency(selectedCountry.currency);
+                        calculatePHP(paymentAmount, selectedCountry.currency);
+                      }
+                    }}
                   >
-                    {teacherAliases.map((alias) => (
-                      <option key={alias} value={alias}>
-                        {alias}
+                    <option value="">Select Country</option>
+                    {countries.map((item) => (
+                      <option key={item.name} value={item.name}>
+                        {item.name} {item.flag}
                       </option>
                     ))}
                   </select>
                 </div>
               </div>
-
               <div>
                 <label className="block mb-1 text-xs font-semibold text-gray-700">
                   Classroom Video Link (Zoom / Google Meet URL)
@@ -1337,9 +1296,8 @@ async function handleAddReport(e: React.FormEvent) {
                 />
               </div>
 
-              {/* Multiple Books Selection Checkboxes */}
               <div>
-               <label className="block mb-1 text-xs font-semibold text-gray-700">
+                <label className="block mb-1 text-xs font-semibold text-gray-700">
                   Assigned Curriculum / Books (Select up to 2)
                 </label>
                 <div className="space-y-2">
@@ -1371,7 +1329,6 @@ async function handleAddReport(e: React.FormEvent) {
                     )}
                   </select>
 
-                  {/* Selected Books Tags */}
                   <div className="flex flex-wrap gap-1.5 pt-1">
                     {selectedBookIds.length === 0 ? (
                       <span className="text-[11px] text-gray-400 italic">No books selected yet.</span>
@@ -1479,13 +1436,13 @@ async function handleAddReport(e: React.FormEvent) {
                 </div>
                 <div>
                   <label className="block mb-1 text-xs font-semibold text-gray-700">
-                    Classes Completed
+                    Free Classes
                   </label>
                   <input
                     type="number"
                     className="input w-full text-xs"
-                    value={classesCompleted}
-                    onChange={(e) => setClassesCompleted(e.target.value)}
+                    value={freeClasses}
+                    onChange={(e) => setFreeClasses(e.target.value)}
                   />
                 </div>
                 <div>
@@ -1512,18 +1469,127 @@ async function handleAddReport(e: React.FormEvent) {
 
             <div className="flex justify-end gap-3 pt-4 border-t border-pink-100">
               <button
+                type="button"
                 onClick={() => setIsEditModalOpen(false)}
                 className="px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-xs font-semibold text-gray-600 transition cursor-pointer"
               >
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={handleUpdateStudent}
                 className="btn-primary cursor-pointer text-xs"
               >
                 Save Changes
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: ADD WEEKLY SCHEDULE */}
+      {isScheduleModalOpen && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="card bg-white w-full max-w-md p-6 rounded-3xl shadow-xl space-y-4 text-xs">
+            <div className="flex items-center justify-between border-b border-pink-100 pb-3">
+              <div>
+                <h3 className="font-bold text-base text-pink-950">Add Weekly Schedule</h3>
+                <p className="text-gray-500">Set regular class slots for this student.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsScheduleModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleAddSchedule} className="space-y-3.5">
+              <div>
+                <label className="block mb-1.5 font-semibold text-gray-700">Select Days of the Week *</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {DAYS_OF_WEEK.map((day) => {
+                    const isSelected = scheduleDays.includes(day);
+                    return (
+                      <button
+                        key={day}
+                        type="button"
+                        onClick={() => {
+                          if (isSelected) {
+                            setScheduleDays(scheduleDays.filter((d) => d !== day));
+                          } else {
+                            setScheduleDays([...scheduleDays, day]);
+                          }
+                        }}
+                        className={`py-2 px-3 rounded-xl border text-xs font-semibold transition cursor-pointer ${
+                          isSelected
+                            ? "bg-pink-600 text-white border-pink-600 shadow-xs"
+                            : "bg-white text-gray-700 border-gray-200 hover:bg-pink-50"
+                        }`}
+                      >
+                        {day}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block mb-1 font-semibold text-gray-700">Class Time *</label>
+                  <input
+                    type="time"
+                    required
+                    className="input w-full text-xs"
+                    value={scheduleTime}
+                    onChange={(e) => setScheduleTime(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1 font-semibold text-gray-700">Duration (mins)</label>
+                  <select
+                    className="input w-full text-xs bg-white"
+                    value={scheduleDuration}
+                    onChange={(e) => setScheduleDuration(e.target.value)}
+                  >
+                    <option value="25">25 minutes</option>
+                    <option value="40">40 minutes</option>
+                    <option value="50">50 minutes</option>
+                    <option value="60">60 minutes</option>
+                    <option value="90">90 minutes</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block mb-1 font-semibold text-gray-700">Topic / Focus</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Regular Class / Conversation"
+                  className="input w-full text-xs"
+                  value={scheduleTopic}
+                  onChange={(e) => setScheduleTopic(e.target.value)}
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-pink-100">
+                <button
+                  type="button"
+                  onClick={() => setIsScheduleModalOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 font-semibold text-gray-600 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingSchedule}
+                  className="btn-primary text-xs px-5 py-2 cursor-pointer"
+                >
+                  {isSavingSchedule ? "Saving..." : "Save Schedule"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

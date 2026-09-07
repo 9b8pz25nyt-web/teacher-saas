@@ -49,6 +49,59 @@ export default function PaymentsPage() {
   const [paymentNotes, setPaymentNotes] = useState("");
   const [savingPayment, setSavingPayment] = useState(false);
 
+  // Edit Payment State
+  const [editingPayment, setEditingPayment] = useState<any | null>(null);
+  const [editAmount, setEditAmount] = useState("");
+  const [editCurrency, setEditCurrency] = useState("PHP");
+  const [editPhpEquivalent, setEditPhpEquivalent] = useState<number>(0);
+  const [editFee, setEditFee] = useState("0");
+  const [editStatus, setEditStatus] = useState("Paid");
+  const [editMethod, setEditMethod] = useState("Bank Transfer");
+  const [editRef, setEditRef] = useState("");
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+
+  function handleOpenEdit(p: any) {
+    setEditingPayment(p);
+    setEditAmount(formatWithCommas(p.amount));
+    setEditCurrency(p.currency || "PHP");
+    setEditPhpEquivalent(p.php_equivalent || p.grossPhp);
+    setEditFee(formatWithCommas(p.transfer_fee_php || 0));
+    setEditStatus(p.payment_status || "Paid");
+    setEditMethod(p.payment_method || "Bank Transfer");
+    setEditRef(p.reference_number || "");
+  }
+
+  async function handleSaveEdit() {
+    if (!editingPayment) return;
+    const cleanAmount = Number(String(editAmount).replace(/[^0-9.]/g, ""));
+    const cleanFee = Number(String(editFee).replace(/[^0-9.]/g, "")) || 0;
+
+    setIsSavingEdit(true);
+    try {
+      const { error } = await supabase
+        .from("payments")
+        .update({
+          amount: cleanAmount,
+          currency: editCurrency,
+          php_equivalent: editPhpEquivalent || cleanAmount,
+          transfer_fee_php: cleanFee,
+          payment_status: editStatus,
+          payment_method: editMethod,
+          reference_number: editRef.trim() || null,
+        })
+        .eq("id", editingPayment.id);
+
+      if (error) throw error;
+
+      setEditingPayment(null);
+      fetchData();
+    } catch (err: any) {
+      alert("Failed to update payment: " + err.message);
+    } finally {
+      setIsSavingEdit(false);
+    }
+  }
+
   // Receipt Modal State
   const [selectedPaymentForReceipt, setSelectedPaymentForReceipt] = useState<any | null>(null);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
@@ -109,6 +162,20 @@ export default function PaymentsPage() {
       }
     } catch {
       setPhpEquivalent(0);
+    }
+  }
+
+  async function handleMarkAsPaid(paymentId: string) {
+    try {
+      const { error } = await supabase
+        .from("payments")
+        .update({ payment_status: "Paid" })
+        .eq("id", paymentId);
+
+      if (error) throw error;
+      fetchData();
+    } catch (err: any) {
+      alert("Failed to update payment status: " + err.message);
     }
   }
 
@@ -421,23 +488,47 @@ export default function PaymentsPage() {
                             </span>
                           )}
                         </td>
+<td className="p-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEdit(p)}
+                              className="p-1.5 text-gray-600 hover:text-pink-600 hover:bg-pink-50 rounded-lg transition inline-flex items-center gap-1 text-[11px] font-semibold border border-pink-100 bg-white cursor-pointer"
+                              title="Edit Payment"
+                            >
+                              <span>Edit</span>
+                            </button>
 
-                        <td className="p-4 text-right space-x-1.5">
-                          <button
-                            type="button"
-                            onClick={() => setSelectedPaymentForReceipt(p)}
-                            className="p-1.5 text-gray-600 hover:text-pink-600 hover:bg-pink-50 rounded-lg transition inline-flex items-center gap-1 text-[11px] font-semibold border border-pink-100 bg-white cursor-pointer"
-                          >
-                            <Receipt size={14} className="text-pink-600" />
-                            <span>Receipt</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeletePayment(p.id)}
-                            className="p-1.5 text-pink-500 hover:text-pink-700 hover:bg-pink-100 rounded-lg transition inline-flex items-center cursor-pointer"
-                          >
-                            <Trash2 size={14} />
-                          </button>
+                            {p.payment_status === "Pending" && (
+                              <button
+                                type="button"
+                                onClick={() => handleMarkAsPaid(p.id)}
+                                className="p-1.5 text-emerald-700 hover:bg-emerald-50 rounded-lg transition inline-flex items-center gap-1 text-[11px] font-semibold border border-emerald-200 bg-white cursor-pointer"
+                                title="Mark as Paid"
+                              >
+                                <span>Mark Paid</span>
+                              </button>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={() => setSelectedPaymentForReceipt(p)}
+                              className="p-1.5 text-gray-600 hover:text-pink-600 hover:bg-pink-50 rounded-lg transition inline-flex items-center gap-1 text-[11px] font-semibold border border-pink-100 bg-white cursor-pointer"
+                              title="View Receipt"
+                            >
+                              <Receipt size={14} className="text-pink-600" />
+                              <span>Receipt</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleDeletePayment(p.id)}
+                              className="p-1.5 text-pink-500 hover:text-pink-700 hover:bg-pink-100 rounded-lg transition inline-flex items-center cursor-pointer"
+                              title="Delete Payment"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -511,7 +602,6 @@ export default function PaymentsPage() {
                 </div>
               </div>
 
-              {/* PHP Gross vs Fee vs Net */}
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="block mb-1 font-semibold text-gray-700">Gross PHP Equivalent</label>
@@ -536,7 +626,6 @@ export default function PaymentsPage() {
                 </div>
               </div>
 
-              {/* Net Take-Home Preview */}
               <div className="p-2.5 bg-pink-50 rounded-xl border border-pink-100 flex justify-between items-center text-xs">
                 <span className="font-bold text-gray-700">Net Take-Home PHP:</span>
                 <span className="font-black text-pink-600 text-sm">
@@ -628,6 +717,90 @@ export default function PaymentsPage() {
         </div>
       )}
 
+      {/* Edit Payment Modal */}
+      {editingPayment && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white border border-pink-200 rounded-3xl p-6 w-full max-w-lg shadow-2xl space-y-4 text-xs">
+            <div className="flex items-center justify-between border-b border-pink-100 pb-3">
+              <h3 className="font-bold text-base text-pink-950">Edit Payment Record</h3>
+              <button onClick={() => setEditingPayment(null)} className="text-gray-400 hover:text-gray-600">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block mb-1 font-semibold text-gray-700">Amount</label>
+                  <input
+                    type="text"
+                    className="input text-xs w-full font-semibold"
+                    value={editAmount}
+                    onChange={(e) => {
+                      const raw = e.target.value.replace(/[^0-9.]/g, "");
+                      setEditAmount(formatWithCommas(raw));
+                      convertToPHP(Number(raw) || 0, editCurrency).then((php) =>
+                        setEditPhpEquivalent(Math.round(php))
+                      );
+                    }}
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1 font-semibold text-gray-700">Status</label>
+                  <select
+                    className="input bg-white text-xs w-full"
+                    value={editStatus}
+                    onChange={(e) => setEditStatus(e.target.value)}
+                  >
+                    <option value="Paid">Paid</option>
+                    <option value="Pending">Pending</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block mb-1 font-semibold text-gray-700">Transfer Fee (PHP)</label>
+                  <input
+                    type="text"
+                    className="input text-xs w-full text-rose-600 font-semibold"
+                    value={editFee}
+                    onChange={(e) => setEditFee(formatWithCommas(e.target.value))}
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1 font-semibold text-gray-700">Reference / Txn #</label>
+                  <input
+                    type="text"
+                    className="input text-xs w-full"
+                    value={editRef}
+                    onChange={(e) => setEditRef(e.target.value)}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-pink-50">
+              <button
+                type="button"
+                onClick={() => setEditingPayment(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveEdit}
+                disabled={isSavingEdit}
+                className="btn-primary text-xs py-2 px-5"
+              >
+                {isSavingEdit ? "Saving..." : "Save Changes"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Printable Receipt Modal */}
       {selectedPaymentForReceipt && (
         <div
@@ -652,7 +825,6 @@ export default function PaymentsPage() {
               </button>
             </div>
 
-            {/* Receipt Preview Sheet */}
             <div className="flex-1 overflow-y-auto border border-gray-200 rounded-2xl p-6 bg-white shadow-inner">
               <div
                 ref={receiptPdfRef}
