@@ -190,15 +190,15 @@ export default function AttendanceModal({
           )}
 
           {makeupRequested && (
-            <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">
-                Make-up Date & Time
+            <div className="space-y-1.5 p-3.5 bg-pink-50/50 rounded-2xl border border-pink-100">
+              <label className="block text-xs font-bold text-pink-900">
+                Make-up Date & Time 📅
               </label>
               <input
                 type="datetime-local"
                 value={makeupDateTime}
                 onChange={(e) => setMakeupDateTime(e.target.value)}
-                className="w-full border border-gray-200 rounded-xl p-2 text-sm focus:ring-2 focus:ring-pink-500 outline-hidden"
+                className="w-full bg-white border border-pink-200 text-pink-950 font-semibold text-xs rounded-xl px-3.5 py-2.5 outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 shadow-xs cursor-pointer scheme-pink [color-scheme:light] accent-pink-600"
                 required={makeupRequested}
               />
             </div>

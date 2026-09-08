@@ -91,7 +91,7 @@ export default function ClassEvent({
     }
   }
 
-  async function handleRedoStatus() {
+ async function handleRedoStatus() {
     if (isSubmitting || !studentId) return;
 
     setIsSubmitting(true);
@@ -99,23 +99,40 @@ export default function ClassEvent({
     setShowActions(false);
 
     try {
-      if (type === 'makeup') {
+      if (type === "makeup") {
+        // 1. Reset make-up status back to Scheduled
         await supabase
           .from("makeup_classes")
-          .update({ status: 'Scheduled' })
-          .eq('id', id);
-      } else {
-        await supabase
-          .from("lessons")
-          .delete()
-          .eq("student_id", studentId)
-          .eq("lesson_date", dateString);
+          .update({ status: "Scheduled" })
+          .eq("id", id);
+      }
 
+      // 2. Delete the record from 'lessons' table (clears calendar completion)
+      await supabase
+        .from("lessons")
+        .delete()
+        .eq("student_id", studentId)
+        .eq("lesson_date", dateString);
+
+      // 3. Delete the corresponding logged lesson report from 'class_reports'
+      await supabase
+        .from("class_reports")
+        .delete()
+        .eq("student_id", studentId)
+        .or(`report_date.eq.${dateString},lesson_date.eq.${dateString}`);
+
+      // 4. Decrement classes_completed count on the student profile
+      const { data: studentData } = await supabase
+        .from("students")
+        .select("classes_completed")
+        .eq("id", studentId)
+        .single();
+
+      if (studentData && (studentData.classes_completed || 0) > 0) {
         await supabase
-          .from("class_reports")
-          .delete()
-          .eq("student_id", studentId)
-          .eq("report_date", dateString);
+          .from("students")
+          .update({ classes_completed: Math.max(0, studentData.classes_completed - 1) })
+          .eq("id", studentId);
       }
 
       if (onStatusUpdate) onStatusUpdate();

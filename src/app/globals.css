@@ -130,3 +130,15 @@ body {
 .animate-marquee2 {
   animation: marquee2 25s linear infinite;
 }
+
+/* Custom Pink styling for datetime-local calendar trigger icon */
+input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  filter: invert(34%) sepia(85%) saturate(2371%) hue-rotate(315deg) brightness(91%) contrast(97%);
+  border-radius: 6px;
+  padding: 2px;
+}
+
+input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
+  background-color: rgba(244, 114, 182, 0.15);
+}

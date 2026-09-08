@@ -50,11 +50,14 @@ export default function LessonLogModal({
           books: allBks.find((b: any) => b.id === item.book_id)
         }))
         setStudentBooks(matched)
-      } else if (allBks) {
-        setStudentBooks(allBks.map(b => ({ book_id: b.id, completed_chapters: [], books: b })))
+      } else {
+        setStudentBooks([])
       }
     }
-    if (isOpen) fetchBooks()
+    if (isOpen) {
+      fetchBooks()
+      setLessonDate(new Date().toISOString().split('T')[0])
+    }
   }, [isOpen, studentId])
 
   if (!isOpen) return null
@@ -66,7 +69,17 @@ export default function LessonLogModal({
     setIsSubmitting(true)
     try {
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+      if (!user) {
+        alert("Session expired. Please log in again.")
+        return
+      }
+
+      // Fetch student teacher alias
+      const { data: currentStudent } = await supabase
+        .from('students')
+        .select('teacher_alias, classes_completed')
+        .eq('id', studentId)
+        .single()
 
       let uploadedFileUrl: string | null = null
       if (homeworkFile) {
@@ -86,56 +99,83 @@ export default function LessonLogModal({
         uploadedFileUrl = publicUrlData.publicUrl
       }
 
-      const payload: any = {
+      const validBookId = reportBookId && reportBookId.trim() !== "" ? reportBookId : null
+
+      const reportPayload: any = {
         student_id: studentId,
         teacher_id: user.id,
+        teacher_alias: currentStudent?.teacher_alias || "Teacher Gabi",
         lesson_title: lessonTitle.trim(),
         title: lessonTitle.trim(),
         report_date: lessonDate,
         lesson_date: lessonDate,
-        book_id: reportBookId || null,
+        book_id: validBookId,
         vocabulary: vocabulary.trim() || null,
         strengths: strengths.trim() || null,
         improvements: improvements.trim() || null,
         homework: homework.trim() || null,
         status: 'Completed',
-        homework_file_url: uploadedFileUrl || null
+        homework_file_url: uploadedFileUrl
       }
 
       const selectedBookItem = studentBooks.find((item: any) => item.books?.id === reportBookId)
       if (selectedBookItem?.books?.book_type === 'pages') {
-        payload.start_page = startPage ? Number(startPage) : null
-        payload.end_page = endPage ? Number(endPage) : null
+        reportPayload.start_page = startPage ? Number(startPage) : null
+        reportPayload.end_page = endPage ? Number(endPage) : null
       }
 
       // 1. Insert into class_reports
-      await supabase.from('class_reports').insert(payload)
+      const { error: reportError } = await supabase.from('class_reports').insert(reportPayload)
+      if (reportError) {
+        throw new Error(`class_reports insert failed: ${reportError.message}`)
+      }
 
-      // 2. Insert into lessons for calendar sync
-      await supabase.from('lessons').insert({
+      // 2. Insert into lessons for calendar synchronization
+      const { error: lessonError } = await supabase.from('lessons').insert({
         student_id: studentId,
         teacher_id: user.id,
         title: lessonTitle.trim(),
         lesson_date: lessonDate,
         status: 'Completed',
         description: `Vocab: ${vocabulary}\nStrengths: ${strengths}\nHomework: ${homework}`,
-        homework_file_url: uploadedFileUrl || null,
-        book_id: reportBookId || null
+        homework_file_url: uploadedFileUrl,
+        book_id: validBookId
       })
+      if (lessonError) {
+        throw new Error(`lessons insert failed: ${lessonError.message}`)
+      }
 
-      // 3. Update status on schedule or makeup event
+      // 3. Update chapter completion if marked
+      if (validBookId && selectedChapterIndex !== "" && isChapterComplete) {
+        const currentCompletedChapters = selectedBookItem?.completed_chapters || []
+        const chapterIdxNum = Number(selectedChapterIndex)
+        
+        if (!currentCompletedChapters.includes(chapterIdxNum)) {
+          const updatedChapters = [...currentCompletedChapters, chapterIdxNum]
+          await supabase
+            .from("student_books")
+            .update({ completed_chapters: updatedChapters })
+            .eq("student_id", studentId)
+            .eq("book_id", validBookId)
+        }
+      }
+
+      // 4. Update status on schedule or makeup event
       if (eventType === 'regular' && eventId) {
         await supabase.from('schedules').update({ status: 'Completed' }).eq('id', eventId)
       } else if (eventType === 'makeup' && eventId) {
         await supabase.from('makeup_classes').update({ status: 'Completed' }).eq('id', eventId)
       }
 
-      // 4. Increment student completed classes count
-      const { data: currentStudent } = await supabase.from('students').select('classes_completed').eq('id', studentId).single()
+      // 5. Increment completed classes count
       const currentCompleted = currentStudent?.classes_completed || 0
-      await supabase.from('students').update({ classes_completed: currentCompleted + 1 }).eq('id', studentId)
+      await supabase
+        .from('students')
+        .update({ classes_completed: currentCompleted + 1 })
+        .eq('id', studentId)
 
       onClose()
+      window.location.reload()
     } catch (err: any) {
       console.error('Error saving lesson log:', err)
       alert(err.message || 'Failed to save lesson log')
