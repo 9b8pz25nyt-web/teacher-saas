@@ -471,12 +471,14 @@ export default function StudentDetailsPage({
         uploadedFileUrl = publicUrlData.publicUrl;
       }
 
+      const validBookId = reportBookId && reportBookId.trim() !== "" ? reportBookId : null;
+
       const payload: any = {
         lesson_title: lessonTitle.trim(),
         title: lessonTitle.trim(),
         report_date: reportDate,
         lesson_date: reportDate,
-        book_id: reportBookId || null,
+        book_id: validBookId,
         vocabulary: vocabulary.trim() || null,
         strengths: strengths.trim() || null,
         improvements: improvements.trim() || null,
@@ -487,8 +489,8 @@ export default function StudentDetailsPage({
 
       const selectedBookItem = studentBooks.find((item: any) => item.books?.id === reportBookId);
       if (selectedBookItem?.books?.book_type === "pages") {
-        payload.start_page = startPage ? Number(startPage) : null;
-        payload.end_page = endPage ? Number(endPage) : null;
+        payload.start_page = startPageInput ? Number(startPageInput) : null;
+        payload.end_page = endPageInput ? Number(endPageInput) : null;
       }
 
       if (uploadedFileUrl) {
@@ -521,10 +523,10 @@ export default function StudentDetailsPage({
           status: "Completed",
           description: `Vocab: ${vocabulary}\nStrengths: ${strengths}\nHomework: ${homework}`,
           homework_file_url: uploadedFileUrl || null,
-          book_id: reportBookId || null,
+          book_id: validBookId,
         });
 
-        if (reportBookId && selectedChapterIndex !== "" && isChapterComplete) {
+        if (validBookId && selectedChapterIndex !== "" && isChapterComplete) {
           const currentCompletedChapters = selectedBookItem?.completed_chapters || [];
           const chapterIdxNum = Number(selectedChapterIndex);
           
@@ -535,7 +537,7 @@ export default function StudentDetailsPage({
               .from("student_books")
               .update({ completed_chapters: updatedChapters })
               .eq("student_id", studentId)
-              .eq("book_id", reportBookId);
+              .eq("book_id", validBookId);
           }
         }
 
@@ -588,6 +590,14 @@ export default function StudentDetailsPage({
 
   const combinedTotalClasses = Number(student?.classes_included || 0) + Number(student?.free_classes || 0);
 
+  // Dynamic completed count derived directly from logged reports array
+  const dynamicCompletedCount = reports ? reports.length : 0;
+  const dynamicRemainingCount = Math.max(combinedTotalClasses - dynamicCompletedCount, 0);
+  const dynamicProgressPercent = Math.min(
+    Math.round((dynamicCompletedCount / (combinedTotalClasses || 1)) * 100),
+    100
+  );
+
   if (loading) {
     return (
       <div className="p-12 text-center text-pink-600 font-medium">
@@ -598,16 +608,6 @@ export default function StudentDetailsPage({
 
   const countryObj = countries.find((c) => c.name === student?.country);
   const currencyObj = currencies[student?.payment_currency];
-  const remainingCount = Math.max(
-    combinedTotalClasses - (student?.classes_completed || 0),
-    0
-  );
-  const progressPercent = Math.min(
-    Math.round(
-      ((student?.classes_completed || 0) / (combinedTotalClasses || 1)) * 100
-    ),
-    100
-  );
 
   return (
     <div className="p-8 max-w-6xl mx-auto space-y-6">
@@ -620,7 +620,7 @@ export default function StudentDetailsPage({
           <span>Back to Students</span>
         </Link>
         <div className="flex items-center gap-2">
-          {student.access_token && (
+          {student?.access_token && (
             <button
               onClick={handleCopyPortalLink}
               className="px-3.5 py-2 bg-pink-50 hover:bg-pink-100 text-pink-700 border border-pink-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
@@ -678,22 +678,22 @@ export default function StudentDetailsPage({
         <div className="space-y-2">
           <div className="flex items-center gap-3">
             <h1 className="text-3xl font-extrabold text-pink-950">
-              {student.name}
+              {student?.name}
             </h1>
             <span className="px-3 py-1 bg-pink-50 text-pink-700 border border-pink-200 text-xs font-bold rounded-xl uppercase">
-              {student.teacher_alias || "Teacher Gabi"}
+              {student?.teacher_alias || "Teacher Gabi"}
             </span>
           </div>
           <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500">
             <span>
-              {countryObj?.flag} {student.country || "International"}
+              {countryObj?.flag} {student?.country || "International"}
             </span>
             <span>•</span>
-            <span>Age: {student.age ? `${student.age} yrs` : "N/A"}</span>
+            <span>Age: {student?.age ? `${student.age} yrs` : "N/A"}</span>
             <span>•</span>
-            <span>Email: {student.email || "N/A"}</span>
+            <span>Email: {student?.email || "N/A"}</span>
             <span>•</span>
-            <span>Phone: {student.phone || "N/A"}</span>
+            <span>Phone: {student?.phone || "N/A"}</span>
           </div>
         </div>
 
@@ -703,7 +703,7 @@ export default function StudentDetailsPage({
           </div>
           <div className="text-xs space-y-0.5 overflow-hidden">
             <p className="font-bold text-gray-900">Classroom Meeting Link</p>
-            {student.meeting_link ? (
+            {student?.meeting_link ? (
               <a
                 href={student.meeting_link}
                 target="_blank"
@@ -724,13 +724,13 @@ export default function StudentDetailsPage({
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold text-gray-900">Class Package</h3>
             <span className="text-xs font-bold text-pink-600">
-              {progressPercent}% Done
+              {dynamicProgressPercent}% Done
             </span>
           </div>
           <div className="w-full bg-gray-100 h-2.5 rounded-full overflow-hidden">
             <div
               className="bg-pink-600 h-full rounded-full transition-all duration-300"
-              style={{ width: `${progressPercent}%` }}
+              style={{ width: `${dynamicProgressPercent}%` }}
             />
           </div>
           <div className="grid grid-cols-3 gap-2 text-center text-xs">
@@ -739,7 +739,7 @@ export default function StudentDetailsPage({
                 Completed
               </p>
               <p className="font-bold text-gray-800 text-base mt-0.5">
-                {student.classes_completed || 0}
+                {dynamicCompletedCount}
               </p>
             </div>
             <div className="p-2.5 bg-pink-50/50 rounded-xl">
@@ -747,7 +747,7 @@ export default function StudentDetailsPage({
                 Remaining
               </p>
               <p className="font-bold text-pink-600 text-base mt-0.5">
-                {remainingCount}
+                {dynamicRemainingCount}
               </p>
             </div>
             <div className="p-2.5 bg-pink-50/50 rounded-xl">
@@ -755,7 +755,7 @@ export default function StudentDetailsPage({
                 Duration
               </p>
               <p className="font-bold text-gray-800 text-base mt-0.5">
-                {student.class_duration || 40}m
+                {student?.class_duration || 40}m
               </p>
             </div>
           </div>
@@ -789,8 +789,8 @@ export default function StudentDetailsPage({
                   bookProgress = Math.min(100, Math.round((maxPageReached / totalPages) * 100));
                 } else {
                   const totalChapters = book?.chapters?.length || 1;
-                  const completedChapters = item?.completed_chapters?.length || 0;
-                  bookProgress = Math.min(100, Math.round((completedChapters / totalChapters) * 100));
+                  const completedChapters = item?.completed_chapters || [];
+                  bookProgress = Math.min(100, Math.round((completedChapters.length / totalChapters) * 100));
                 }
 
                 return (
@@ -820,11 +820,11 @@ export default function StudentDetailsPage({
               <span className="text-gray-500">Package Rate:</span>
               <span className="font-bold text-pink-600 text-sm">
                 {currencyObj?.symbol || ""}
-                {Number(student.payment_amount || 0).toLocaleString()}{" "}
-                {student.payment_currency}
+                {Number(student?.payment_amount || 0).toLocaleString()}{" "}
+                {student?.payment_currency}
               </span>
             </div>
-            {student.php_equivalent && (
+            {student?.php_equivalent && (
               <div className="flex justify-between items-center text-gray-600">
                 <span>PHP Value:</span>
                 <span className="font-semibold text-gray-900">
@@ -835,7 +835,7 @@ export default function StudentDetailsPage({
             <div className="flex justify-between items-center pt-1 border-t border-pink-100">
               <span className="text-gray-500">Payment Status:</span>
               <span className="font-bold text-emerald-600 uppercase text-[10px]">
-                {student.payment_status || "Active"}
+                {student?.payment_status || "Active"}
               </span>
             </div>
           </div>
@@ -892,7 +892,7 @@ export default function StudentDetailsPage({
         <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs space-y-2">
           <h3 className="text-sm font-bold text-gray-900">Notes & Objectives</h3>
           <p className="text-xs text-gray-600 leading-relaxed">
-            {student.notes || "No special notes recorded yet."}
+            {student?.notes || "No special notes recorded yet."}
           </p>
         </div>
       </div>
@@ -904,7 +904,7 @@ export default function StudentDetailsPage({
               Logged Lessons & Reports
             </h3>
             <span className="text-[11px] font-bold text-pink-600 bg-pink-50 px-2 py-0.5 rounded-lg border border-pink-200">
-              {reports.length}
+              {dynamicCompletedCount}
             </span>
           </div>
           <button
@@ -968,7 +968,7 @@ export default function StudentDetailsPage({
                 </div>
 
                 {rep.vocabulary && (
-                  <p className="text-gray-600 font-mono text-[11px] bg-white/70 p-2 rounded-lg border border-pink-50">
+                  <p className="text-gray-600 font-mono text-[11px] bg-white/70 p-2 rounded-lg border border-pink-50 whitespace-pre-wrap">
                     <strong>Vocab/Structures:</strong> {rep.vocabulary}
                   </p>
                 )}
@@ -983,7 +983,7 @@ export default function StudentDetailsPage({
                       <strong className="text-pink-900 text-[11px]">
                         Homework:
                       </strong>
-                      <p className="text-[11px] text-gray-800">{rep.homework}</p>
+                      <p className="text-[11px] text-gray-800 whitespace-pre-wrap">{rep.homework}</p>
                     </div>
                   </div>
                 )}
@@ -1146,12 +1146,17 @@ export default function StudentDetailsPage({
                 <label className="block mb-1 font-semibold text-gray-700">
                   Vocabulary / Target Patterns
                 </label>
-                <input
-                  type="text"
+                <textarea
+                  rows={2}
                   placeholder="e.g. cheetah, mammal, fast, faster than"
                   className="input w-full text-xs"
                   value={vocabulary}
                   onChange={(e) => setVocabulary(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.stopPropagation();
+                    }
+                  }}
                 />
               </div>
 
