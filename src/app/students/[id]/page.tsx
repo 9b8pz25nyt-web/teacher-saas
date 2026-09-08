@@ -17,10 +17,9 @@ import {
   Copy,
   Check,
   FileCheck,
-  Download,
-  X,
-  Sparkles,
   Video,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 
 const DEFAULT_ALIASES = ["Teacher Gabi", "Teacher Princess"];
@@ -49,16 +48,17 @@ export default function StudentDetailsPage({
   const [books, setBooks] = useState<any[]>([]);
   const [studentBooks, setStudentBooks] = useState<any[]>([]);
   const [reports, setReports] = useState<any[]>([]);
+  const [latestPayment, setLatestPayment] = useState<any>(null);
   const [teacherAliases, setTeacherAliases] = useState<string[]>(DEFAULT_ALIASES);
   const [loading, setLoading] = useState(true);
   const [copiedPortal, setCopiedPortal] = useState(false);
-  const [copiedNotice, setCopiedNotice] = useState(false);
+  const [expandedReportIds, setExpandedReportIds] = useState<string[]>([]);
 
-  // Renewal Modal & PDF State
-  const [isRenewalModalOpen, setIsRenewalModalOpen] = useState(false);
-  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
-  const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>("");
-  const renewalPdfRef = useRef<HTMLDivElement>(null);
+  function toggleExpandReport(id: string) {
+    setExpandedReportIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  }
 
   // Edit Modal State
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -107,10 +107,8 @@ export default function StudentDetailsPage({
   const [scheduleDuration, setScheduleDuration] = useState("40");
   const [scheduleTopic, setScheduleTopic] = useState("Regular Class");
   const [isSavingSchedule, setIsSavingSchedule] = useState(false);
-  const [startPage, setStartPage] = useState("");
-  const [endPage, setEndPage] = useState("");
 
-  // Report Modal State initialized instantly from window URL search params
+  // Report Modal State
   const [isReportModalOpen, setIsReportModalOpen] = useState(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
@@ -203,8 +201,8 @@ export default function StudentDetailsPage({
         studentData.classes_included ? String(studentData.classes_included) : "30"
       );
       setFreeClasses(
-        studentData.free_classes !== undefined && studentData.free_classes !== null 
-          ? String(studentData.free_classes) 
+        studentData.free_classes !== undefined && studentData.free_classes !== null
+          ? String(studentData.free_classes)
           : "0"
       );
       setClassesCompleted(
@@ -222,25 +220,42 @@ export default function StudentDetailsPage({
       setEndDate(studentData.end_date || studentData.contract_end_date || "");
       setNotes(studentData.notes || "");
 
-      const [{ data: scheds }, { data: bks }, { data: repList }, { data: studentBks }] =
-        await Promise.all([
-          supabase.from("schedules").select("*").eq("student_id", studentId),
-          supabase.from("books").select("*").order("title", { ascending: true }),
-          supabase
-            .from("class_reports")
-            .select("*")
-            .eq("student_id", studentId)
-            .order("report_date", { ascending: false }),
-          supabase
-            .from("student_books")
-            .select("*")
-            .eq("student_id", studentId),
-        ]);
+      // Execute queries with robust student matching
+      const [
+        { data: scheds },
+        { data: bks },
+        { data: repList },
+        { data: studentBks },
+        { data: paymentList },
+      ] = await Promise.all([
+        supabase.from("schedules").select("*").eq("student_id", studentId),
+        supabase.from("books").select("*").order("title", { ascending: true }),
+        supabase
+          .from("class_reports")
+          .select("*")
+          .eq("student_id", studentId)
+          .order("report_date", { ascending: false }),
+        supabase
+          .from("student_books")
+          .select("*")
+          .eq("student_id", studentId),
+        supabase
+          .from("payments")
+          .select("*")
+          .or(`student_id.eq.${studentId},student_name.ilike.%${studentData.name}%`)
+          .order("created_at", { ascending: false })
+          .limit(1),
+      ]);
 
       if (scheds) setSchedules(scheds);
       if (bks) setBooks(bks);
       if (repList) setReports(repList);
-      
+      if (paymentList && paymentList.length > 0) {
+        setLatestPayment(paymentList[0]);
+      } else {
+        setLatestPayment(null);
+      }
+
       if (studentBks && studentBks.length > 0 && bks) {
         setSelectedBookIds(studentBks.map((item) => item.book_id));
         const matchedBooks = studentBks.map((item) => ({
@@ -263,19 +278,6 @@ export default function StudentDetailsPage({
   useEffect(() => {
     fetchStudentData();
   }, [fetchStudentData]);
-
-  useEffect(() => {
-    if (student?.access_token) {
-      const portal = `${window.location.origin}/portal/${student.access_token}`;
-      QRCode.toDataURL(portal, {
-        width: 160,
-        margin: 1,
-        color: { dark: "#1f2937", light: "#ffffff" },
-      })
-        .then((url) => setQrCodeDataUrl(url))
-        .catch(() => setQrCodeDataUrl(""));
-    }
-  }, [student?.access_token]);
 
   async function calculatePHP(amount: string, currency: string) {
     const cleanAmount = amount.replace(/,/g, "");
@@ -529,10 +531,10 @@ export default function StudentDetailsPage({
         if (validBookId && selectedChapterIndex !== "" && isChapterComplete) {
           const currentCompletedChapters = selectedBookItem?.completed_chapters || [];
           const chapterIdxNum = Number(selectedChapterIndex);
-          
+
           if (!currentCompletedChapters.includes(chapterIdxNum)) {
             const updatedChapters = [...currentCompletedChapters, chapterIdxNum];
-            
+
             await supabase
               .from("student_books")
               .update({ completed_chapters: updatedChapters })
@@ -541,7 +543,7 @@ export default function StudentDetailsPage({
           }
         }
 
-        const currentCompleted = student.classes_completed || 0;
+        const currentCompleted = student?.classes_completed || 0;
         await supabase
           .from("students")
           .update({ classes_completed: currentCompleted + 1 })
@@ -597,6 +599,15 @@ export default function StudentDetailsPage({
     Math.round((dynamicCompletedCount / (combinedTotalClasses || 1)) * 100),
     100
   );
+
+  // Derive dynamic payment status: prioritize actual payment transactions
+  const rawStatus = (latestPayment?.status || student?.payment_status || "Pending").trim();
+  const isPaid =
+    rawStatus.toLowerCase() === "paid" ||
+    rawStatus.toLowerCase() === "completed" ||
+    rawStatus.toLowerCase() === "active";
+
+  const displayStatus = isPaid ? "PAID" : "PENDING";
 
   if (loading) {
     return (
@@ -779,9 +790,9 @@ export default function StudentDetailsPage({
               studentBooks.map((item, index) => {
                 const book = item.books;
                 const isPageBased = book?.book_type === "pages";
-                
+
                 const bookReports = reports.filter((r) => r.book_id === book?.id);
-                
+
                 let bookProgress = 0;
                 if (isPageBased) {
                   const maxPageReached = bookReports.reduce((max, r) => Math.max(max, r.end_page || 0), 0);
@@ -834,8 +845,14 @@ export default function StudentDetailsPage({
             )}
             <div className="flex justify-between items-center pt-1 border-t border-pink-100">
               <span className="text-gray-500">Payment Status:</span>
-              <span className="font-bold text-emerald-600 uppercase text-[10px]">
-                {student?.payment_status || "Active"}
+              <span
+                className={`font-bold uppercase text-[10px] px-2.5 py-0.5 rounded-lg border ${
+                  isPaid
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                    : "bg-amber-50 text-amber-700 border-amber-200"
+                }`}
+              >
+                {displayStatus}
               </span>
             </div>
           </div>
@@ -934,61 +951,97 @@ export default function StudentDetailsPage({
             No lessons logged yet for this student.
           </p>
         ) : (
-          <div className="space-y-3">
-            {reports.map((rep) => (
-              <div
-                key={rep.id}
-                className="p-4 bg-pink-50/30 rounded-2xl border border-pink-100 space-y-2.5 text-xs"
-              >
-                <div className="flex justify-between items-center">
-                  <span className="font-bold text-gray-900 text-sm">
-                    {rep.lesson_title || rep.title}
-                  </span>
-                  <div className="flex items-center gap-3">
-                    <span className="text-gray-400 text-[11px]">
-                      {rep.report_date || rep.lesson_date}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => handleOpenEditReport(rep)}
-                      className="text-gray-400 hover:text-pink-600 transition p-1 cursor-pointer"
-                    >
-                      <Edit size={14} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        handleDeleteReport(rep.id, rep.homework_file_url)
-                      }
-                      className="text-gray-400 hover:text-red-600 transition p-1 cursor-pointer"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </div>
+          <div className="space-y-2.5 max-h-[500px] overflow-y-auto pr-1">
+            {reports.map((rep) => {
+              const isExpanded = expandedReportIds.includes(rep.id);
 
-                {rep.vocabulary && (
-                  <p className="text-gray-600 font-mono text-[11px] bg-white/70 p-2 rounded-lg border border-pink-50 whitespace-pre-wrap">
-                    <strong>Vocab/Structures:</strong> {rep.vocabulary}
-                  </p>
-                )}
+              return (
+                <div
+                  key={rep.id}
+                  className="bg-pink-50/30 rounded-2xl border border-pink-100 text-xs transition-all overflow-hidden"
+                >
+                  <div
+                    onClick={() => toggleExpandReport(rep.id)}
+                    className="p-3.5 flex items-center justify-between cursor-pointer hover:bg-pink-50/60 select-none"
+                  >
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        className="p-1 rounded-lg text-pink-500 bg-white border border-pink-100 shadow-2xs cursor-pointer"
+                      >
+                        {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                      </button>
+                      <span className="font-bold text-gray-900 text-sm">
+                        {rep.lesson_title || rep.title}
+                      </span>
+                    </div>
 
-                {rep.homework && (
-                  <div className="p-2.5 bg-pink-100/50 rounded-xl border border-pink-200 text-pink-950 flex items-start gap-1.5">
-                    <FileCheck
-                      size={14}
-                      className="text-pink-600 mt-0.5 shrink-0"
-                    />
-                    <div>
-                      <strong className="text-pink-900 text-[11px]">
-                        Homework:
-                      </strong>
-                      <p className="text-[11px] text-gray-800 whitespace-pre-wrap">{rep.homework}</p>
+                    <div
+                      className="flex items-center gap-3"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <span className="text-gray-400 text-[11px] font-mono">
+                        {rep.report_date || rep.lesson_date}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEditReport(rep)}
+                        className="text-gray-400 hover:text-pink-600 transition p-1 cursor-pointer"
+                      >
+                        <Edit size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleDeleteReport(rep.id, rep.homework_file_url)
+                        }
+                        className="text-gray-400 hover:text-red-600 transition p-1 cursor-pointer"
+                      >
+                        <Trash2 size={14} />
+                      </button>
                     </div>
                   </div>
-                )}
-              </div>
-            ))}
+
+                  {isExpanded && (
+                    <div className="px-4 pb-4 pt-1 border-t border-pink-100/60 space-y-2.5 bg-white/40">
+                      {rep.vocabulary && (
+                        <div className="text-gray-600 font-mono text-[11px] bg-white/80 p-2.5 rounded-xl border border-pink-50 whitespace-pre-wrap">
+                          <strong className="text-pink-900 font-sans">Vocab/Structures:</strong>
+                          <p className="mt-1">{rep.vocabulary}</p>
+                        </div>
+                      )}
+
+                      {(rep.strengths || rep.improvements) && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px]">
+                          {rep.strengths && (
+                            <div className="p-2.5 bg-emerald-50/60 border border-emerald-100 rounded-xl text-emerald-950">
+                              <strong className="text-emerald-800">Strengths & Highlights:</strong>
+                              <p className="mt-0.5 whitespace-pre-wrap">{rep.strengths}</p>
+                            </div>
+                          )}
+                          {rep.improvements && (
+                            <div className="p-2.5 bg-amber-50/60 border border-amber-100 rounded-xl text-amber-950">
+                              <strong className="text-amber-800">Next Focus:</strong>
+                              <p className="mt-0.5 whitespace-pre-wrap">{rep.improvements}</p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {rep.homework && (
+                        <div className="p-2.5 bg-pink-100/50 rounded-xl border border-pink-200 text-pink-950 flex items-start gap-1.5">
+                          <FileCheck size={14} className="text-pink-600 mt-0.5 shrink-0" />
+                          <div>
+                            <strong className="text-pink-900 text-[11px]">Homework:</strong>
+                            <p className="text-[11px] text-gray-800 whitespace-pre-wrap">{rep.homework}</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
@@ -1046,7 +1099,7 @@ export default function StudentDetailsPage({
                   return isPageBased ? (
                     <div className="p-3 bg-pink-50/50 rounded-xl border border-pink-100 space-y-3">
                       <label className="block font-semibold text-pink-900 text-xs">
-                        Page Range Covered 📄 (Total Book Pages: {book.total_pages || "N/A"})
+                        Page Range Covered 📄 (Total Book Pages: {book?.total_pages || "N/A"})
                       </label>
                       <div className="grid grid-cols-2 gap-2">
                         <div>
@@ -1054,7 +1107,7 @@ export default function StudentDetailsPage({
                           <input
                             type="number"
                             min="1"
-                            max={book.total_pages || 999}
+                            max={book?.total_pages || 999}
                             className="input w-full text-xs bg-white"
                             value={startPageInput}
                             onChange={(e) => setStartPageInput(e.target.value)}
@@ -1066,7 +1119,7 @@ export default function StudentDetailsPage({
                           <input
                             type="number"
                             min="1"
-                            max={book.total_pages || 999}
+                            max={book?.total_pages || 999}
                             className="input w-full text-xs bg-white"
                             value={endPageInput}
                             onChange={(e) => setEndPageInput(e.target.value)}
