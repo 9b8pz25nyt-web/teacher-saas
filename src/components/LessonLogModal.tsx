@@ -244,10 +244,10 @@ export default function LessonLogModal({
             </div>
           </div>
 
-          <div>
+         <div>
             <label className="block mb-1 font-semibold text-gray-700">Vocabulary / Target Patterns</label>
-            <input
-              type="text"
+            <textarea
+              rows={2}
               placeholder="e.g. cheetah, mammal, fast, faster than"
               className="input w-full text-xs"
               value={vocabulary}
