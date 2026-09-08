@@ -82,7 +82,6 @@ export default function StudentDetailsPage({
   const [endDate, setEndDate] = useState("");
   const [selectedBookIds, setSelectedBookIds] = useState<string[]>([]);
   const [notes, setNotes] = useState("");
-  const [savingBook, setSavingBook] = useState(false);
   const [editingReportId, setEditingReportId] = useState<string | null>(null);
   const [reportBookId, setReportBookId] = useState("");
   const [selectedChapterIndex, setSelectedChapterIndex] = useState<string>("");
@@ -90,8 +89,8 @@ export default function StudentDetailsPage({
 
   function handleOpenEditReport(rep: any) {
     setEditingReportId(rep.id);
-    setLessonTitle(rep.lesson_title || "");
-    setReportDate(rep.report_date || new Date().toISOString().split("T")[0]);
+    setLessonTitle(rep.lesson_title || rep.title || "");
+    setReportDate(rep.report_date || rep.lesson_date || new Date().toISOString().split("T")[0]);
     setReportBookId(rep.book_id || "");
     setVocabulary(rep.vocabulary || "");
     setStrengths(rep.strengths || "");
@@ -133,11 +132,9 @@ export default function StudentDetailsPage({
   const [homework, setHomework] = useState("");
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
   const [homeworkFile, setHomeworkFile] = useState<File | null>(null);
-  const [showLessonModal, setShowLessonModal] = useState(false);
   const [lessonTitle, setLessonTitle] = useState("");
-  const [lessonDate, setLessonDate] = useState(new Date().toISOString().split("T")[0]);
-  const [lessonDuration, setLessonDuration] = useState("40");
-  const [lessonStatus, setLessonStatus] = useState("Completed");
+  const [startPageInput, setStartPageInput] = useState("");
+  const [endPageInput, setEndPageInput] = useState("");
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -245,23 +242,6 @@ export default function StudentDetailsPage({
       if (repList) setReports(repList);
       
       if (studentBks && studentBks.length > 0 && bks) {
-        const matchedBooks = studentBks.map((item) => ({
-          book_id: item.book_id,
-          completed_chapters: item.completed_chapters || [],
-          books: bks.find((b: any) => b.id === item.book_id),
-        }));
-        setStudentBooks(matchedBooks);
-      } else {
-        // Fallback: if no student_books rows exist yet, show all available books or allow assigning them
-        setStudentBooks(bks ? bks.map(b => ({ book_id: b.id, completed_chapters: [], books: b })) : []);
-      }
-
-      if (scheds) setSchedules(scheds);
-     if (bks) {
-        setBooks(bks);
-      }
-
-      if (studentBks && studentBks.length > 0 && bks) {
         setSelectedBookIds(studentBks.map((item) => item.book_id));
         const matchedBooks = studentBks.map((item) => ({
           book_id: item.book_id,
@@ -269,13 +249,9 @@ export default function StudentDetailsPage({
           books: bks.find((b: any) => b.id === item.book_id),
         }));
         setStudentBooks(matchedBooks);
-      } else if (bks) {
-        // Fallback: if no student_books rows exist yet, make all books available to select
-        setStudentBooks(bks.map((b) => ({
-          book_id: b.id,
-          completed_chapters: [],
-          books: b,
-        })));
+      } else {
+        setSelectedBookIds([]);
+        setStudentBooks([]);
       }
     } catch (err) {
       console.error("Error fetching student details:", err);
@@ -354,29 +330,17 @@ export default function StudentDetailsPage({
         return;
       }
 
-      const { error: deleteError } = await supabase
+      await supabase
         .from("student_books")
         .delete()
         .eq("student_id", studentId);
-
-      if (deleteError) {
-        console.error("Error deleting old student_books:", deleteError);
-      }
 
       if (selectedBookIds.length > 0) {
         const rows = selectedBookIds.map((bookId) => ({
           student_id: studentId,
           book_id: bookId,
         }));
-        const { error: bookInsertError } = await supabase
-          .from("student_books")
-          .insert(rows);
-
-        if (bookInsertError) {
-          console.error("Error inserting student_books:", bookInsertError);
-          alert("Failed to save books: " + bookInsertError.message);
-          return;
-        }
+        await supabase.from("student_books").insert(rows);
       }
 
       setIsEditModalOpen(false);
@@ -509,13 +473,16 @@ export default function StudentDetailsPage({
 
       const payload: any = {
         lesson_title: lessonTitle.trim(),
+        title: lessonTitle.trim(),
         report_date: reportDate,
+        lesson_date: reportDate,
         book_id: reportBookId || null,
         vocabulary: vocabulary.trim() || null,
         strengths: strengths.trim() || null,
         improvements: improvements.trim() || null,
         homework: homework.trim() || null,
         teacher_alias: student?.teacher_alias || teacherAlias || "Teacher Gabi",
+        status: "Completed",
       };
 
       const selectedBookItem = studentBooks.find((item: any) => item.books?.id === reportBookId);
@@ -544,6 +511,18 @@ export default function StudentDetailsPage({
           .insert(payload);
 
         if (reportError) throw reportError;
+
+        // Sync with lessons table
+        await supabase.from("lessons").insert({
+          student_id: studentId,
+          teacher_id: user?.id,
+          title: lessonTitle.trim(),
+          lesson_date: reportDate,
+          status: "Completed",
+          description: `Vocab: ${vocabulary}\nStrengths: ${strengths}\nHomework: ${homework}`,
+          homework_file_url: uploadedFileUrl || null,
+          book_id: reportBookId || null,
+        });
 
         if (reportBookId && selectedChapterIndex !== "" && isChapterComplete) {
           const currentCompletedChapters = selectedBookItem?.completed_chapters || [];
@@ -788,9 +767,15 @@ export default function StudentDetailsPage({
               <BookOpen size={16} />
               <span>Assigned Books & Progress</span>
             </div>
+            <button
+              onClick={() => setIsEditModalOpen(true)}
+              className="text-xs font-medium text-pink-600 hover:text-pink-700 bg-pink-50 hover:bg-pink-100 px-2.5 py-1 rounded-md transition-colors cursor-pointer"
+            >
+              Edit Books
+            </button>
           </div>
           <div className="space-y-2 max-h-[160px] overflow-y-auto">
-           {studentBooks.length > 0 ? (
+            {studentBooks.length > 0 ? (
               studentBooks.map((item, index) => {
                 const book = item.books;
                 const isPageBased = book?.book_type === "pages";
@@ -829,14 +814,6 @@ export default function StudentDetailsPage({
         <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold text-gray-900">Tuition & Billing</h3>
-            <button
-              type="button"
-              onClick={() => setIsRenewalModalOpen(true)}
-              className="text-[11px] font-bold text-pink-600 hover:text-pink-700 flex items-center gap-1 cursor-pointer"
-            >
-              <Sparkles size={13} className="text-pink-600" />
-              <span>Renewal Notice</span>
-            </button>
           </div>
           <div className="bg-pink-50/40 p-3.5 rounded-2xl space-y-2 text-xs">
             <div className="flex justify-between items-center">
@@ -965,11 +942,11 @@ export default function StudentDetailsPage({
               >
                 <div className="flex justify-between items-center">
                   <span className="font-bold text-gray-900 text-sm">
-                    {rep.lesson_title}
+                    {rep.lesson_title || rep.title}
                   </span>
                   <div className="flex items-center gap-3">
                     <span className="text-gray-400 text-[11px]">
-                      {rep.report_date}
+                      {rep.report_date || rep.lesson_date}
                     </span>
                     <button
                       type="button"
@@ -1079,8 +1056,8 @@ export default function StudentDetailsPage({
                             min="1"
                             max={book.total_pages || 999}
                             className="input w-full text-xs bg-white"
-                            value={startPage}
-                            onChange={(e) => setStartPage(e.target.value)}
+                            value={startPageInput}
+                            onChange={(e) => setStartPageInput(e.target.value)}
                             placeholder="e.g. 1"
                           />
                         </div>
@@ -1091,8 +1068,8 @@ export default function StudentDetailsPage({
                             min="1"
                             max={book.total_pages || 999}
                             className="input w-full text-xs bg-white"
-                            value={endPage}
-                            onChange={(e) => setEndPage(e.target.value)}
+                            value={endPageInput}
+                            onChange={(e) => setEndPageInput(e.target.value)}
                             placeholder="e.g. 5"
                           />
                         </div>
@@ -1268,38 +1245,25 @@ export default function StudentDetailsPage({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
                   <label className="block mb-1 text-xs font-semibold text-gray-700">
-                    Phone
+                    Student Name *
                   </label>
                   <input
                     className="input w-full text-xs"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
                   />
                 </div>
                 <div>
                   <label className="block mb-1 text-xs font-semibold text-gray-700">
-                    Country *
+                    Teacher Alias
                   </label>
                   <select
                     className="input w-full text-xs bg-white"
-                    value={country}
-                    onChange={(e) => {
-                      const selected = e.target.value;
-                      const selectedCountry = countries.find(
-                        (item) => item.name === selected
-                      );
-                      setCountry(selected);
-                      if (selectedCountry) {
-                        setPaymentCurrency(selectedCountry.currency);
-                        calculatePHP(paymentAmount, selectedCountry.currency);
-                      }
-                    }}
+                    value={teacherAlias}
+                    onChange={(e) => setTeacherAlias(e.target.value)}
                   >
-                    <option value="">Select Country</option>
-                    {countries.map((item) => (
-                      <option key={item.name} value={item.name}>
-                        {item.name} {item.flag}
-                      </option>
+                    {teacherAliases.map((alias) => (
+                      <option key={alias} value={alias}>{alias}</option>
                     ))}
                   </select>
                 </div>
