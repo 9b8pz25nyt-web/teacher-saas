@@ -26,12 +26,12 @@ export default function LessonLogModal({
   const [isChapterComplete, setIsChapterComplete] = useState(false)
   const [startPage, setStartPage] = useState('')
   const [endPage, setEndPage] = useState('')
-
   const [lessonTitle, setLessonTitle] = useState('')
   const [lessonDate, setLessonDate] = useState(new Date().toISOString().split('T')[0])
   const [vocabulary, setVocabulary] = useState('')
   const [strengths, setStrengths] = useState('')
   const [improvements, setImprovements] = useState('')
+  const [teacherMessage, setTeacherMessage] = useState('')
   const [homework, setHomework] = useState('')
   const [homeworkFile, setHomeworkFile] = useState<File | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -117,9 +117,10 @@ export default function LessonLogModal({
         vocabulary: vocabulary.trim() || null,
         strengths: strengths.trim() || null,
         improvements: improvements.trim() || null,
+        teacher_message: teacherMessage.trim() || null,
         homework: homework.trim() || null,
         status: 'Completed',
-        homework_file_url: uploadedFileUrl
+        homework_file_url: uploadedFileUrl,
       }
 
       // 1. Insert into class_reports
@@ -308,6 +309,20 @@ export default function LessonLogModal({
                 onChange={(e) => setImprovements(e.target.value)}
               />
             </div>
+          </div>
+
+          {/* Message from Teacher */}
+          <div>
+            <label className="block mb-1 font-semibold text-pink-700">
+              💌 Message from Teacher (Overall Note to Parents)
+            </label>
+            <textarea
+              rows={2}
+              placeholder="e.g. Great progress today! Please make sure to review the vocab list before next class."
+              className="input w-full text-xs border-pink-200 bg-pink-50/20"
+              value={teacherMessage}
+              onChange={(e) => setTeacherMessage(e.target.value)}
+            />
           </div>
 
           {/* Assigned Homework */}
