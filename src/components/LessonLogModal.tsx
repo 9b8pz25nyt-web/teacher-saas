@@ -62,6 +62,8 @@ export default function LessonLogModal({
 
   if (!isOpen) return null
 
+  const selectedBookItem = studentBooks.find((item: any) => item.books?.id === reportBookId)
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!lessonTitle.trim()) return alert('Please enter a lesson title')
@@ -110,18 +112,14 @@ export default function LessonLogModal({
         report_date: lessonDate,
         lesson_date: lessonDate,
         book_id: validBookId,
+        start_page: startPage ? Number(startPage) : null,
+        end_page: endPage ? Number(endPage) : null,
         vocabulary: vocabulary.trim() || null,
         strengths: strengths.trim() || null,
         improvements: improvements.trim() || null,
         homework: homework.trim() || null,
         status: 'Completed',
         homework_file_url: uploadedFileUrl
-      }
-
-      const selectedBookItem = studentBooks.find((item: any) => item.books?.id === reportBookId)
-      if (selectedBookItem?.books?.book_type === 'pages') {
-        reportPayload.start_page = startPage ? Number(startPage) : null
-        reportPayload.end_page = endPage ? Number(endPage) : null
       }
 
       // 1. Insert into class_reports
@@ -139,7 +137,9 @@ export default function LessonLogModal({
         status: 'Completed',
         description: `Vocab: ${vocabulary}\nStrengths: ${strengths}\nHomework: ${homework}`,
         homework_file_url: uploadedFileUrl,
-        book_id: validBookId
+        book_id: validBookId,
+        start_page: startPage ? Number(startPage) : null,
+        end_page: endPage ? Number(endPage) : null
       })
       if (lessonError) {
         throw new Error(`lessons insert failed: ${lessonError.message}`)
@@ -202,6 +202,7 @@ export default function LessonLogModal({
         </div>
 
         <form onSubmit={handleSave} className="space-y-3.5 text-xs">
+         {/* 1. Book / Curriculum Selector */}
           <div>
             <label className="block mb-1 font-semibold text-pink-700">Select Book / Curriculum 📖</label>
             <select
@@ -219,6 +220,94 @@ export default function LessonLogModal({
                 </option>
               ))}
             </select>
+          </div>
+
+          {/* 2. Lesson Title & Date */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block mb-1 font-semibold text-gray-700">Lesson Title *</label>
+              <input
+                type="text"
+                required
+                placeholder="e.g. Unit 3: Animals & Habitats"
+                className="input w-full text-xs"
+                value={lessonTitle}
+                onChange={(e) => setLessonTitle(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block mb-1 font-semibold text-gray-700">Date</label>
+              <input
+                type="date"
+                className="input w-full text-xs"
+                value={lessonDate}
+                onChange={(e) => setLessonDate(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {/* 3. Start & End Page Range (After Lesson Title) */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block mb-1 font-semibold text-gray-700">Start Page 📄</label>
+              <input
+                type="number"
+                min="1"
+                placeholder="e.g. 12"
+                className="input w-full text-xs"
+                value={startPage}
+                onChange={(e) => setStartPage(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block mb-1 font-semibold text-gray-700">End Page 📄</label>
+              <input
+                type="number"
+                min="1"
+                placeholder="e.g. 16"
+                className="input w-full text-xs"
+                value={endPage}
+                onChange={(e) => setEndPage(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {/* 4. Vocabulary / Target Patterns */}
+          <div>
+            <label className="block mb-1 font-semibold text-gray-700">Vocabulary / Target Patterns</label>
+            <textarea
+              rows={2}
+              placeholder="e.g. cheetah, mammal, fast, faster than"
+              className="input w-full text-xs"
+              value={vocabulary}
+              onChange={(e) => setVocabulary(e.target.value)}
+            />
+          </div>
+
+          {/* Start and End Page Range Inputs */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block mb-1 font-semibold text-gray-700">Start Page 📄</label>
+              <input
+                type="number"
+                min="1"
+                placeholder="e.g. 12"
+                className="input w-full text-xs"
+                value={startPage}
+                onChange={(e) => setStartPage(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block mb-1 font-semibold text-gray-700">End Page 📄</label>
+              <input
+                type="number"
+                min="1"
+                placeholder="e.g. 16"
+                className="input w-full text-xs"
+                value={endPage}
+                onChange={(e) => setEndPage(e.target.value)}
+              />
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -244,7 +333,7 @@ export default function LessonLogModal({
             </div>
           </div>
 
-         <div>
+          <div>
             <label className="block mb-1 font-semibold text-gray-700">Vocabulary / Target Patterns</label>
             <textarea
               rows={2}
