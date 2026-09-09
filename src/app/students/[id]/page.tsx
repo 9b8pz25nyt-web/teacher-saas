@@ -275,12 +275,13 @@ export default function StudentDetailsPage({
           .from("student_books")
           .select("*")
           .eq("student_id", studentId),
-        supabase
-          .from("payments")
-          .select("*")
-          .or(`student_id.eq.${studentId},student_name.ilike.%${studentData.name}%`)
-          .order("created_at", { ascending: false })
-          .limit(1),
+       // Replace the payment fetch query with:
+supabase
+  .from("payments")
+  .select("*")
+  .or(`student_id.eq.${studentId},student_name.ilike.%${studentData.name.trim()}%`)
+  .order("created_at", { ascending: false })
+  .limit(1),
       ]);
 
       if (scheds) setSchedules(scheds);
@@ -634,11 +635,17 @@ export default function StudentDetailsPage({
     100
   );
 
-  const rawStatus = (latestPayment?.status || student?.payment_status || "Pending").trim();
+ // Check both the latest payment transaction and the student record status
+  const rawStatus = (
+    latestPayment?.status || 
+    student?.payment_status || 
+    "Pending"
+  ).trim().toLowerCase();
+
   const isPaid =
-    rawStatus.toLowerCase() === "paid" ||
-    rawStatus.toLowerCase() === "completed" ||
-    rawStatus.toLowerCase() === "active";
+    rawStatus === "paid" ||
+    rawStatus === "completed" ||
+    rawStatus === "active";
 
   const displayStatus = isPaid ? "PAID" : "PENDING";
 
