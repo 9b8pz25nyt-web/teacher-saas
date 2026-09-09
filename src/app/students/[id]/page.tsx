@@ -637,17 +637,22 @@ supabase
     100
   );
 
- // Check both the latest payment transaction and the student record status
-  const rawStatus = (
-    latestPayment?.status || 
-    student?.payment_status || 
-    "Pending"
-  ).trim().toLowerCase();
+ // Treat as Paid if they only have free classes, have a logged payment, or have active/paid status
+  const totalRegularClasses = Number(student?.classes_included || 0);
+  const totalFreeClasses = Number(student?.free_classes || 0);
+  const isFreePackage = totalRegularClasses === 0 && totalFreeClasses > 0;
+
+  const rawStudentStatus = (student?.payment_status || "Pending").trim().toLowerCase();
+  const rawPaymentStatus = (latestPayment?.status || "").trim().toLowerCase();
 
   const isPaid =
-    rawStatus === "paid" ||
-    rawStatus === "completed" ||
-    rawStatus === "active";
+    isFreePackage ||
+    Boolean(latestPayment) ||
+    rawStudentStatus === "paid" ||
+    rawStudentStatus === "completed" ||
+    rawStudentStatus === "active" ||
+    rawPaymentStatus === "paid" ||
+    rawPaymentStatus === "completed";
 
   const displayStatus = isPaid ? "PAID" : "PENDING";
 
