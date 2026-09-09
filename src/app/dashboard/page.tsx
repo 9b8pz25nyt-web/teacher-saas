@@ -17,6 +17,9 @@ export default function DashboardPage() {
   const [students, setStudents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isCleaning, setIsCleaning] = useState(false);
+  const [payments, setPayments] = useState<any[]>([]);
+const [hoursFilter, setHoursFilter] = useState<"daily" | "monthly" | "yearly">("monthly");
+const [incomeFilter, setIncomeFilter] = useState<"daily" | "monthly" | "yearly">("monthly");
 
   const [selectedAttendance, setSelectedAttendance] = useState<{
     eventId: string;
@@ -50,6 +53,12 @@ export default function DashboardPage() {
   const fetchDashboardData = useCallback(async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
+
+      const { data: paymentsData } = await supabase
+  .from("payments")
+  .select("*");
+
+if (paymentsData) setPayments(paymentsData);
 
       // 1. Fetch Students
       const { data: studentsData } = await supabase
@@ -152,7 +161,7 @@ export default function DashboardPage() {
   const startDayOffset = (firstDayWeekdayIndex + 6) % 7;
   const totalCalendarSlots = Math.ceil((startDayOffset + daysInMonth) / 7) * 7;
 
- // Rollover mapping: only adds an extra regular date if no active make-up class exists for the student
+  // Rollover mapping
   const studentValidDatesMap = (() => {
     const map: Record<string, string[]> = {};
     
@@ -163,7 +172,6 @@ export default function DashboardPage() {
       const totalAllowed = (student.classes_included || 0) + (student.free_classes || 0);
       if (totalAllowed <= 0) return;
 
-      // Count active (non-cancelled) make-up classes already scheduled for this student
       const activeMakeupsCount = makeupEvents.filter(
         (m) => m.student_id === student.id && m.status !== "Cancelled"
       ).length;
@@ -176,7 +184,6 @@ export default function DashboardPage() {
       let safetyCounter = 0;
       let countedSlots = 0;
 
-      // Target active regular quota = base package minus whatever active makeups are already covering
       const targetRegularSlots = Math.max(totalAllowed - activeMakeupsCount, 0);
 
       while (countedSlots < targetRegularSlots && safetyCounter < 730) {
@@ -198,7 +205,6 @@ export default function DashboardPage() {
 
           dates.push(dateString);
 
-          // Only count active, non-cancelled dates toward the regular quota
           if (!isCancelled) {
             countedSlots++;
           }
@@ -213,16 +219,64 @@ export default function DashboardPage() {
 
     return map;
   })();
+// Total Teaching Hours Calculation based on Recorded Lessons
+const calculatedHours = (() => {
+  const targetDateStr = todayDateStr; // YYYY-MM-DD
+  const targetMonthStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}`; // YYYY-MM
+  const targetYearStr = `${selectedYear}`; // YYYY
 
+  const filtered = recordedLessons.filter((l) => {
+    if (!l.lesson_date || l.status === "Cancelled") return false;
+    const lDate = l.lesson_date.substring(0, 10);
+    if (hoursFilter === "daily") return lDate === targetDateStr;
+    if (hoursFilter === "monthly") return lDate.startsWith(targetMonthStr);
+    return lDate.startsWith(targetYearStr);
+  });
+
+  // Default lesson duration = 25m or calculate using student record
+  const totalMinutes = filtered.reduce((acc, l) => {
+    const student = students.find((s) => s.id === l.student_id);
+    return acc + (student?.class_duration || 25);
+  }, 0);
+
+  const hours = (totalMinutes / 60).toFixed(1);
+  return {
+    hours,
+    classCount: filtered.length,
+  };
+})();
+
+// Total Income Calculation based on Payments
+const calculatedIncome = (() => {
+  const targetDateStr = todayDateStr;
+  const targetMonthStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}`;
+  const targetYearStr = `${selectedYear}`;
+
+  const filtered = payments.filter((p) => {
+    const pDate = (p.payment_date || p.created_at || "").substring(0, 10);
+    if (incomeFilter === "daily") return pDate === targetDateStr;
+    if (incomeFilter === "monthly") return pDate.startsWith(targetMonthStr);
+    return pDate.startsWith(targetYearStr);
+  });
+
+  const totalPHP = filtered.reduce((sum, p) => {
+    return sum + Number(p.php_equivalent || p.amount_in_php || p.payment_amount || 0);
+  }, 0);
+
+  return {
+    amount: totalPHP,
+    count: filtered.length,
+  };
+})();
   return (
     <div className="flex flex-col min-h-screen bg-gray-50/50">
       <RenewalAlertBanner />
 
-      <main className="p-8 max-w-7xl mx-auto w-full space-y-6">
+ <main className="p-8 max-w-7xl mx-auto w-full space-y-6">
         {/* Top Header Controls */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-3xl border border-pink-100 shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-3xl border border-pink-100 shadow-xs">
           <div>
-            <h1 className="text-2xl font-bold text-pink-950">
+            <h1 className="text-2xl font-bold text-pink-950 flex items-center gap-1.5">
               Teacher Dashboard ✨
             </h1>
             <p className="text-sm text-gray-500 mt-0.5">
@@ -230,7 +284,7 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          <div className="flex items-center gap-3 flex-wrap">
+          <div>
             <button
               onClick={handleRunCleanup}
               disabled={isCleaning}
@@ -239,39 +293,85 @@ export default function DashboardPage() {
               <Trash2 size={14} />
               <span>{isCleaning ? "Cleaning..." : "🧹 Clean Storage (>30d)"}</span>
             </button>
-
-            <div className="flex items-center gap-2 bg-pink-50/60 p-1.5 rounded-2xl border border-pink-100">
-              <select
-                className="bg-white border border-pink-200 rounded-xl px-3 py-1.5 text-sm font-semibold text-pink-900 focus:outline-none cursor-pointer"
-                value={selectedMonth}
-                onChange={(e) => setCurrentDate(new Date(selectedYear, Number(e.target.value), 1))}
-              >
-                {monthNames.map((m, idx) => (
-                  <option key={m} value={idx}>{m}</option>
-                ))}
-              </select>
-
-              <select
-                className="bg-white border border-pink-200 rounded-xl px-3 py-1.5 text-sm font-semibold text-pink-900 focus:outline-none cursor-pointer"
-                value={selectedYear}
-                onChange={(e) => setCurrentDate(new Date(Number(e.target.value), selectedMonth, 1))}
-              >
-                {availableYears.map((y) => (
-                  <option key={y} value={y}>{y}</option>
-                ))}
-              </select>
-            </div>
-
-            <button
-              onClick={() => setCurrentDate(new Date())}
-              className="px-4 py-2 bg-pink-600 hover:bg-pink-700 text-white font-bold text-xs rounded-2xl transition shadow-xs cursor-pointer"
-            >
-              Today
-            </button>
           </div>
         </div>
 
-        {/* Classes For Today */}
+        {/* 1. KPI Metrics Row */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          {/* Card 1: Today's Class Overview */}
+          <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs flex flex-col justify-between space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                Today&apos;s Schedule
+              </span>
+              <span className="text-xs font-bold text-pink-700 bg-pink-50 px-2.5 py-1 rounded-xl border border-pink-200">
+                Live
+              </span>
+            </div>
+            <div>
+              <p className="text-3xl font-extrabold text-pink-950">
+                {totalTodaysCount} <span className="text-base font-semibold text-gray-500">Classes</span>
+              </p>
+              <p className="text-xs text-gray-400 mt-1">
+                {todaysRegularSchedules.length} Regular • {todaysMakeupSchedules.length} Make-up
+              </p>
+            </div>
+          </div>
+
+          {/* Card 2: Teaching Hours (Dropdown) */}
+          <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs flex flex-col justify-between space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                Teaching Time
+              </span>
+              <select
+                value={hoursFilter}
+                onChange={(e) => setHoursFilter(e.target.value as any)}
+                className="text-xs font-bold text-pink-700 bg-pink-50 border border-pink-200 rounded-xl px-2.5 py-1 focus:outline-none cursor-pointer"
+              >
+                <option value="daily">Today</option>
+                <option value="monthly">This Month</option>
+                <option value="yearly">This Year</option>
+              </select>
+            </div>
+            <div>
+              <p className="text-3xl font-extrabold text-pink-950">
+                {calculatedHours.hours} <span className="text-base font-semibold text-gray-500">Hours</span>
+              </p>
+              <p className="text-xs text-gray-400 mt-1">
+                From {calculatedHours.classCount} completed lessons
+              </p>
+            </div>
+          </div>
+
+          {/* Card 3: Total Income (Dropdown) */}
+          <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs flex flex-col justify-between space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                Revenue & Tuition
+              </span>
+              <select
+                value={incomeFilter}
+                onChange={(e) => setIncomeFilter(e.target.value as any)}
+                className="text-xs font-bold text-pink-700 bg-pink-50 border border-pink-200 rounded-xl px-2.5 py-1 focus:outline-none cursor-pointer"
+              >
+                <option value="daily">Today</option>
+                <option value="monthly">This Month</option>
+                <option value="yearly">This Year</option>
+              </select>
+            </div>
+            <div>
+              <p className="text-3xl font-extrabold text-pink-600">
+                ₱{calculatedIncome.amount.toLocaleString()}
+              </p>
+              <p className="text-xs text-pink-400 font-medium mt-1">
+                {calculatedIncome.count} transactions recorded
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* 2. Classes For Today Card */}
         <div className="bg-white p-6 rounded-3xl border border-pink-100 shadow-xs space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold text-pink-950">
@@ -340,28 +440,59 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* Calendar Grid */}
-        <div className="bg-white rounded-3xl border border-pink-100 shadow-xs p-6">
-          <div className="flex justify-between items-center mb-6">
+        {/* 3. Calendar Grid Card */}
+        <div className="bg-white rounded-3xl border border-pink-100 shadow-xs p-6 space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-pink-50">
             <h2 className="text-2xl font-bold text-pink-950">
               {monthNames[selectedMonth]} {selectedYear}
             </h2>
 
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-2 bg-pink-50/60 p-1.5 rounded-2xl border border-pink-100">
+                <select
+                  className="bg-white border border-pink-200 rounded-xl px-3 py-1.5 text-xs font-bold text-pink-900 focus:outline-none cursor-pointer"
+                  value={selectedMonth}
+                  onChange={(e) => setCurrentDate(new Date(selectedYear, Number(e.target.value), 1))}
+                >
+                  {monthNames.map((m, idx) => (
+                    <option key={m} value={idx}>{m}</option>
+                  ))}
+                </select>
+
+                <select
+                  className="bg-white border border-pink-200 rounded-xl px-3 py-1.5 text-xs font-bold text-pink-900 focus:outline-none cursor-pointer"
+                  value={selectedYear}
+                  onChange={(e) => setCurrentDate(new Date(Number(e.target.value), selectedMonth, 1))}
+                >
+                  {availableYears.map((y) => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+              </div>
+
               <button
-                onClick={() => setCurrentDate(new Date(selectedYear, selectedMonth - 1, 1))}
-                className="p-2 hover:bg-pink-50 rounded-xl text-pink-700 transition cursor-pointer border border-pink-100"
-                title="Previous Month"
+                onClick={() => setCurrentDate(new Date())}
+                className="px-4 py-2 bg-pink-600 hover:bg-pink-700 text-white font-bold text-xs rounded-2xl transition shadow-xs cursor-pointer"
               >
-                <ChevronLeft size={18} />
+                Today
               </button>
-              <button
-                onClick={() => setCurrentDate(new Date(selectedYear, selectedMonth + 1, 1))}
-                className="p-2 hover:bg-pink-50 rounded-xl text-pink-700 transition cursor-pointer border border-pink-100"
-                title="Next Month"
-              >
-                <ChevronRight size={18} />
-              </button>
+
+              <div className="flex items-center gap-1 border border-pink-100 bg-pink-50/40 p-1 rounded-2xl">
+                <button
+                  onClick={() => setCurrentDate(new Date(selectedYear, selectedMonth - 1, 1))}
+                  className="p-1.5 hover:bg-white rounded-xl text-pink-700 transition cursor-pointer"
+                  title="Previous Month"
+                >
+                  <ChevronLeft size={16} />
+                </button>
+                <button
+                  onClick={() => setCurrentDate(new Date(selectedYear, selectedMonth + 1, 1))}
+                  className="p-1.5 hover:bg-white rounded-xl text-pink-700 transition cursor-pointer"
+                  title="Next Month"
+                >
+                  <ChevronRight size={16} />
+                </button>
+              </div>
             </div>
           </div>
 
@@ -456,20 +587,18 @@ export default function DashboardPage() {
                         );
                       })}
 
-                   {/* REGULAR CLASSES */}
+                    {/* REGULAR CLASSES */}
                     {schedules
                       .filter((sched) => {
                         if (sched.day_of_week?.toLowerCase() !== weekdayName.toLowerCase()) {
                           return false;
                         }
 
-                        // Always show if it was marked as a lesson (e.g. Cancelled/Completed/Absent)
                         const hasLessonRecord = recordedLessons.some(
                           (l) => l.student_id === sched.student_id && l.lesson_date?.substring(0, 10) === dateString
                         );
                         if (hasLessonRecord) return true;
 
-                        // Otherwise check if it falls within the active projected rollover dates
                         const validDates = studentValidDatesMap[sched.student_id];
                         if (validDates) {
                           return validDates.includes(dateString);
