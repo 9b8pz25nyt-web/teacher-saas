@@ -228,8 +228,9 @@ export default function StudentsPage() {
                 <div className="flex justify-between">
                   <span className="text-gray-500">Package:</span>
                   <span>
-                    {student.classes_included || 5} {student.free_classes ? `(+${student.free_classes} free)` : ""} Classes ({student.class_duration || 40}m)
-                  </span>
+  {student.classes_included ?? 0}
+  {student.free_classes ? ` (+${student.free_classes} free)` : ""} Classes ({student.class_duration || 40}m)
+</span>
                 </div>
                 <div className="flex justify-between font-medium">
                   <span className="text-gray-500">Rate:</span>
