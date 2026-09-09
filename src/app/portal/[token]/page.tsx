@@ -6,13 +6,14 @@ import {
   Video,
   BookOpen,
   Calendar,
-  Clock,
   MessageSquare,
   CheckCircle2,
   Sparkles,
   Award,
   TrendingUp,
   FileCheck,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 
 export default function StudentPortalPage({
@@ -32,7 +33,14 @@ export default function StudentPortalPage({
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [loading, setLoading] = useState(true);
   const [uploadingReportId, setUploadingReportId] = useState<string | null>(null);
-  
+  const [expandedReportIds, setExpandedReportIds] = useState<string[]>([]);
+
+  function toggleExpandReport(id: string) {
+    setExpandedReportIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  }
+
   const pendingHomeworkCount = reports.filter(
     (report) => (report.homework || report.homework_file_url) && report.homework_status !== "Submitted"
   ).length;
@@ -116,7 +124,13 @@ export default function StudentPortalPage({
         ]);
 
         if (scheds) setSchedules(scheds);
-        if (repList) setReports(repList);
+        if (repList) {
+          setReports(repList);
+          // Expand latest lesson report by default
+          if (repList.length > 0) {
+            setExpandedReportIds([repList[0].id]);
+          }
+        }
         if (studentBks) setStudentBooks(studentBks);
         if (booksData) setAllBooks(booksData);
       } catch (err) {
@@ -158,23 +172,21 @@ export default function StudentPortalPage({
     );
   }
 
+  const dynamicCompletedClasses = reports ? reports.length : 0;
   const totalIncludedClasses = Number(student.classes_included || 0) + Number(student.free_classes || 0);
-  const remainingClasses = Math.max(
-    totalIncludedClasses - (student.classes_completed || 0),
-    0
-  );
+  const remainingClasses = Math.max(totalIncludedClasses - dynamicCompletedClasses, 0);
   const progressPercentage = Math.min(
     100,
-    Math.round(((student.classes_completed || 0) / (totalIncludedClasses || 1)) * 100)
+    Math.round((dynamicCompletedClasses / (totalIncludedClasses || 1)) * 100)
   );
 
   return (
     <div className="min-h-screen bg-neutral-50/60 p-4 md:p-8 font-sans">
       <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-4 gap-6">
         
-        {/* Left Column (Col 1): Sticky Sidebar with Darker Outlines */}
+        {/* Left Column (Col 1): Sidebar */}
         <div className="lg:col-span-1 space-y-5 lg:sticky lg:top-8 self-start">
-          {/* Portal Header / Student Profile */}
+          {/* Student Profile Card */}
           <div className="bg-white border-2 border-pink-300 rounded-3xl p-5 shadow-xs space-y-4">
             <div>
               <span className="text-[10px] font-bold text-pink-700 tracking-widest uppercase bg-pink-100 px-2.5 py-1 rounded-lg border border-pink-300">
@@ -211,7 +223,7 @@ export default function StudentPortalPage({
             <div className="grid grid-cols-2 gap-2 text-center text-xs">
               <div className="p-3 bg-pink-50/60 rounded-2xl border border-pink-300">
                 <p className="text-gray-500 font-semibold text-[10px] uppercase">Completed</p>
-                <p className="text-xl font-extrabold text-gray-900 mt-0.5">{student.classes_completed || 0}</p>
+                <p className="text-xl font-extrabold text-gray-900 mt-0.5">{dynamicCompletedClasses}</p>
               </div>
               <div className="p-3 bg-pink-50/60 rounded-2xl border border-pink-300">
                 <p className="text-gray-500 font-semibold text-[10px] uppercase">Remaining</p>
@@ -239,7 +251,7 @@ export default function StudentPortalPage({
             )}
           </div>
 
-          {/* Interactive Parent Request Box */}
+          {/* Parent Requests Box */}
           <div className="bg-white border-2 border-pink-300 rounded-3xl p-5 shadow-xs space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="font-bold text-gray-900 text-xs flex items-center gap-1.5">
@@ -275,7 +287,7 @@ export default function StudentPortalPage({
           </div>
         </div>
 
-        {/* Right Main Area (Cols 2-4): Feed with Darker Outlines */}
+        {/* Right Main Area (Cols 2-4) */}
         <div className="lg:col-span-3 space-y-6">
           {/* Pending Homework Notification Banner */}
           {pendingHomeworkCount > 0 && (
@@ -345,7 +357,7 @@ export default function StudentPortalPage({
             </div>
           </div>
 
-          {/* Daily Class Reports, Lesson History & Teacher Feedback */}
+          {/* Daily Class Reports with Accordion Dropdown */}
           <div id="lesson-history" className="bg-white border-2 border-pink-300 rounded-3xl p-6 shadow-xs space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="font-bold text-gray-900 text-sm flex items-center gap-2">
@@ -363,140 +375,161 @@ export default function StudentPortalPage({
                 <p className="text-[11px] text-gray-400 mt-1">Lesson notes, new vocabulary, and homework will appear here after class.</p>
               </div>
             ) : (
-              <div className="space-y-4">
-                {reports.map((rep, idx) => (
-                  <div
-                    key={rep.id || idx}
-                    className="p-5 bg-pink-50/40 rounded-2xl border-2 border-pink-200 text-xs space-y-3"
-                  >
-                    {/* Lesson Header */}
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 border-b border-pink-200 pb-2.5">
-                      <div className="flex items-center gap-2">
-                        <span className="px-2 py-0.5 bg-pink-600 text-white text-[10px] font-extrabold rounded-md uppercase">
-                          Lesson
-                        </span>
-                        <h4 className="font-bold text-pink-950 text-sm">{rep.lesson_title}</h4>
-                      </div>
-                      <span className="text-gray-500 text-[11px] flex items-center gap-1 font-medium">
-                        <Calendar size={12} /> {rep.report_date}
-                      </span>
-                    </div>
+              <div className="space-y-3">
+                {reports.map((rep, idx) => {
+                  const isExpanded = expandedReportIds.includes(rep.id);
 
-                    {/* Vocabulary & Target Sentences */}
-                    {rep.vocabulary && (
-                      <div className="space-y-1">
-                        <span className="font-bold text-gray-900 flex items-center gap-1.5 text-[11px]">
-                          <Sparkles size={13} className="text-pink-600" /> Vocabulary & Target Structures:
-                        </span>
-                        <p className="text-gray-800 bg-white p-2.5 rounded-xl border-2 border-pink-200 leading-relaxed font-mono text-[11px]">
-                          {rep.vocabulary}
-                        </p>
-                      </div>
-                    )}
-
-                    {/* Feedback: Strengths & Improvement */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {rep.strengths && (
-                        <div className="p-3 bg-emerald-50/80 rounded-xl border-2 border-emerald-200 space-y-1">
-                          <span className="font-bold text-emerald-900 flex items-center gap-1 text-[11px]">
-                            <Award size={13} className="text-emerald-600" /> Strengths & Highlights:
-                          </span>
-                          <p className="text-emerald-950 leading-relaxed text-[11px]">{rep.strengths}</p>
-                        </div>
-                      )}
-
-                      {rep.improvements && (
-                        <div className="p-3 bg-amber-50/80 rounded-xl border-2 border-amber-200 space-y-1">
-                          <span className="font-bold text-amber-900 flex items-center gap-1 text-[11px]">
-                            <TrendingUp size={13} className="text-amber-600" /> Next Focus / Tips:
-                          </span>
-                          <p className="text-amber-950 leading-relaxed text-[11px]">{rep.improvements}</p>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Homework Section */}
-                    {(rep.homework || rep.homework_file_url) && (
-                      <div className="p-4 bg-pink-100/60 rounded-2xl border-2 border-pink-300 text-pink-950 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="font-bold flex items-center gap-1.5 text-xs text-pink-950">
-                            <FileCheck size={15} className="text-pink-600" />
-                            <span>Assigned Homework / Review (Optional):</span>
-                          </span>
-
-                          <span
-                            className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider ${
-                              rep.homework_status === "Submitted"
-                                ? "bg-emerald-100 text-emerald-900 border border-emerald-300"
-                                : "bg-pink-200 text-pink-800 border border-pink-300"
-                            }`}
+                  return (
+                    <div
+                      key={rep.id || idx}
+                      className="bg-pink-50/40 rounded-2xl border-2 border-pink-200 text-xs transition-all overflow-hidden"
+                    >
+                      {/* Accordion Toggle Bar */}
+                      <div
+                        onClick={() => toggleExpandReport(rep.id)}
+                        className="p-4 flex items-center justify-between cursor-pointer hover:bg-pink-100/50 select-none transition"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <button
+                            type="button"
+                            className="p-1 rounded-lg text-pink-600 bg-white border border-pink-300 shadow-2xs"
                           >
-                            {rep.homework_status === "Submitted" ? "✓ Submitted" : "Pending"}
+                            {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                          </button>
+                          <span className="px-2 py-0.5 bg-pink-600 text-white text-[10px] font-extrabold rounded-md uppercase">
+                            Lesson
                           </span>
+                          <h4 className="font-bold text-pink-950 text-sm">{rep.lesson_title || rep.title}</h4>
                         </div>
 
-                        {rep.homework && (
-                          <p className="leading-relaxed text-[11px] font-medium text-gray-900 bg-white p-2.5 rounded-xl border-2 border-pink-200">
-                            {rep.homework}
-                          </p>
-                        )}
+                        <span className="text-gray-500 text-[11px] flex items-center gap-1 font-mono font-semibold">
+                          <Calendar size={12} /> {rep.report_date || rep.lesson_date}
+                        </span>
+                      </div>
 
-                        {rep.homework_file_url && (
-                          <div>
-                            <a
-                              href={rep.homework_file_url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border-2 border-pink-300 text-pink-800 font-bold rounded-lg text-[10px] hover:bg-pink-50 transition shadow-2xs"
-                            >
-                              <span>📄 View Teacher Worksheet / Page</span>
-                            </a>
-                          </div>
-                        )}
-
-                        <div className="pt-2 border-t border-pink-300/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                          {rep.homework_submission_url ? (
-                            <div className="flex items-center gap-2">
-                              <span className="text-[11px] text-emerald-800 font-bold">Completed File:</span>
-                              <a
-                                href={rep.homework_submission_url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="text-[11px] text-pink-700 font-bold underline hover:text-pink-800"
-                              >
-                                View Submitted Homework
-                              </a>
+                      {/* Collapsible Content */}
+                      {isExpanded && (
+                        <div className="px-5 pb-5 pt-2 border-t border-pink-200 space-y-3.5 bg-white/60">
+                          {/* Vocabulary & Target Patterns */}
+                          {rep.vocabulary && (
+                            <div className="space-y-1">
+                              <span className="font-bold text-gray-900 flex items-center gap-1.5 text-[11px]">
+                                <Sparkles size={13} className="text-pink-600" /> Vocabulary & Target Structures:
+                              </span>
+                              <p className="text-gray-800 bg-white p-3 rounded-xl border-2 border-pink-200 leading-relaxed font-mono text-[11px] whitespace-pre-wrap">
+                                {rep.vocabulary}
+                              </p>
                             </div>
-                          ) : (
-                            <p className="text-[10px] text-gray-600 italic">
-                              Upload photo of worksheet or notebook when done.
-                            </p>
                           )}
 
-                          <label className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-pink-600 hover:bg-pink-700 text-white rounded-xl text-[10px] font-bold transition shadow-2xs cursor-pointer self-start sm:self-auto">
-                            <span>
-                              {uploadingReportId === rep.id
-                                ? "Uploading..."
-                                : rep.homework_submission_url
-                                ? "Re-upload Homework"
-                                : "Upload Homework"}
-                            </span>
-                            <input
-                              type="file"
-                              accept="image/*,application/pdf"
-                              className="hidden"
-                              disabled={uploadingReportId === rep.id}
-                              onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (file) handleStudentHomeworkUpload(rep.id, file);
-                              }}
-                            />
-                          </label>
+                          {/* Feedback: Strengths & Improvement */}
+                          {(rep.strengths || rep.improvements) && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              {rep.strengths && (
+                                <div className="p-3 bg-emerald-50/80 rounded-xl border-2 border-emerald-200 space-y-1">
+                                  <span className="font-bold text-emerald-900 flex items-center gap-1 text-[11px]">
+                                    <Award size={13} className="text-emerald-600" /> Strengths & Highlights:
+                                  </span>
+                                  <p className="text-emerald-950 leading-relaxed text-[11px] whitespace-pre-wrap">{rep.strengths}</p>
+                                </div>
+                              )}
+
+                              {rep.improvements && (
+                                <div className="p-3 bg-amber-50/80 rounded-xl border-2 border-amber-200 space-y-1">
+                                  <span className="font-bold text-amber-900 flex items-center gap-1 text-[11px]">
+                                    <TrendingUp size={13} className="text-amber-600" /> Next Focus / Tips:
+                                  </span>
+                                  <p className="text-amber-950 leading-relaxed text-[11px] whitespace-pre-wrap">{rep.improvements}</p>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Homework Section */}
+                          {(rep.homework || rep.homework_file_url) && (
+                            <div className="p-4 bg-pink-100/60 rounded-2xl border-2 border-pink-300 text-pink-950 space-y-3">
+                              <div className="flex items-center justify-between">
+                                <span className="font-bold flex items-center gap-1.5 text-xs text-pink-950">
+                                  <FileCheck size={15} className="text-pink-600" />
+                                  <span>Assigned Homework / Review (Optional):</span>
+                                </span>
+
+                                <span
+                                  className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider ${
+                                    rep.homework_status === "Submitted"
+                                      ? "bg-emerald-100 text-emerald-900 border border-emerald-300"
+                                      : "bg-pink-200 text-pink-800 border border-pink-300"
+                                  }`}
+                                >
+                                  {rep.homework_status === "Submitted" ? "✓ Submitted" : "Pending"}
+                                </span>
+                              </div>
+
+                              {rep.homework && (
+                                <p className="leading-relaxed text-[11px] font-medium text-gray-900 bg-white p-2.5 rounded-xl border-2 border-pink-200 whitespace-pre-wrap">
+                                  {rep.homework}
+                                </p>
+                              )}
+
+                              {rep.homework_file_url && (
+                                <div>
+                                  <a
+                                    href={rep.homework_file_url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border-2 border-pink-300 text-pink-800 font-bold rounded-lg text-[10px] hover:bg-pink-50 transition shadow-2xs"
+                                  >
+                                    <span>📄 View Teacher Worksheet / Page</span>
+                                  </a>
+                                </div>
+                              )}
+
+                              <div className="pt-2 border-t border-pink-300/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                {rep.homework_submission_url ? (
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[11px] text-emerald-800 font-bold">Completed File:</span>
+                                    <a
+                                      href={rep.homework_submission_url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="text-[11px] text-pink-700 font-bold underline hover:text-pink-800"
+                                    >
+                                      View Submitted Homework
+                                    </a>
+                                  </div>
+                                ) : (
+                                  <p className="text-[10px] text-gray-600 italic">
+                                    Upload photo of worksheet or notebook when done.
+                                  </p>
+                                )}
+
+                                <label className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-pink-600 hover:bg-pink-700 text-white rounded-xl text-[10px] font-bold transition shadow-2xs cursor-pointer self-start sm:self-auto">
+                                  <span>
+                                    {uploadingReportId === rep.id
+                                      ? "Uploading..."
+                                      : rep.homework_submission_url
+                                      ? "Re-upload Homework"
+                                      : "Upload Homework"}
+                                  </span>
+                                  <input
+                                    type="file"
+                                    accept="image/*,application/pdf"
+                                    className="hidden"
+                                    disabled={uploadingReportId === rep.id}
+                                    onChange={(e) => {
+                                      const file = e.target.files?.[0];
+                                      if (file) handleStudentHomeworkUpload(rep.id, file);
+                                    }}
+                                  />
+                                </label>
+                              </div>
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>

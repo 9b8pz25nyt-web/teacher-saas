@@ -53,6 +53,7 @@ export default function StudentDetailsPage({
   const [loading, setLoading] = useState(true);
   const [copiedPortal, setCopiedPortal] = useState(false);
   const [expandedReportIds, setExpandedReportIds] = useState<string[]>([]);
+  const [isParentRequestsOpen, setIsParentRequestsOpen] = useState(true);
 
   function toggleExpandReport(id: string) {
     setExpandedReportIds((prev) =>
@@ -220,7 +221,6 @@ export default function StudentDetailsPage({
       setEndDate(studentData.end_date || studentData.contract_end_date || "");
       setNotes(studentData.notes || "");
 
-      // Execute queries with robust student matching
       const [
         { data: scheds },
         { data: bks },
@@ -516,7 +516,6 @@ export default function StudentDetailsPage({
 
         if (reportError) throw reportError;
 
-        // Sync with lessons table
         await supabase.from("lessons").insert({
           student_id: studentId,
           teacher_id: user?.id,
@@ -592,7 +591,6 @@ export default function StudentDetailsPage({
 
   const combinedTotalClasses = Number(student?.classes_included || 0) + Number(student?.free_classes || 0);
 
-  // Dynamic completed count derived directly from logged reports array
   const dynamicCompletedCount = reports ? reports.length : 0;
   const dynamicRemainingCount = Math.max(combinedTotalClasses - dynamicCompletedCount, 0);
   const dynamicProgressPercent = Math.min(
@@ -600,7 +598,6 @@ export default function StudentDetailsPage({
     100
   );
 
-  // Derive dynamic payment status: prioritize actual payment transactions
   const rawStatus = (latestPayment?.status || student?.payment_status || "Pending").trim();
   const isPaid =
     rawStatus.toLowerCase() === "paid" ||
@@ -859,6 +856,7 @@ export default function StudentDetailsPage({
         </div>
       </div>
 
+      {/* Single, Non-Duplicated Schedule & Notes/Parent Requests Row */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs space-y-3">
           <div className="flex items-center justify-between">
@@ -906,14 +904,58 @@ export default function StudentDetailsPage({
           )}
         </div>
 
-        <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs space-y-2">
-          <h3 className="text-sm font-bold text-gray-900">Notes & Objectives</h3>
-          <p className="text-xs text-gray-600 leading-relaxed">
-            {student?.notes || "No special notes recorded yet."}
-          </p>
+        {/* Teacher Notes & Collapsible Parent Requests */}
+        <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs space-y-3">
+          <div>
+            <h3 className="text-sm font-bold text-gray-900">Teacher Notes & Objectives</h3>
+            <p className="text-xs text-gray-600 leading-relaxed mt-1">
+              {student?.notes || "No teacher notes recorded yet."}
+            </p>
+          </div>
+
+          {/* Collapsible Parent Requests Section */}
+          <div className="pt-2 border-t border-pink-100">
+            <div
+              onClick={() => setIsParentRequestsOpen(!isParentRequestsOpen)}
+              className="flex items-center justify-between p-2 -mx-2 rounded-xl cursor-pointer hover:bg-pink-50/50 select-none transition"
+            >
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="p-1 rounded-lg text-pink-600 bg-white border border-pink-200 shadow-2xs"
+                >
+                  {isParentRequestsOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                </button>
+                <span className="text-xs font-bold text-pink-900">
+                  💬 Parent Notes & Requests
+                </span>
+              </div>
+
+              {student?.parent_requests && (
+                <span className="text-[10px] font-extrabold bg-pink-100 text-pink-700 px-2 py-0.5 rounded-md border border-pink-200">
+                  New Message
+                </span>
+              )}
+            </div>
+
+            {isParentRequestsOpen && (
+              <div className="mt-2">
+                {student?.parent_requests ? (
+                  <div className="p-3 bg-pink-50/50 border border-pink-200 rounded-2xl text-xs text-pink-950 font-medium whitespace-pre-wrap">
+                    {student.parent_requests}
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-400 italic px-1">
+                    No notes received from parents yet.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
+      {/* Logged Lessons & Reports */}
       <div className="bg-white border border-pink-100 rounded-3xl p-6 shadow-xs space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
