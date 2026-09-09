@@ -110,7 +110,7 @@ export default function StudentDetailsPage({
   const [paymentCurrency, setPaymentCurrency] = useState("PHP");
   const [paymentAmount, setPaymentAmount] = useState("");
   const [phpEquivalent, setPhpEquivalent] = useState("");
-  const [classesIncluded, setClassesIncluded] = useState("30");
+  const [classesIncluded, setClassesIncluded] = useState("0");
   const [freeClasses, setFreeClasses] = useState("0");
   const [classesCompleted, setClassesCompleted] = useState("0");
   const [classDuration, setClassDuration] = useState("40");
@@ -235,8 +235,10 @@ export default function StudentDetailsPage({
           : ""
       );
       setClassesIncluded(
-        studentData.classes_included ? String(studentData.classes_included) : "30"
-      );
+  studentData.classes_included !== undefined && studentData.classes_included !== null
+    ? String(studentData.classes_included)
+    : "0"
+);
       setFreeClasses(
         studentData.free_classes !== undefined && studentData.free_classes !== null
           ? String(studentData.free_classes)
