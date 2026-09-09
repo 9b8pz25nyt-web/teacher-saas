@@ -103,6 +103,14 @@ export default function ContractsPage() {
     return "Schedule to be confirmed";
   }
 
+  // Helper to calculate total sessions safely
+  function getTotalSessions(student: any) {
+    if (!student) return 10;
+    const included = Number(student.classes_included ?? 10);
+    const free = Number(student.free_classes ?? 0);
+    return included + free;
+  }
+
   // Handle Formal Agreement Modal
   function handleOpenAgreement(student: any) {
     setSelectedStudentForAgreement(student);
@@ -173,11 +181,12 @@ export default function ContractsPage() {
     const sched = getStudentSchedules(student);
     const activeLink = meetingLink || student.meeting_link || "Link available inside your Student Portal";
     const pUrl = portalUrl || (student.access_token ? `${window.location.origin}/portal/${student.access_token}` : "");
+    const sessionCount = getTotalSessions(student);
 
     const text =
       `🌟 Welcome to Class with ${teacherName}! 🌟\n\n` +
       `👤 Student: ${student.name}\n` +
-      `📚 Package: ${Number(student?.classes_included || 5) + Number(student?.free_classes || 1)} Classes (${student?.class_duration || 40} mins each)\n` +
+      `📚 Package: ${sessionCount} Classes (${student?.class_duration || 25} mins each)\n` +
       `🗓 Schedule: ${sched}\n` +
       `💻 Classroom Platform: ${classroomPlatform}\n` +
       `🔗 Direct Class Link: ${activeLink}\n` +
@@ -221,6 +230,7 @@ export default function ContractsPage() {
             {students.map((student) => {
               const countryObj = countries.find((c) => c.name === student.country);
               const schedText = getStudentSchedules(student);
+              const totalSessions = getTotalSessions(student);
 
               return (
                 <div
@@ -245,7 +255,7 @@ export default function ContractsPage() {
                       <div className="flex justify-between">
                         <span className="text-gray-500">Package:</span>
                         <span className="font-bold text-gray-800">
-                          {student.classes_included || 30} Classes ({student.class_duration || 40}m)
+                          {totalSessions} Classes ({student.class_duration || 25}m)
                         </span>
                       </div>
                       <div className="flex justify-between">
@@ -376,10 +386,10 @@ export default function ContractsPage() {
                   <div style={{ backgroundColor: "#f9fafb", border: "1px solid #f3f4f6", padding: "12px", borderRadius: "12px" }}>
                     <p style={{ fontSize: "10px", textTransform: "uppercase", fontWeight: "bold", color: "#9ca3af", margin: "0 0 4px 0" }}>Class Package</p>
                     <p style={{ fontWeight: "bold", color: "#1f2937", fontSize: "14px", margin: "0 0 2px 0" }}>
-                      {Number(selectedStudentForWelcome?.classes_included || 5) + Number(selectedStudentForWelcome?.free_classes || 1)} Sessions
+                      {getTotalSessions(selectedStudentForWelcome)} Sessions
                     </p>
                     <p style={{ fontSize: "10px", color: "#db2777", fontWeight: "600", margin: 0 }}>
-                      {selectedStudentForWelcome.class_duration || 40} minutes / class
+                      {selectedStudentForWelcome.class_duration || 25} minutes / class
                     </p>
                   </div>
 
@@ -591,8 +601,8 @@ export default function ContractsPage() {
                   <div className="flex items-start justify-between gap-4">
                     <div className="space-y-1 flex-1">
                       <h4 style={{ fontWeight: "bold", color: "#111827", margin: "0 0 4px 0" }}>1. Package & Student Learning Portal</h4>
-                     <p style={{ color: "#4b5563", margin: "0 0 3px 0" }}>
-                        • <strong>Total Package:</strong> {Number(selectedStudentForAgreement?.classes_included || 5) + Number(selectedStudentForAgreement?.free_classes || 1)} Sessions ({selectedStudentForAgreement.class_duration || 40} minutes per class)
+                      <p style={{ color: "#4b5563", margin: "0 0 3px 0" }}>
+                        • <strong>Total Package:</strong> {getTotalSessions(selectedStudentForAgreement)} Sessions ({selectedStudentForAgreement.class_duration || 25} minutes per class)
                       </p>
                       <p style={{ color: "#4b5563", margin: "0 0 3px 0" }}>
                         • <strong>Class Schedule:</strong> {getStudentSchedules(selectedStudentForAgreement)}
