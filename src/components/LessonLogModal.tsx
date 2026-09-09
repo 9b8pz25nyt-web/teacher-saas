@@ -190,7 +190,9 @@ export default function LessonLogModal({
         <div className="flex items-center justify-between border-b border-pink-100 pb-3">
           <div>
             <h2 className="text-xl font-bold text-pink-950">Log Lesson & Homework</h2>
-            <p className="text-xs text-gray-500">Record daily lesson feedback and track curriculum progress for {studentName}.</p>
+            <p className="text-xs text-gray-500">
+              Record daily lesson feedback and track curriculum progress for {studentName}.
+            </p>
           </div>
           <button
             type="button"
@@ -202,7 +204,7 @@ export default function LessonLogModal({
         </div>
 
         <form onSubmit={handleSave} className="space-y-3.5 text-xs">
-         {/* 1. Book / Curriculum Selector */}
+          {/* Select Book */}
           <div>
             <label className="block mb-1 font-semibold text-pink-700">Select Book / Curriculum 📖</label>
             <select
@@ -222,7 +224,7 @@ export default function LessonLogModal({
             </select>
           </div>
 
-          {/* 2. Lesson Title & Date */}
+          {/* Lesson Title & Date */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block mb-1 font-semibold text-gray-700">Lesson Title *</label>
@@ -246,7 +248,7 @@ export default function LessonLogModal({
             </div>
           </div>
 
-          {/* 3. Start & End Page Range (After Lesson Title) */}
+          {/* Start & End Page Range */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block mb-1 font-semibold text-gray-700">Start Page 📄</label>
@@ -272,7 +274,7 @@ export default function LessonLogModal({
             </div>
           </div>
 
-          {/* 4. Vocabulary / Target Patterns */}
+          {/* Vocabulary / Target Patterns */}
           <div>
             <label className="block mb-1 font-semibold text-gray-700">Vocabulary / Target Patterns</label>
             <textarea
@@ -284,66 +286,7 @@ export default function LessonLogModal({
             />
           </div>
 
-          {/* Start and End Page Range Inputs */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block mb-1 font-semibold text-gray-700">Start Page 📄</label>
-              <input
-                type="number"
-                min="1"
-                placeholder="e.g. 12"
-                className="input w-full text-xs"
-                value={startPage}
-                onChange={(e) => setStartPage(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="block mb-1 font-semibold text-gray-700">End Page 📄</label>
-              <input
-                type="number"
-                min="1"
-                placeholder="e.g. 16"
-                className="input w-full text-xs"
-                value={endPage}
-                onChange={(e) => setEndPage(e.target.value)}
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block mb-1 font-semibold text-gray-700">Lesson Title *</label>
-              <input
-                type="text"
-                required
-                placeholder="e.g. Unit 3: Animals & Habitats"
-                className="input w-full text-xs"
-                value={lessonTitle}
-                onChange={(e) => setLessonTitle(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="block mb-1 font-semibold text-gray-700">Date</label>
-              <input
-                type="date"
-                className="input w-full text-xs"
-                value={lessonDate}
-                onChange={(e) => setLessonDate(e.target.value)}
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block mb-1 font-semibold text-gray-700">Vocabulary / Target Patterns</label>
-            <textarea
-              rows={2}
-              placeholder="e.g. cheetah, mammal, fast, faster than"
-              className="input w-full text-xs"
-              value={vocabulary}
-              onChange={(e) => setVocabulary(e.target.value)}
-            />
-          </div>
-
+          {/* Strengths & Highlights / Next Focus */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block mb-1 font-semibold text-gray-700">Strengths & Highlights</label>
@@ -367,8 +310,11 @@ export default function LessonLogModal({
             </div>
           </div>
 
+          {/* Assigned Homework */}
           <div>
-            <label className="block mb-1 font-semibold text-pink-700">Assigned Homework / Instructions (Optional) 📚</label>
+            <label className="block mb-1 font-semibold text-pink-700">
+              Assigned Homework / Instructions (Optional) 📚
+            </label>
             <textarea
               rows={2}
               placeholder="e.g. Complete Student Book Page 24 exercises 1-4."
@@ -378,8 +324,11 @@ export default function LessonLogModal({
             />
           </div>
 
+          {/* Attach Homework File */}
           <div className="p-3 bg-pink-50/40 rounded-2xl border border-pink-100 space-y-1.5">
-            <label className="block font-semibold text-pink-900 text-xs">Attach Homework Page / Worksheet (Optional) 📄</label>
+            <label className="block font-semibold text-pink-900 text-xs">
+              Attach Homework Page / Worksheet (Optional) 📄
+            </label>
             <input
               type="file"
               accept="image/*,application/pdf"
@@ -387,10 +336,13 @@ export default function LessonLogModal({
               className="file:mr-3 file:py-1.5 file:px-3.5 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-pink-600 file:text-white hover:file:bg-pink-700 text-xs text-gray-500 w-full cursor-pointer"
             />
             {homeworkFile && (
-              <p className="text-[11px] text-emerald-700 font-medium">✓ Selected file: {homeworkFile.name}</p>
+              <p className="text-[11px] text-emerald-700 font-medium">
+                ✓ Selected file: {homeworkFile.name}
+              </p>
             )}
           </div>
 
+          {/* Action Buttons */}
           <div className="flex justify-end gap-2 pt-3 border-t border-pink-100">
             <button
               type="button"
