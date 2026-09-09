@@ -13,6 +13,7 @@ export default function BooksPage() {
   const [editBookTitle, setEditBookTitle] = useState("");
   const [editBookType, setEditBookType] = useState("chapters");
   const [editTotalPages, setEditTotalPages] = useState("");
+  const [editFileUrl, setEditFileUrl] = useState("");
   const [editChaptersInput, setEditChaptersInput] = useState<{ title: string; url: string }[]>([
     { title: "", url: "" },
   ]);
@@ -21,6 +22,7 @@ export default function BooksPage() {
   const [newBookTitle, setNewBookTitle] = useState("");
   const [newBookType, setNewBookType] = useState("chapters");
   const [newTotalPages, setNewTotalPages] = useState("");
+  const [newFileUrl, setNewFileUrl] = useState("");
   const [chaptersInput, setChaptersInput] = useState<{ title: string; url: string }[]>([
     { title: "", url: "" },
   ]);
@@ -30,6 +32,7 @@ export default function BooksPage() {
     setEditBookTitle(book.title || "");
     setEditBookType(book.book_type || "chapters");
     setEditTotalPages(book.total_pages ? String(book.total_pages) : "");
+    setEditFileUrl(book.file_url || book.link || book.drive_url || "");
     setEditChaptersInput(book.chapters && book.chapters.length > 0 ? book.chapters : [{ title: "", url: "" }]);
     setIsEditModalOpen(true);
   }
@@ -47,6 +50,7 @@ export default function BooksPage() {
         title: editBookTitle.trim(),
         book_type: editBookType,
         total_pages: pagesCount,
+        file_url: editFileUrl.trim() || null,
         chapters: validChapters,
       })
       .eq("id", editingBookId);
@@ -92,6 +96,7 @@ export default function BooksPage() {
         title: newBookTitle.trim(),
         book_type: newBookType,
         total_pages: pagesCount,
+        file_url: newFileUrl.trim() || null,
         chapters: validChapters,
       },
     ]);
@@ -102,6 +107,7 @@ export default function BooksPage() {
       setNewBookTitle("");
       setNewBookType("chapters");
       setNewTotalPages("");
+      setNewFileUrl("");
       setChaptersInput([{ title: "", url: "" }]);
       fetchBooks();
     }
@@ -155,17 +161,29 @@ export default function BooksPage() {
         </div>
 
         {newBookType === "pages" ? (
-          <div>
-            <label className="block mb-1 text-xs font-semibold text-gray-700">Total Pages *</label>
-            <input
-              type="number"
-              required
-              min="1"
-              placeholder="e.g. 50"
-              className="border border-pink-200 p-3 w-full rounded-xl text-xs focus:outline-none focus:border-pink-500 bg-white"
-              value={newTotalPages}
-              onChange={(e) => setNewTotalPages(e.target.value)}
-            />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block mb-1 text-xs font-semibold text-gray-700">Total Pages *</label>
+              <input
+                type="number"
+                required
+                min="1"
+                placeholder="e.g. 50"
+                className="border border-pink-200 p-3 w-full rounded-xl text-xs focus:outline-none focus:border-pink-500 bg-white"
+                value={newTotalPages}
+                onChange={(e) => setNewTotalPages(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block mb-1 text-xs font-semibold text-gray-700">Book Link / Drive URL (Optional) 🔗</label>
+              <input
+                type="url"
+                placeholder="https://drive.google.com/... or OneDrive link"
+                className="border border-pink-200 p-3 w-full rounded-xl text-xs font-mono focus:outline-none focus:border-pink-500 bg-white"
+                value={newFileUrl}
+                onChange={(e) => setNewFileUrl(e.target.value)}
+              />
+            </div>
           </div>
         ) : (
           <div className="space-y-2">
@@ -255,6 +273,18 @@ export default function BooksPage() {
                   </div>
 
                   <div className="flex items-center gap-3">
+                    {isPageBased && (book.file_url || book.link || book.drive_url) && (
+                      <a
+                        href={book.file_url || book.link || book.drive_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="px-3 py-1.5 bg-pink-50 hover:bg-pink-100 text-pink-700 border border-pink-200 rounded-xl text-xs font-bold transition flex items-center gap-1"
+                      >
+                        <span>Open Book</span>
+                        <ExternalLink size={12} />
+                      </a>
+                    )}
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -360,16 +390,28 @@ export default function BooksPage() {
               </div>
 
               {editBookType === "pages" ? (
-                <div>
-                  <label className="block mb-1 font-semibold text-gray-700">Total Pages *</label>
-                  <input
-                    type="number"
-                    required
-                    min="1"
-                    className="border border-pink-200 p-3 w-full rounded-xl focus:outline-none focus:border-pink-500 bg-white"
-                    value={editTotalPages}
-                    onChange={(e) => setEditTotalPages(e.target.value)}
-                  />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block mb-1 font-semibold text-gray-700">Total Pages *</label>
+                    <input
+                      type="number"
+                      required
+                      min="1"
+                      className="border border-pink-200 p-3 w-full rounded-xl focus:outline-none focus:border-pink-500 bg-white"
+                      value={editTotalPages}
+                      onChange={(e) => setEditTotalPages(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block mb-1 font-semibold text-gray-700">Book Link / Drive URL (Optional) 🔗</label>
+                    <input
+                      type="url"
+                      placeholder="https://drive.google.com/..."
+                      className="border border-pink-200 p-3 w-full rounded-xl font-mono focus:outline-none focus:border-pink-500 bg-white"
+                      value={editFileUrl}
+                      onChange={(e) => setEditFileUrl(e.target.value)}
+                    />
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-2">

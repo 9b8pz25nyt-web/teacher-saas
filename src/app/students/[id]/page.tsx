@@ -32,6 +32,42 @@ const DAYS_OF_WEEK = [
   "Saturday",
   "Sunday",
 ];
+const DAY_ORDER = [
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+  "Sunday",
+];
+
+function groupSchedules(schedList: any[]) {
+  if (!schedList || schedList.length === 0) return [];
+
+  // Group by unique time + duration
+  const groups: Record<string, { days: string[]; time: string; duration: number; ids: string[] }> = {};
+
+  schedList.forEach((s) => {
+    const time = s.start_time || s.schedule_time || s.time || "TBA";
+    const duration = s.duration || 25;
+    const key = `${time}-${duration}`;
+
+    if (!groups[key]) {
+      groups[key] = { days: [], time, duration, ids: [] };
+    }
+    if (s.day_of_week && !groups[key].days.includes(s.day_of_week)) {
+      groups[key].days.push(s.day_of_week);
+    }
+    groups[key].ids.push(s.id);
+  });
+
+  return Object.values(groups).map((group) => {
+    // Sort days chronologically
+    group.days.sort((a, b) => DAY_ORDER.indexOf(a) - DAY_ORDER.indexOf(b));
+    return group;
+  });
+}
 
 export default function StudentDetailsPage({
   params,
@@ -856,236 +892,259 @@ export default function StudentDetailsPage({
         </div>
       </div>
 
-      {/* Single, Non-Duplicated Schedule & Notes/Parent Requests Row */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold text-gray-900">Weekly Schedule</h3>
-            <button
-              type="button"
-              onClick={() => setIsScheduleModalOpen(true)}
-              className="text-xs font-bold text-pink-600 hover:text-pink-700 flex items-center gap-1 cursor-pointer"
-            >
-              <Plus size={14} />
-              <span>Add Schedule</span>
-            </button>
+    {/* 2-Column Main Workspace: Left (Schedule & Notes) | Right (Logged Lessons & Reports) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        
+        {/* Left Column (5/12): Weekly Schedule & Notes */}
+        <div className="lg:col-span-5 space-y-5">
+          {/* Weekly Schedule Card (No scrollbar, auto-height) */}
+          <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-gray-900">Weekly Schedule</h3>
+              <button
+                type="button"
+                onClick={() => setIsScheduleModalOpen(true)}
+                className="text-xs font-bold text-pink-600 hover:text-pink-700 flex items-center gap-1 cursor-pointer"
+              >
+                <Plus size={14} />
+                <span>Add Schedule</span>
+              </button>
+            </div>
+
+            {schedules.length === 0 ? (
+              <p className="text-xs text-gray-400 italic">
+                No scheduled class times added yet.
+              </p>
+            ) : (
+              <div className="space-y-1.5">
+                {[...schedules]
+                  .sort((a, b) => {
+                    const order = [
+                      "Monday",
+                      "Tuesday",
+                      "Wednesday",
+                      "Thursday",
+                      "Friday",
+                      "Saturday",
+                      "Sunday",
+                    ];
+                    return order.indexOf(a.day_of_week) - order.indexOf(b.day_of_week);
+                  })
+                  .map((s) => (
+                    <div
+                      key={s.id}
+                      className="grid grid-cols-[85px_65px_1fr_auto] items-center text-xs p-2.5 bg-pink-50/40 rounded-xl border border-pink-100/70 hover:bg-pink-50/80 transition"
+                    >
+                      <span className="font-bold text-gray-800">
+                        {s.day_of_week}
+                      </span>
+                      <span className="text-pink-600 font-bold font-mono text-[12px]">
+                        {s.start_time || s.schedule_time || s.time}
+                      </span>
+                      <div>
+                        <span className="px-2 py-0.5 bg-white text-gray-600 text-[10px] font-semibold rounded-md border border-pink-100 shadow-2xs">
+                          {s.duration || 25}m
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteSchedule(s.id)}
+                        className="text-gray-400 hover:text-red-600 p-1 transition cursor-pointer"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  ))}
+              </div>
+            )}
           </div>
-          {schedules.length === 0 ? (
-            <p className="text-xs text-gray-400 italic">
-              No scheduled class times added yet.
-            </p>
-          ) : (
-            <div className="space-y-1.5">
-              {schedules.map((s) => (
-                <div
-                  key={s.id}
-                  className="flex items-center justify-between text-xs p-2.5 bg-pink-50/50 rounded-xl border border-pink-50"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-gray-800">
-                      {s.day_of_week}
-                    </span>
-                    <span className="text-gray-400">•</span>
-                    <span className="text-pink-600 font-semibold">
-                      {s.start_time || s.schedule_time || s.time}
-                    </span>
-                    <span className="text-gray-400">({s.duration || 40}m)</span>
-                  </div>
+
+          {/* Teacher Notes & Collapsible Parent Requests Card */}
+          <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs space-y-3">
+            <div>
+              <h3 className="text-sm font-bold text-gray-900">Teacher Notes & Objectives</h3>
+              <p className="text-xs text-gray-600 leading-relaxed mt-1">
+                {student?.notes || "No teacher notes recorded yet."}
+              </p>
+            </div>
+
+            {/* Collapsible Parent Requests */}
+            <div className="pt-2 border-t border-pink-100">
+              <div
+                onClick={() => setIsParentRequestsOpen(!isParentRequestsOpen)}
+                className="flex items-center justify-between p-2 -mx-2 rounded-xl cursor-pointer hover:bg-pink-50/50 select-none transition"
+              >
+                <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => handleDeleteSchedule(s.id)}
-                    className="text-gray-400 hover:text-red-600 p-1 transition cursor-pointer"
+                    className="p-1 rounded-lg text-pink-600 bg-white border border-pink-200 shadow-2xs"
                   >
-                    <Trash2 size={13} />
+                    {isParentRequestsOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
                   </button>
+                  <span className="text-xs font-bold text-pink-900">
+                    💬 Parent Notes & Requests
+                  </span>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
 
-        {/* Teacher Notes & Collapsible Parent Requests */}
-        <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs space-y-3">
-          <div>
-            <h3 className="text-sm font-bold text-gray-900">Teacher Notes & Objectives</h3>
-            <p className="text-xs text-gray-600 leading-relaxed mt-1">
-              {student?.notes || "No teacher notes recorded yet."}
-            </p>
-          </div>
-
-          {/* Collapsible Parent Requests Section */}
-          <div className="pt-2 border-t border-pink-100">
-            <div
-              onClick={() => setIsParentRequestsOpen(!isParentRequestsOpen)}
-              className="flex items-center justify-between p-2 -mx-2 rounded-xl cursor-pointer hover:bg-pink-50/50 select-none transition"
-            >
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  className="p-1 rounded-lg text-pink-600 bg-white border border-pink-200 shadow-2xs"
-                >
-                  {isParentRequestsOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-                </button>
-                <span className="text-xs font-bold text-pink-900">
-                  💬 Parent Notes & Requests
-                </span>
+                {student?.parent_requests && (
+                  <span className="text-[10px] font-extrabold bg-pink-100 text-pink-700 px-2 py-0.5 rounded-md border border-pink-200">
+                    New Message
+                  </span>
+                )}
               </div>
 
-              {student?.parent_requests && (
-                <span className="text-[10px] font-extrabold bg-pink-100 text-pink-700 px-2 py-0.5 rounded-md border border-pink-200">
-                  New Message
-                </span>
+              {isParentRequestsOpen && (
+                <div className="mt-2">
+                  {student?.parent_requests ? (
+                    <div className="p-3 bg-pink-50/50 border border-pink-200 rounded-2xl text-xs text-pink-950 font-medium whitespace-pre-wrap">
+                      {student.parent_requests}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-gray-400 italic px-1">
+                      No notes received from parents yet.
+                    </p>
+                  )}
+                </div>
               )}
             </div>
+          </div>
+        </div>
 
-            {isParentRequestsOpen && (
-              <div className="mt-2">
-                {student?.parent_requests ? (
-                  <div className="p-3 bg-pink-50/50 border border-pink-200 rounded-2xl text-xs text-pink-950 font-medium whitespace-pre-wrap">
-                    {student.parent_requests}
-                  </div>
-                ) : (
-                  <p className="text-xs text-gray-400 italic px-1">
-                    No notes received from parents yet.
-                  </p>
-                )}
+        {/* Right Column (7/12): Logged Lessons & Reports */}
+        <div className="lg:col-span-7">
+          <div className="bg-white border border-pink-100 rounded-3xl p-6 shadow-xs space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-gray-900">
+                  Logged Lessons & Reports
+                </h3>
+                <span className="text-[11px] font-bold text-pink-600 bg-pink-50 px-2 py-0.5 rounded-lg border border-pink-200">
+                  {dynamicCompletedCount}
+                </span>
+              </div>
+              <button
+                onClick={() => {
+                  const today = new Date().toISOString().split("T")[0];
+                  setReportDate(today);
+                  setEditingReportId(null);
+                  setLessonTitle("");
+                  setVocabulary("");
+                  setStrengths("");
+                  setImprovements("");
+                  setHomework("");
+                  setHomeworkFile(null);
+                  setSelectedChapterIndex("");
+                  setIsChapterComplete(false);
+                  setIsReportModalOpen(true);
+                }}
+                className="text-xs font-bold text-pink-600 hover:text-pink-700 flex items-center gap-1 cursor-pointer"
+              >
+                <Plus size={14} />
+                <span>Add Report</span>
+              </button>
+            </div>
+
+            {reports.length === 0 ? (
+              <p className="text-xs text-gray-400 italic">
+                No lessons logged yet for this student.
+              </p>
+            ) : (
+              <div className="space-y-2.5">
+                {reports.map((rep) => {
+                  const isExpanded = expandedReportIds.includes(rep.id);
+
+                  return (
+                    <div
+                      key={rep.id}
+                      className="bg-pink-50/30 rounded-2xl border border-pink-100 text-xs transition-all overflow-hidden"
+                    >
+                      <div
+                        onClick={() => toggleExpandReport(rep.id)}
+                        className="p-3.5 flex items-center justify-between cursor-pointer hover:bg-pink-50/60 select-none"
+                      >
+                        <div className="flex items-center gap-3">
+                          <button
+                            type="button"
+                            className="p-1 rounded-lg text-pink-500 bg-white border border-pink-100 shadow-2xs cursor-pointer"
+                          >
+                            {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                          </button>
+                          <span className="font-bold text-gray-900 text-sm">
+                            {rep.lesson_title || rep.title}
+                          </span>
+                        </div>
+
+                        <div
+                          className="flex items-center gap-3"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <span className="text-gray-400 text-[11px] font-mono">
+                            {rep.report_date || rep.lesson_date}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditReport(rep)}
+                            className="text-gray-400 hover:text-pink-600 transition p-1 cursor-pointer"
+                          >
+                            <Edit size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleDeleteReport(rep.id, rep.homework_file_url)
+                            }
+                            className="text-gray-400 hover:text-red-600 transition p-1 cursor-pointer"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+
+                      {isExpanded && (
+                        <div className="px-4 pb-4 pt-1 border-t border-pink-100/60 space-y-2.5 bg-white/40">
+                          {rep.vocabulary && (
+                            <div className="text-gray-600 font-mono text-[11px] bg-white/80 p-2.5 rounded-xl border border-pink-50 whitespace-pre-wrap">
+                              <strong className="text-pink-900 font-sans">Vocab/Structures:</strong>
+                              <p className="mt-1">{rep.vocabulary}</p>
+                            </div>
+                          )}
+
+                          {(rep.strengths || rep.improvements) && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px]">
+                              {rep.strengths && (
+                                <div className="p-2.5 bg-emerald-50/60 border border-emerald-100 rounded-xl text-emerald-950">
+                                  <strong className="text-emerald-800">Strengths & Highlights:</strong>
+                                  <p className="mt-0.5 whitespace-pre-wrap">{rep.strengths}</p>
+                                </div>
+                              )}
+                              {rep.improvements && (
+                                <div className="p-2.5 bg-amber-50/60 border border-amber-100 rounded-xl text-amber-950">
+                                  <strong className="text-amber-800">Next Focus:</strong>
+                                  <p className="mt-0.5 whitespace-pre-wrap">{rep.improvements}</p>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {rep.homework && (
+                            <div className="p-2.5 bg-pink-100/50 rounded-xl border border-pink-200 text-pink-950 flex items-start gap-1.5">
+                              <FileCheck size={14} className="text-pink-600 mt-0.5 shrink-0" />
+                              <div>
+                                <strong className="text-pink-900 text-[11px]">Homework:</strong>
+                                <p className="text-[11px] text-gray-800 whitespace-pre-wrap">{rep.homework}</p>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
         </div>
-      </div>
 
-      {/* Logged Lessons & Reports */}
-      <div className="bg-white border border-pink-100 rounded-3xl p-6 shadow-xs space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <h3 className="text-sm font-bold text-gray-900">
-              Logged Lessons & Reports
-            </h3>
-            <span className="text-[11px] font-bold text-pink-600 bg-pink-50 px-2 py-0.5 rounded-lg border border-pink-200">
-              {dynamicCompletedCount}
-            </span>
-          </div>
-          <button
-            onClick={() => {
-              const today = new Date().toISOString().split("T")[0];
-              setReportDate(today);
-              setEditingReportId(null);
-              setLessonTitle("");
-              setVocabulary("");
-              setStrengths("");
-              setImprovements("");
-              setHomework("");
-              setHomeworkFile(null);
-              setSelectedChapterIndex("");
-              setIsChapterComplete(false);
-              setIsReportModalOpen(true);
-            }}
-            className="text-xs font-bold text-pink-600 hover:text-pink-700 flex items-center gap-1 cursor-pointer"
-          >
-            <Plus size={14} />
-            <span>Add Report</span>
-          </button>
-        </div>
-
-        {reports.length === 0 ? (
-          <p className="text-xs text-gray-400 italic">
-            No lessons logged yet for this student.
-          </p>
-        ) : (
-          <div className="space-y-2.5 max-h-[500px] overflow-y-auto pr-1">
-            {reports.map((rep) => {
-              const isExpanded = expandedReportIds.includes(rep.id);
-
-              return (
-                <div
-                  key={rep.id}
-                  className="bg-pink-50/30 rounded-2xl border border-pink-100 text-xs transition-all overflow-hidden"
-                >
-                  <div
-                    onClick={() => toggleExpandReport(rep.id)}
-                    className="p-3.5 flex items-center justify-between cursor-pointer hover:bg-pink-50/60 select-none"
-                  >
-                    <div className="flex items-center gap-3">
-                      <button
-                        type="button"
-                        className="p-1 rounded-lg text-pink-500 bg-white border border-pink-100 shadow-2xs cursor-pointer"
-                      >
-                        {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                      </button>
-                      <span className="font-bold text-gray-900 text-sm">
-                        {rep.lesson_title || rep.title}
-                      </span>
-                    </div>
-
-                    <div
-                      className="flex items-center gap-3"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <span className="text-gray-400 text-[11px] font-mono">
-                        {rep.report_date || rep.lesson_date}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => handleOpenEditReport(rep)}
-                        className="text-gray-400 hover:text-pink-600 transition p-1 cursor-pointer"
-                      >
-                        <Edit size={14} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          handleDeleteReport(rep.id, rep.homework_file_url)
-                        }
-                        className="text-gray-400 hover:text-red-600 transition p-1 cursor-pointer"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </div>
-
-                  {isExpanded && (
-                    <div className="px-4 pb-4 pt-1 border-t border-pink-100/60 space-y-2.5 bg-white/40">
-                      {rep.vocabulary && (
-                        <div className="text-gray-600 font-mono text-[11px] bg-white/80 p-2.5 rounded-xl border border-pink-50 whitespace-pre-wrap">
-                          <strong className="text-pink-900 font-sans">Vocab/Structures:</strong>
-                          <p className="mt-1">{rep.vocabulary}</p>
-                        </div>
-                      )}
-
-                      {(rep.strengths || rep.improvements) && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px]">
-                          {rep.strengths && (
-                            <div className="p-2.5 bg-emerald-50/60 border border-emerald-100 rounded-xl text-emerald-950">
-                              <strong className="text-emerald-800">Strengths & Highlights:</strong>
-                              <p className="mt-0.5 whitespace-pre-wrap">{rep.strengths}</p>
-                            </div>
-                          )}
-                          {rep.improvements && (
-                            <div className="p-2.5 bg-amber-50/60 border border-amber-100 rounded-xl text-amber-950">
-                              <strong className="text-amber-800">Next Focus:</strong>
-                              <p className="mt-0.5 whitespace-pre-wrap">{rep.improvements}</p>
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {rep.homework && (
-                        <div className="p-2.5 bg-pink-100/50 rounded-xl border border-pink-200 text-pink-950 flex items-start gap-1.5">
-                          <FileCheck size={14} className="text-pink-600 mt-0.5 shrink-0" />
-                          <div>
-                            <strong className="text-pink-900 text-[11px]">Homework:</strong>
-                            <p className="text-[11px] text-gray-800 whitespace-pre-wrap">{rep.homework}</p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
       </div>
 
       {/* MODAL: LOG LESSON & HOMEWORK */}
