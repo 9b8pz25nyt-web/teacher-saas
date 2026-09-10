@@ -246,8 +246,8 @@ export default function StudentDetailsPage({
       );
       setRenewalRate(rawAmount);
 
-     if (studentData.access_token) {
-        const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || window.location.origin;
+  if (studentData.access_token) {
+        const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://teacher-saas-pink.vercel.app";
         const portalLink = `${baseUrl}/portal/${studentData.access_token}`;
         QRCode.toDataURL(portalLink, { width: 120, margin: 1 })
           .then((url) => setInvoiceQrDataUrl(url))
