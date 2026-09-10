@@ -1289,7 +1289,6 @@ ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCust
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                {/* Tuition Rate Input with Comma Formatting */}
                 <div>
                   <label className="block mb-1 font-semibold text-gray-700">
                     Tuition Rate ({student?.payment_currency || "VND"}) *
@@ -1392,28 +1391,28 @@ ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCust
                   }}
                   className="space-y-6 text-xs"
                 >
-                {/* Clean Modern Header with Centered Portal QR Code */}
-<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1.5px solid #f472b6", paddingBottom: "16px" }}>
-  <div>
-    <h1 style={{ fontSize: "22px", fontWeight: "800", color: "#831843", margin: 0, letterSpacing: "-0.5px" }}>
-      {teacherBrandName}
-    </h1>
-    <p style={{ fontSize: "11px", color: "#64748b", margin: "4px 0 0 0", fontWeight: "500" }}>
-      Private ESL & English Language Tutoring Services
-    </p>
-  </div>
+                  {/* Clean Modern Header with Portal QR Code on Top */}
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1.5px solid #f472b6", paddingBottom: "16px" }}>
+                    <div>
+                      <h1 style={{ fontSize: "22px", fontWeight: "800", color: "#831843", margin: 0, letterSpacing: "-0.5px" }}>
+                        {teacherBrandName}
+                      </h1>
+                      <p style={{ fontSize: "11px", color: "#64748b", margin: "4px 0 0 0", fontWeight: "500" }}>
+                        Private ESL & English Language Tutoring Services
+                      </p>
+                    </div>
 
-  <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-    <div style={{ textAlign: "right" }}>
-      <h2 style={{ fontSize: "16px", fontWeight: "800", color: "#db2777", margin: 0, letterSpacing: "0.5px" }}>
-        RENEWAL INVOICE
-      </h2>
-      <p style={{ fontSize: "10px", color: "#94a3b8", margin: "4px 0 0 0" }}>
-        Date: {new Date().toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })}
-      </p>
-    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                      <div style={{ textAlign: "right" }}>
+                        <h2 style={{ fontSize: "16px", fontWeight: "800", color: "#db2777", margin: 0, letterSpacing: "0.5px" }}>
+                          RENEWAL INVOICE
+                        </h2>
+                        <p style={{ fontSize: "10px", color: "#94a3b8", margin: "4px 0 0 0" }}>
+                          Date: {new Date().toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })}
+                        </p>
+                      </div>
 
- {invoiceQrDataUrl && (
+                      {invoiceQrDataUrl && (
                         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", backgroundColor: "#fdf2f8", padding: "6px", borderRadius: "8px", border: "1px solid #fce7f3", flexShrink: 0 }}>
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
@@ -1426,8 +1425,8 @@ ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCust
                           </span>
                         </div>
                       )}
-  </div>
-</div>
+                    </div>
+                  </div>
 
                   {/* Metadata 2-Column Cards */}
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
@@ -1500,11 +1499,8 @@ ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCust
                     </tfoot>
                   </table>
 
-                  {/* Footer Notes & Payment QR Code Only */}
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid #f1f5f9", paddingTop: "16px", gap: "16px" }}>
-                    <div style={{ flex: 1 }}>
-                     {/* Unified Box: Payment Instructions (Left) & Payment QR Code (Right) */}
-                  {(renewalCustomNotes || paymentQrPreviewUrl) && (
+                  {/* Footer Notes & Payment QR Code (Unified Box) */}
+                  {(renewalCustomNotes || paymentQrPreviewUrl) ? (
                     <div style={{ backgroundColor: "#fdf2f8", border: "1px solid #fce7f3", padding: "12px 14px", borderRadius: "12px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "16px" }}>
                       <div style={{ flex: 1 }}>
                         <p style={{ fontSize: "10px", fontWeight: "700", color: "#831843", textTransform: "uppercase", margin: 0 }}>
@@ -1529,34 +1525,13 @@ ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCust
                         </div>
                       )}
                     </div>
-                  )}
-
-                  {!renewalCustomNotes && !paymentQrPreviewUrl && (
+                  ) : (
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid #f1f5f9", paddingTop: "12px" }}>
                       <p style={{ fontSize: "10.5px", color: "#64748b", margin: 0, lineHeight: "1.4" }}>
                         Thank you for learning with us! Please confirm once payment is sent to secure your schedule slots.
                       </p>
-                      {student?.access_token && (
-                        <p style={{ fontSize: "10px", color: "#db2777", margin: 0, fontWeight: "600" }}>
-                          Portal Link: {window.location.origin}/portal/{student.access_token}
-                        </p>
-                      )}
                     </div>
                   )}
-
-                      {!renewalCustomNotes && (
-                        <p style={{ fontSize: "10.5px", color: "#64748b", margin: 0, lineHeight: "1.4" }}>
-                          Thank you for learning with us! Please confirm once payment is sent to secure your schedule slots.
-                        </p>
-                      )}
-
-                      {student?.access_token && (
-                        <p style={{ fontSize: "10px", color: "#db2777", marginTop: "10px", fontWeight: "600" }}>
-                          Student Portal Link: {window.location.origin}/portal/{student.access_token}
-                        </p>
-                      )}
-                    </div>
-                  </div>
                 </div>
               </div>
             </div>
