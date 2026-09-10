@@ -1,95 +1,105 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
 import Link from "next/link";
-import { AlertCircle } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 
-interface StudentAlert {
-  id: string;
-  name: string;
-  remaining: number;
+interface RenewalAlertBannerProps {
+  students?: any[];
 }
 
-export default function RenewalAlertBanner() {
-  const [lowBalanceStudents, setLowBalanceStudents] = useState<StudentAlert[]>([]);
+export default function RenewalAlertBanner({ students: propStudents }: RenewalAlertBannerProps) {
+  const [renewalList, setRenewalList] = useState<any[]>([]);
 
   useEffect(() => {
-    async function checkRenewals() {
-      const { data, error } = await supabase
-        .from("students")
-        .select("id, name, classes_included, classes_completed");
-
-      if (!error && data) {
-        const expiring: StudentAlert[] = data
-          .map((s) => {
-            const included = Number(s.classes_included || 0);
-            const completed = Number(s.classes_completed || 0);
-            const remaining = Math.max(0, included - completed);
-            return {
-              id: s.id,
-              name: s.name,
-              remaining,
-            };
-          })
-          .filter((s) => s.remaining <= 5);
-
-        setLowBalanceStudents(expiring);
+    async function loadExpiring() {
+      let list = propStudents;
+      if (!list || list.length === 0) {
+        const { data } = await supabase.from("students").select("*");
+        list = data || [];
       }
+
+      const expiring = (list || []).filter((s: any) => {
+        const included = Number(s.classes_included || 0);
+        const free = Number(s.free_classes || 0);
+        const completed = Number(s.classes_completed || 0);
+        const remaining = included + free - completed;
+
+        return remaining <= 5 || included === 0;
+      });
+
+      setRenewalList(expiring);
     }
 
-    checkRenewals();
-  }, []);
+    loadExpiring();
+  }, [propStudents]);
 
-  if (lowBalanceStudents.length === 0) return null;
+  if (renewalList.length === 0) return null;
 
   return (
-    <div className="bg-pink-100 border-b border-pink-200 text-pink-950 py-2.5 px-4 flex items-center shadow-xs overflow-hidden z-20">
-      {/* Static Pink Label on the left */}
-      <div className="flex items-center gap-2 font-bold text-xs uppercase tracking-wider text-pink-700 shrink-0 bg-pink-200/90 px-3 py-1.5 rounded-full mr-4 border border-pink-300 shadow-xs">
-        <AlertCircle size={14} className="text-pink-600 animate-pulse" />
-        <span>Package Renewal Alerts</span>
-      </div>
+    <div className="w-full bg-pink-100/90 border-b border-pink-200 text-pink-950 py-2.5 px-4 overflow-hidden select-none relative z-30 group">
+      <div 
+        className="flex items-center gap-8 whitespace-nowrap animate-marquee group-hover:[animation-play-state:paused] hover:[animation-play-state:paused]"
+        style={{ width: "max-content", animation: "marquee 45s linear infinite" }}
+      >
+        {/* Track 1 */}
+        <div className="flex items-center gap-6 shrink-0">
+          <span className="font-bold text-xs uppercase tracking-wider text-pink-700 bg-pink-50 px-2.5 py-1 rounded-xl border border-pink-200 shrink-0">
+            PACKAGE RENEWAL ALERTS
+          </span>
 
-      {/* Infinite Scrolling Ticker with Spaced-Out Detailed Messages */}
-      <div className="relative flex overflow-x-hidden flex-1 group">
-        <div className="animate-marquee whitespace-nowrap flex items-center gap-16 pr-16 group-hover:[animation-play-state:paused] text-xs">
-          {lowBalanceStudents.map((student) => (
-            <Link
-              key={student.id}
-              href={`/students/${student.id}`}
-              className="inline-flex items-center gap-2 font-medium hover:underline text-pink-900 bg-white/80 px-4 py-1.5 rounded-full border border-pink-200 shadow-xs transition hover:bg-white"
-            >
-              <span>⚠️ Action Needed: <strong>{student.name}</strong> has</span>
-              <span className="font-bold text-pink-600 underline decoration-pink-300">
-                {student.remaining === 0
-                  ? "0 classes left (Package Expired)"
-                  : `${student.remaining} class${student.remaining === 1 ? "" : "es"} remaining`}
-              </span>
-              <span className="text-pink-400 font-semibold">— Click to view profile & prepare renewal invoice →</span>
-            </Link>
-          ))}
+          {renewalList.map((student) => {
+            const total = Number(student.classes_included || 0) + Number(student.free_classes || 0);
+            const done = Number(student.classes_completed || 0);
+            const left = Math.max(0, total - done);
+
+            return (
+              <Link
+                key={`track1-${student.id}`}
+                href={`/students/${student.id}?action=renew`}
+                className="inline-flex items-center gap-1.5 text-xs text-pink-900 hover:text-pink-600 transition-colors"
+              >
+                <span>
+                  ⚠️ Action Needed: <strong>{student.name}</strong> has{" "}
+                  <span className="font-bold text-pink-700">
+                    {left} {left === 1 ? "class" : "classes"} left {left === 0 ? "(Package Expired)" : ""}
+                  </span>{" "}
+                  — Click to view profile & prepare renewal invoice →
+                </span>
+                <span className="text-pink-300 font-bold ml-4">•</span>
+              </Link>
+            );
+          })}
         </div>
 
-        <div
-          aria-hidden="true"
-          className="absolute top-0 animate-marquee2 whitespace-nowrap flex items-center gap-16 pr-16 group-hover:[animation-play-state:paused] text-xs"
-        >
-          {lowBalanceStudents.map((student) => (
-            <Link
-              key={`dup-${student.id}`}
-              href={`/students/${student.id}`}
-              className="inline-flex items-center gap-2 font-medium hover:underline text-pink-900 bg-white/80 px-4 py-1.5 rounded-full border border-pink-200 shadow-xs transition hover:bg-white"
-            >
-              <span>⚠️ Action Needed: <strong>{student.name}</strong> has</span>
-              <span className="font-bold text-pink-600 underline decoration-pink-300">
-                {student.remaining === 0
-                  ? "0 classes left (Package Expired)"
-                  : `${student.remaining} class${student.remaining === 1 ? "" : "es"} remaining`}
-              </span>
-              <span className="text-pink-400 font-semibold">— Click to view profile & prepare renewal invoice →</span>
-            </Link>
-          ))}
+        {/* Track 2 (Duplicate for continuous loop) */}
+        <div className="flex items-center gap-6 shrink-0">
+          <span className="font-bold text-xs uppercase tracking-wider text-pink-700 bg-pink-50 px-2.5 py-1 rounded-xl border border-pink-200 shrink-0">
+            PACKAGE RENEWAL ALERTS
+          </span>
+
+          {renewalList.map((student) => {
+            const total = Number(student.classes_included || 0) + Number(student.free_classes || 0);
+            const done = Number(student.classes_completed || 0);
+            const left = Math.max(0, total - done);
+
+            return (
+              <Link
+                key={`track2-${student.id}`}
+                href={`/students/${student.id}?action=renew`}
+                className="inline-flex items-center gap-1.5 text-xs text-pink-900 hover:text-pink-600 transition-colors"
+              >
+                <span>
+                  ⚠️ Action Needed: <strong>{student.name}</strong> has{" "}
+                  <span className="font-bold text-pink-700">
+                    {left} {left === 1 ? "class" : "classes"} left {left === 0 ? "(Package Expired)" : ""}
+                  </span>{" "}
+                  — Click to view profile & prepare renewal invoice →
+                </span>
+                <span className="text-pink-300 font-bold ml-4">•</span>
+              </Link>
+            );
+          })}
         </div>
       </div>
     </div>

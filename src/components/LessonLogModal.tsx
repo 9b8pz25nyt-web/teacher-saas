@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
 
 interface LessonLogModalProps {
   isOpen: boolean
@@ -225,7 +227,7 @@ export default function LessonLogModal({
             </select>
           </div>
 
-          {/* Lesson Title & Date */}
+        {/* Lesson Title & Date */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block mb-1 font-semibold text-gray-700">Lesson Title *</label>
@@ -240,12 +242,22 @@ export default function LessonLogModal({
             </div>
             <div>
               <label className="block mb-1 font-semibold text-gray-700">Date</label>
-              <input
-                type="date"
-                className="input w-full text-xs"
-                value={lessonDate}
-                onChange={(e) => setLessonDate(e.target.value)}
-              />
+              <div className="relative">
+                <DatePicker
+                  selected={lessonDate ? new Date(lessonDate) : new Date()}
+                  onChange={(date: Date | null) => {
+                    if (date) {
+                      const y = date.getFullYear();
+                      const m = String(date.getMonth() + 1).padStart(2, "0");
+                      const d = String(date.getDate()).padStart(2, "0");
+                      setLessonDate(`${y}-${m}-${d}`);
+                    }
+                  }}
+                  dateFormat="yyyy-MM-dd"
+                  className="w-full p-2.5 text-xs rounded-xl border border-pink-200 bg-white text-pink-950 focus:outline-hidden focus:ring-2 focus:ring-pink-400 cursor-pointer"
+                  wrapperClassName="w-full"
+                />
+              </div>
             </div>
           </div>
 

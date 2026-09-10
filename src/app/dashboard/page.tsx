@@ -18,8 +18,8 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [isCleaning, setIsCleaning] = useState(false);
   const [payments, setPayments] = useState<any[]>([]);
-const [hoursFilter, setHoursFilter] = useState<"daily" | "monthly" | "yearly">("monthly");
-const [incomeFilter, setIncomeFilter] = useState<"daily" | "monthly" | "yearly">("monthly");
+  const [hoursFilter, setHoursFilter] = useState<"daily" | "monthly" | "yearly">("monthly");
+  const [incomeFilter, setIncomeFilter] = useState<"daily" | "monthly" | "yearly">("monthly");
 
   const [selectedAttendance, setSelectedAttendance] = useState<{
     eventId: string;
@@ -55,10 +55,10 @@ const [incomeFilter, setIncomeFilter] = useState<"daily" | "monthly" | "yearly">
       const { data: { user } } = await supabase.auth.getUser();
 
       const { data: paymentsData } = await supabase
-  .from("payments")
-  .select("*");
+        .from("payments")
+        .select("*");
 
-if (paymentsData) setPayments(paymentsData);
+      if (paymentsData) setPayments(paymentsData);
 
       // 1. Fetch Students
       const { data: studentsData } = await supabase
@@ -142,10 +142,13 @@ if (paymentsData) setPayments(paymentsData);
     }
   }
 
-  // Today calculations (Regular + Makeup)
+// Today calculations (Regular + Makeup)
   const todayObj = new Date();
   const todayWeekday = todayObj.toLocaleDateString("en-US", { weekday: "long" });
-  const todayDateStr = todayObj.toISOString().split("T")[0];
+  const localYear = todayObj.getFullYear();
+  const localMonth = String(todayObj.getMonth() + 1).padStart(2, "0");
+  const localDay = String(todayObj.getDate()).padStart(2, "0");
+  const todayDateStr = `${localYear}-${localMonth}-${localDay}`;
 
   const todaysRegularSchedules = schedules.filter(
     (sched) => sched.day_of_week?.toLowerCase() === todayWeekday.toLowerCase()
@@ -219,60 +222,62 @@ if (paymentsData) setPayments(paymentsData);
 
     return map;
   })();
-// Total Teaching Hours Calculation based on Recorded Lessons
-const calculatedHours = (() => {
-  const targetDateStr = todayDateStr; // YYYY-MM-DD
-  const targetMonthStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}`; // YYYY-MM
-  const targetYearStr = `${selectedYear}`; // YYYY
 
-  const filtered = recordedLessons.filter((l) => {
-    if (!l.lesson_date || l.status === "Cancelled") return false;
-    const lDate = l.lesson_date.substring(0, 10);
-    if (hoursFilter === "daily") return lDate === targetDateStr;
-    if (hoursFilter === "monthly") return lDate.startsWith(targetMonthStr);
-    return lDate.startsWith(targetYearStr);
-  });
+  // Total Teaching Hours Calculation based on Recorded Lessons
+  const calculatedHours = (() => {
+    const targetDateStr = todayDateStr;
+    const targetMonthStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}`;
+    const targetYearStr = `${selectedYear}`;
 
-  // Default lesson duration = 25m or calculate using student record
-  const totalMinutes = filtered.reduce((acc, l) => {
-    const student = students.find((s) => s.id === l.student_id);
-    return acc + (student?.class_duration || 25);
-  }, 0);
+    const filtered = recordedLessons.filter((l) => {
+      if (!l.lesson_date || l.status === "Cancelled") return false;
+      const lDate = l.lesson_date.substring(0, 10);
+      if (hoursFilter === "daily") return lDate === targetDateStr;
+      if (hoursFilter === "monthly") return lDate.startsWith(targetMonthStr);
+      return lDate.startsWith(targetYearStr);
+    });
 
-  const hours = (totalMinutes / 60).toFixed(1);
-  return {
-    hours,
-    classCount: filtered.length,
-  };
-})();
+    const totalMinutes = filtered.reduce((acc, l) => {
+      const student = students.find((s) => s.id === l.student_id);
+      return acc + (student?.class_duration || 25);
+    }, 0);
 
-// Total Income Calculation based on Payments
-const calculatedIncome = (() => {
-  const targetDateStr = todayDateStr;
-  const targetMonthStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}`;
-  const targetYearStr = `${selectedYear}`;
+    const hours = (totalMinutes / 60).toFixed(1);
+    return {
+      hours,
+      classCount: filtered.length,
+    };
+  })();
 
-  const filtered = payments.filter((p) => {
-    const pDate = (p.payment_date || p.created_at || "").substring(0, 10);
-    if (incomeFilter === "daily") return pDate === targetDateStr;
-    if (incomeFilter === "monthly") return pDate.startsWith(targetMonthStr);
-    return pDate.startsWith(targetYearStr);
-  });
+  // Total Income Calculation based on Payments
+  const calculatedIncome = (() => {
+    const targetDateStr = todayDateStr;
+    const targetMonthStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}`;
+    const targetYearStr = `${selectedYear}`;
 
-  const totalPHP = filtered.reduce((sum, p) => {
-    return sum + Number(p.php_equivalent || p.amount_in_php || p.payment_amount || 0);
-  }, 0);
+    const filtered = payments.filter((p) => {
+      const pDate = (p.payment_date || p.created_at || "").substring(0, 10);
+      if (incomeFilter === "daily") return pDate === targetDateStr;
+      if (incomeFilter === "monthly") return pDate.startsWith(targetMonthStr);
+      return pDate.startsWith(targetYearStr);
+    });
 
-  return {
-    amount: totalPHP,
-    count: filtered.length,
-  };
-})();
+    const totalPHP = filtered.reduce((sum, p) => {
+      return sum + Number(p.php_equivalent || p.amount_in_php || p.payment_amount || 0);
+    }, 0);
+
+    return {
+      amount: totalPHP,
+      count: filtered.length,
+    };
+  })();
+
   return (
     <div className="flex flex-col min-h-screen bg-gray-50/50">
-      <RenewalAlertBanner />
+      {/* Pass the students list directly to the banner */}
+      <RenewalAlertBanner students={students} />
 
- <main className="p-8 max-w-7xl mx-auto w-full space-y-6">
+      <main className="p-8 max-w-7xl mx-auto w-full space-y-6">
         {/* Top Header Controls */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-3xl border border-pink-100 shadow-xs">
           <div>
@@ -318,7 +323,7 @@ const calculatedIncome = (() => {
             </div>
           </div>
 
-          {/* Card 2: Teaching Hours (Dropdown) */}
+          {/* Card 2: Teaching Hours */}
           <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs flex flex-col justify-between space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
@@ -344,7 +349,7 @@ const calculatedIncome = (() => {
             </div>
           </div>
 
-          {/* Card 3: Total Income (Dropdown) */}
+          {/* Card 3: Total Income */}
           <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs flex flex-col justify-between space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">

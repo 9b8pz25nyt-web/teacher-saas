@@ -6,6 +6,8 @@ import { supabase } from "@/lib/supabase";
 import { convertToPHP } from "@/lib/currency";
 import { countries } from "@/constants/countries";
 import { currencies } from "@/constants/currencies";
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
 
 const DEFAULT_ALIASES = ["Teacher Gabi", "Teacher Princess"];
 
@@ -457,21 +459,46 @@ export default function StudentsPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-3">
+             <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block mb-1 text-xs font-semibold text-gray-700">
                     Contract Start Date
                   </label>
+                  <div className="relative">
+                    <DatePicker
+                      selected={contractStartDate ? new Date(contractStartDate) : null}
+                      onChange={(date: Date | null) => {
+                        if (date) {
+                          const y = date.getFullYear();
+                          const m = String(date.getMonth() + 1).padStart(2, "0");
+                          const d = String(date.getDate()).padStart(2, "0");
+                          const formattedDate = `${y}-${m}-${d}`;
+                          setContractStartDate(formattedDate);
+                          calculateEndDate(formattedDate, classesIncluded, freeClasses);
+                        } else {
+                          setContractStartDate("");
+                        }
+                      }}
+                      dateFormat="yyyy-MM-dd"
+                      placeholderText="Select start date"
+                      className="input w-full text-xs bg-white cursor-pointer"
+                      wrapperClassName="w-full"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block mb-1 text-xs font-semibold text-gray-700">
+                    Contract End Date (Auto-calculated)
+                  </label>
                   <input
                     type="date"
-                    className="input w-full text-xs"
-                    value={contractStartDate}
-                    onChange={(e) => {
-                      setContractStartDate(e.target.value);
-                      calculateEndDate(e.target.value, classesIncluded, freeClasses);
-                    }}
+                    className="input w-full text-xs bg-gray-50"
+                    value={contractEndDate}
+                    onChange={(e) => setContractEndDate(e.target.value)}
                   />
                 </div>
+              </div>
                 <div>
                   <label className="block mb-1 text-xs font-semibold text-gray-700">
                     Contract End Date (Auto-calculated)

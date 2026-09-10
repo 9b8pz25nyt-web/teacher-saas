@@ -16,24 +16,21 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  const pathname = usePathname();
-  const isPortal = pathname?.startsWith("/portal");
-
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
-      <body className="min-h-full flex">
-        {!isPortal && <Sidebar />}
-        <main className="flex-1 overflow-y-auto bg-[#fff7fb]">
-          {children}
-        </main>
+    <html lang="en">
+      <body className="bg-gray-50 text-gray-900">
+        <div className="flex h-screen overflow-hidden">
+          {/* Sticky Sidebar */}
+          <aside className="shrink-0">
+            <Sidebar />
+          </aside>
+
+          {/* Scrollable Main Content */}
+          <main className="flex-1 overflow-y-auto">
+            {children}
+          </main>
+        </div>
       </body>
     </html>
   );

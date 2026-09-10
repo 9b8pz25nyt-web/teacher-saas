@@ -2,12 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { Plus, Trash2, Check, Sparkles, Lock } from "lucide-react";
+import { Plus, Trash2, Check, Sparkles, Lock, Upload } from "lucide-react";
 
 export default function SettingsPage() {
   const [aliases, setAliases] = useState<string[]>([]);
   const [newAlias, setNewAlias] = useState("");
   const [dashboardTitle, setDashboardTitle] = useState("ESL Teacher's Private Class Dashboard");
+  const [logoUrl, setLogoUrl] = useState("");
+  const [uploadingLogo, setUploadingLogo] = useState(false);
   
   // Password state
   const [newPassword, setNewPassword] = useState("");
@@ -28,7 +30,7 @@ export default function SettingsPage() {
 
         const { data: profile } = await supabase
           .from("profiles")
-          .select("teacher_aliases, dashboard_title")
+          .select("teacher_aliases, dashboard_title, logo_url")
           .eq("user_id", user.id)
           .maybeSingle();
 
@@ -41,6 +43,10 @@ export default function SettingsPage() {
         if (profile?.dashboard_title) {
           setDashboardTitle(profile.dashboard_title);
         }
+
+        if (profile?.logo_url) {
+          setLogoUrl(profile.logo_url);
+        }
       } catch (err) {
         console.error("Error loading profile:", err);
       } finally {
@@ -50,6 +56,44 @@ export default function SettingsPage() {
 
     fetchProfile();
   }, []);
+
+  async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingLogo(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const fileExt = file.name.split(".").pop();
+      const fileName = `${user.id}/logo-${Date.now()}.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("avatars") // Make sure you have a bucket named 'avatars' in Supabase Storage
+        .upload(fileName, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data: publicUrlData } = supabase.storage
+        .from("avatars")
+        .getPublicUrl(fileName);
+
+      const publicUrl = publicUrlData.publicUrl;
+      setLogoUrl(publicUrl);
+
+      // Save logo URL directly to profiles table
+      await supabase
+        .from("profiles")
+        .upsert({ user_id: user.id, logo_url: publicUrl }, { onConflict: "user_id" });
+
+      alert("Logo uploaded and updated successfully!");
+    } catch (err: any) {
+      alert("Error uploading logo: " + err.message);
+    } finally {
+      setUploadingLogo(false);
+    }
+  }
 
   async function handleSave() {
     setSaving(true);
@@ -63,7 +107,8 @@ export default function SettingsPage() {
         .upsert({ 
           user_id: user.id, 
           teacher_aliases: aliases,
-          dashboard_title: dashboardTitle 
+          dashboard_title: dashboardTitle,
+          logo_url: logoUrl
         }, { onConflict: "user_id" });
 
       if (error) throw error;
@@ -135,7 +180,28 @@ export default function SettingsPage() {
           </span>
           <div>
             <h1 className="text-xl font-bold text-pink-950">Dashboard Settings</h1>
-            <p className="text-xs text-gray-500">Manage your custom dashboard title and selectable teacher aliases.</p>
+            <p className="text-xs text-gray-500">Manage your custom dashboard title, brand logo, and teacher aliases.</p>
+          </div>
+        </div>
+
+        {/* Logo Upload Section */}
+        <div className="space-y-2">
+          <label className="text-xs font-bold text-pink-950">Dashboard Logo / Brand Image</label>
+          <div className="flex items-center gap-4">
+            {logoUrl ? (
+              <img src={logoUrl} alt="Logo Preview" className="w-12 h-12 rounded-xl object-cover border border-pink-200 bg-white" />
+            ) : (
+              <div className="w-12 h-12 rounded-xl border border-dashed border-pink-300 flex items-center justify-center text-gray-400 text-[10px]">
+                No logo
+              </div>
+            )}
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleLogoUpload}
+              disabled={uploadingLogo}
+              className="text-xs text-gray-500 cursor-pointer file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-pink-600 file:text-white hover:file:bg-pink-700"
+            />
           </div>
         </div>
 

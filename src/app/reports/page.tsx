@@ -15,7 +15,19 @@ import {
   Plus,
   Trash2,
   Wifi,
+  ChevronDown,
+  BookOpen,
+  Users,
+  Calendar,
 } from "lucide-react";
+import JournalReport from "./JournalReport";
+
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December"
+];
+
+const AVAILABLE_YEARS = [2024, 2025, 2026, 2027, 2028, 2029, 2030];
 
 export default function ReportsPage() {
   const [students, setStudents] = useState<any[]>([]);
@@ -24,9 +36,22 @@ export default function ReportsPage() {
   const [expenses, setExpenses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [businessName, setBusinessName] = useState("Private ESL Tutoring Services");
+  const [statementSigner, setStatementSigner] = useState("Teacher Gabi");
 
-  // Timeframe filter: 'weekly' | 'monthly' | 'annual'
-  const [timeframe, setTimeframe] = useState<"weekly" | "monthly" | "annual">("monthly");
+  // Section Accordion Visibility Toggles
+  const [openSections, setOpenSections] = useState({
+    collections: true,
+    expenses: true,
+    journal: true,
+  });
+
+  const toggleSection = (key: "collections" | "expenses" | "journal") => {
+    setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  // Synchronized Timeframe & Date selector
+  const [timeframe, setTimeframe] = useState<"daily" | "weekly" | "monthly" | "annual">("monthly");
+  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split("T")[0]);
 
   // Income Target State
   const [monthlyTarget, setMonthlyTarget] = useState(50000);
@@ -41,6 +66,7 @@ export default function ReportsPage() {
 
   // New Expense Form State
   const [expenseTitle, setExpenseTitle] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("Transfer Fees");
   const [expenseAmountPhp, setExpenseAmountPhp] = useState("");
   const [expenseDate, setExpenseDate] = useState(new Date().toISOString().split("T")[0]);
   const [expenseNotes, setExpenseNotes] = useState("");
@@ -73,13 +99,41 @@ export default function ReportsPage() {
       ] = await Promise.all([
         supabase.from("students").select("*"),
         supabase.from("lessons").select("*"),
-        supabase.from("payments").select("*"),
+        supabase
+          .from("payments")
+          .select(`
+            id,
+            created_at,
+            payment_date,
+            currency,
+            original_amount,
+            net_amount_php,
+            gross_amount_php,
+            php_equivalent,
+            payment_amount,
+            transfer_fee_php,
+            payment_method,
+            reference_no,
+            status,
+            payment_status,
+            student_id,
+            students (
+              name
+            )
+          `)
+          .order("payment_date", { ascending: false }),
         supabase.from("expenses").select("*").order("expense_date", { ascending: false }),
       ]);
 
       if (studentsData) setStudents(studentsData);
       if (lessonsData) setLessons(lessonsData);
-      if (paymentsData) setPayments(paymentsData);
+      if (paymentsData) {
+        const formatted = paymentsData.map((p: any) => ({
+          ...p,
+          student_name: p.students?.name || "Private Student",
+        }));
+        setPayments(formatted);
+      }
       if (expensesData) setExpenses(expensesData);
     } catch (error) {
       console.error("Error loading reports data:", error);
@@ -93,61 +147,100 @@ export default function ReportsPage() {
   }, [fetchData]);
 
   const currentHorizonTarget =
-    timeframe === "weekly"
+    timeframe === "daily"
+      ? Math.round(monthlyTarget / 30)
+      : timeframe === "weekly"
       ? Math.round(monthlyTarget / 4)
       : timeframe === "annual"
       ? monthlyTarget * 12
       : monthlyTarget;
 
-  // Pure Cash-Basis Breakdown per student based on collected payments
-  const studentBreakdown = students.map((s) => {
-    const studentPayments = payments.filter(
-      (p) => p.student_id === s.id && p.payment_status === "Paid"
-    );
+  // Filter helper for synchronized date/timeframe
+  const matchesFilter = (dateStr?: string) => {
+    if (!dateStr) return false;
+    const formatted = dateStr.split("T")[0];
+    const currentMonth = selectedDate.substring(0, 7);
+    const currentYear = selectedDate.substring(0, 4);
 
-    const grossPackagePhp = studentPayments.reduce(
-      (acc, curr) => acc + (Number(curr.php_equivalent) || Number(curr.payment_amount) || 0),
-      0
-    );
+    if (timeframe === "daily") return formatted === selectedDate;
+    if (timeframe === "monthly") return formatted.startsWith(currentMonth);
+    if (timeframe === "annual") return formatted.startsWith(currentYear);
+    
+    const itemTime = new Date(formatted).getTime();
+    const selTime = new Date(selectedDate).getTime();
+    return Math.abs(selTime - itemTime) / (1000 * 3600 * 24) <= 7;
+  };
 
-    const totalFeesForStudent = studentPayments.reduce(
-      (acc, curr) => acc + (Number(curr.transfer_fee_php) || 0),
-      0
-    );
+  const studentBreakdown = students
+    .map((s) => {
+      const studentPayments = payments.filter(
+        (p) =>
+          p.student_id === s.id &&
+          matchesFilter(p.payment_date || p.created_at) &&
+          ((p.payment_status || p.status || "").toLowerCase() === "paid" ||
+            (p.payment_status || p.status || "").toLowerCase() === "completed")
+      );
 
-    const netPackagePhp = Math.max(0, grossPackagePhp - totalFeesForStudent);
+      const paymentsSum = studentPayments.reduce(
+        (acc, curr) =>
+          acc +
+          (Number(curr.gross_amount_php) ||
+            Number(curr.php_equivalent) ||
+            Number(curr.payment_amount) ||
+            Number(curr.net_amount_php) ||
+            0),
+        0
+      );
 
-    const studentLessons = lessons.filter(
-      (l) => l.student_id === s.id && l.status !== "Cancelled"
-    );
-    const completedClasses = Number(s.classes_completed || studentLessons.length || 0);
-    const minutesPerClass = Number(s.class_duration || 40);
-    const totalHoursTaught = (completedClasses * minutesPerClass) / 60;
+      const studentCreatedDate = s.start_date || s.created_at || "";
+      const studentRateMatches = matchesFilter(studentCreatedDate);
+      const fallbackStudentRate = studentRateMatches
+        ? Number(s.php_equivalent || s.payment_amount || 0)
+        : 0;
 
-    return {
-      ...s,
-      completedClasses,
-      grossPackagePhp,
-      totalFeesForStudent,
-      netPackagePhp,
-      totalHoursTaught,
-    };
-  });
+      const grossPackagePhp = paymentsSum > 0 ? paymentsSum : fallbackStudentRate;
 
-  // Operating Expenses (Internet, Zoom, Tools)
-  const totalTelecomSoftwareExpense = expenses.reduce(
+      const totalFeesForStudent = studentPayments.reduce(
+        (acc, curr) => acc + (Number(curr.transfer_fee_php) || 0),
+        0
+      );
+
+      const netPackagePhp = Math.max(0, grossPackagePhp - totalFeesForStudent);
+
+      const studentLessons = lessons.filter(
+        (l) =>
+          l.student_id === s.id &&
+          matchesFilter(l.lesson_date || l.created_at) &&
+          l.status !== "Cancelled"
+      );
+      const completedClasses = Number(studentLessons.length || 0);
+      const minutesPerClass = Number(s.class_duration || 40);
+      const totalHoursTaught = (completedClasses * minutesPerClass) / 60;
+
+      return {
+        ...s,
+        completedClasses,
+        grossPackagePhp,
+        totalFeesForStudent,
+        netPackagePhp,
+        totalHoursTaught,
+      };
+    })
+    .filter((s) => s.grossPackagePhp > 0 || s.totalHoursTaught > 0);
+
+  const filteredExpenses = expenses.filter((exp) => matchesFilter(exp.expense_date));
+
+  const totalTelecomSoftwareExpense = filteredExpenses.reduce(
     (acc, curr) => acc + (Number(curr.amount_php) || 0),
     0
   );
 
-  // Aggregated Cash-Basis Totals
   const totalGrossRevenue = studentBreakdown.reduce((acc, s) => acc + s.grossPackagePhp, 0);
   const totalTransferFees = studentBreakdown.reduce((acc, s) => acc + s.totalFeesForStudent, 0);
   const totalOperatingExpenses = totalTransferFees + totalTelecomSoftwareExpense;
   const totalNetOperatingIncome = Math.max(0, totalGrossRevenue - totalOperatingExpenses);
   const totalContractCommitment = totalGrossRevenue;
 
-  // Total hours taught across all students
   const totalHoursTaught = studentBreakdown.reduce((acc, s) => acc + s.totalHoursTaught, 0);
   const totalClassesTaught = studentBreakdown.reduce((acc, s) => acc + s.completedClasses, 0);
 
@@ -169,7 +262,9 @@ export default function ReportsPage() {
   async function handleAddExpense(e: React.FormEvent) {
     e.preventDefault();
     const cleanAmount = Number(expenseAmountPhp.replace(/[^0-9.]/g, ""));
-    if (!expenseTitle.trim() || !cleanAmount || isNaN(cleanAmount)) {
+    const finalTitle = selectedCategory === "Other" ? expenseTitle.trim() : selectedCategory;
+
+    if (!finalTitle || !cleanAmount || isNaN(cleanAmount)) {
       alert("Please enter a valid expense title and amount.");
       return;
     }
@@ -183,8 +278,8 @@ export default function ReportsPage() {
 
       const { error } = await supabase.from("expenses").insert({
         teacher_id: user.id,
-        category: "Telecommunications, Software & Internet",
-        title: expenseTitle.trim(),
+        category: selectedCategory === "Other" ? "Custom Expense" : selectedCategory,
+        title: finalTitle,
         amount_php: cleanAmount,
         expense_date: expenseDate,
         notes: expenseNotes.trim() || null,
@@ -194,6 +289,7 @@ export default function ReportsPage() {
 
       setShowExpenseModal(false);
       setExpenseTitle("");
+      setSelectedCategory("Transfer Fees");
       setExpenseAmountPhp("");
       setExpenseNotes("");
       fetchData();
@@ -226,10 +322,19 @@ export default function ReportsPage() {
       const element = statementPdfRef.current;
       const opt = {
         margin: 10,
-        filename: `Cash_Basis_Income_Statement_${timeframe.toUpperCase()}_${new Date().toISOString().split("T")[0]}.pdf`,
-        image: { type: "jpeg" as const, quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, backgroundColor: "#ffffff" },
-        jsPDF: { unit: "mm" as const, format: "a4" as const, orientation: "portrait" as const },
+        filename: `Cash_Basis_Income_Statement_${timeframe.toUpperCase()}_${selectedDate}.pdf`,
+        image: { type: "png" as const, quality: 1.0 },
+        html2canvas: {
+          scale: 3,
+          useCORS: true,
+          backgroundColor: "#ffffff",
+          letterRendering: true,
+        },
+        jsPDF: {
+          unit: "mm" as const,
+          format: "a4" as const,
+          orientation: "portrait" as const,
+        },
       };
 
       await html2pdf().set(opt).from(element).save();
@@ -241,27 +346,28 @@ export default function ReportsPage() {
     }
   }
 
+  const selectedYearStr = selectedDate.substring(0, 4);
+  const selectedMonthIdx = Number(selectedDate.substring(5, 7)) - 1;
+
   return (
     <div className="flex flex-col min-h-screen bg-pink-50/20">
       <div className="p-8 space-y-6 flex-1 max-w-7xl w-full mx-auto">
-        {/* Header & Controls */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold text-pink-600">Financial & Teaching Reports</h1>
             <p className="text-xs text-gray-500 mt-0.5">
-              Cash-basis income statement & operational expenses for BIR compliance.
+              Synchronized reports across collections, expenses, and BIR double-entry journals.
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5 self-start sm:self-auto">
-            {/* Timeframe Selector */}
             <div className="flex items-center bg-white border border-pink-100 rounded-2xl p-1 shadow-2xs">
-              {(["weekly", "monthly", "annual"] as const).map((mode) => (
+              {(["daily", "weekly", "monthly", "annual"] as const).map((mode) => (
                 <button
                   key={mode}
                   type="button"
                   onClick={() => setTimeframe(mode)}
-                  className={`text-xs capitalize font-semibold px-3.5 py-1.5 rounded-xl transition cursor-pointer ${
+                  className={`text-xs capitalize font-semibold px-3 py-1.5 rounded-xl transition cursor-pointer ${
                     timeframe === mode
                       ? "bg-pink-600 text-white shadow-2xs font-bold"
                       : "text-gray-500 hover:text-pink-600"
@@ -272,24 +378,71 @@ export default function ReportsPage() {
               ))}
             </div>
 
-            {/* Add Operating Expense Button */}
+            <div className="flex items-center gap-1.5 bg-white border border-pink-200 rounded-2xl px-3 py-1.5 shadow-2xs">
+              <Calendar size={13} className="text-pink-600 shrink-0" />
+              {timeframe === "annual" ? (
+                <select
+                  value={selectedYearStr}
+                  onChange={(e) => setSelectedDate(`${e.target.value}-01-01`)}
+                  className="text-xs font-bold text-pink-900 bg-transparent focus:outline-none cursor-pointer"
+                >
+                  {AVAILABLE_YEARS.map((y) => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+              ) : timeframe === "monthly" ? (
+                <div className="flex items-center gap-1.5">
+                  <select
+                    value={isNaN(selectedMonthIdx) || selectedMonthIdx < 0 ? 0 : selectedMonthIdx}
+                    onChange={(e) => {
+                      const m = String(Number(e.target.value) + 1).padStart(2, "0");
+                      setSelectedDate(`${selectedYearStr}-${m}-01`);
+                    }}
+                    className="text-xs font-bold text-pink-900 bg-transparent focus:outline-none cursor-pointer"
+                  >
+                    {MONTH_NAMES.map((m, idx) => (
+                      <option key={m} value={idx}>{m}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={selectedYearStr}
+                    onChange={(e) => {
+                      const m = String(selectedMonthIdx + 1).padStart(2, "0");
+                      setSelectedDate(`${e.target.value}-${m}-01`);
+                    }}
+                    className="text-xs font-bold text-pink-900 bg-transparent focus:outline-none cursor-pointer"
+                  >
+                    {AVAILABLE_YEARS.map((y) => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  className="text-xs font-bold text-pink-900 bg-transparent focus:outline-none cursor-pointer"
+                />
+              )}
+            </div>
+
             <button
               type="button"
               onClick={() => setShowExpenseModal(true)}
-              className="px-3.5 py-2 bg-pink-50 hover:bg-pink-100 text-pink-700 border border-pink-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
+              className="px-3 py-1.5 bg-pink-50 hover:bg-pink-100 text-pink-700 border border-pink-200 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer shadow-2xs"
             >
               <Plus size={14} />
               <span>Add Expense</span>
             </button>
 
-            {/* Cash-Basis Income Statement Modal Button */}
             <button
               type="button"
               onClick={() => setShowIncomeStatementModal(true)}
-              className="btn-primary text-xs flex items-center gap-1.5 cursor-pointer shadow-xs"
+              className="btn-primary text-xs px-3 py-1.5 flex items-center gap-1 cursor-pointer shadow-xs"
             >
-              <Building2 size={15} />
-              <span>Cash Receipts Statement</span>
+              <Building2 size={14} />
+              <span>Statement</span>
             </button>
           </div>
         </div>
@@ -417,148 +570,242 @@ export default function ReportsPage() {
           </div>
         </div>
 
-        {/* Operating Expenses Ledger */}
-        <div className="bg-white border border-pink-100 rounded-3xl shadow-xs overflow-hidden">
-          <div className="p-5 border-b border-pink-100 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="p-2 bg-pink-50 text-pink-600 rounded-xl">
-                <Wifi size={16} />
+        {/* 1. STUDENT REVENUE LEDGER */}
+        <div className="bg-white border border-pink-100 rounded-3xl shadow-xs overflow-hidden transition-all duration-200">
+          <button
+            type="button"
+            onClick={() => toggleSection("collections")}
+            className="w-full p-5 flex items-center justify-between bg-white hover:bg-pink-50/30 transition text-left cursor-pointer border-b border-pink-50"
+          >
+            <div className="flex items-center gap-3">
+              <span className="p-2.5 bg-pink-50 text-pink-600 rounded-2xl">
+                <Users size={18} />
               </span>
               <div>
-                <h3 className="text-sm font-bold text-pink-950">Operating & Software Expenses</h3>
-                <p className="text-xs text-gray-500">Internet connection, Zoom Pro, and teaching tools</p>
+                <h3 className="text-base font-bold text-pink-950">
+                  1. Student Revenue Ledger (Gross Collections & Realized Cash)
+                </h3>
+                <p className="text-xs text-gray-500">
+                  Filtered for {timeframe} ({selectedDate})
+                </p>
               </div>
             </div>
-            
+
             <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => setShowExpenseModal(true)}
-                className="px-3.5 py-1.5 bg-pink-600 hover:bg-pink-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
-              >
-                <Plus size={14} />
-                <span>Add Expense</span>
-              </button>
-
-              <span className="text-xs font-bold text-rose-600 bg-rose-50 px-3 py-1.5 rounded-xl border border-rose-100">
-                Total Recorded: ₱{totalTelecomSoftwareExpense.toLocaleString()} PHP
+              <span className="hidden sm:inline-block text-xs font-bold text-pink-600 bg-pink-50 px-3 py-1.5 rounded-xl border border-pink-100">
+                Total: ₱{totalContractCommitment.toLocaleString()} PHP
               </span>
+              <div className="flex items-center gap-1 text-pink-600">
+                <span className="text-xs font-semibold">
+                  {openSections.collections ? "Collapse" : "Expand"}
+                </span>
+                <ChevronDown
+                  size={18}
+                  className={`transition-transform duration-200 ${
+                    openSections.collections ? "rotate-180" : ""
+                  }`}
+                />
+              </div>
             </div>
-          </div>
+          </button>
 
-          {expenses.length === 0 ? (
-            <div className="p-8 text-center text-xs text-gray-400 space-y-3">
-              <p className="italic">No operating expenses recorded yet.</p>
-              <button
-                type="button"
-                onClick={() => setShowExpenseModal(true)}
-                className="inline-flex items-center gap-1 px-4 py-2 bg-pink-50 hover:bg-pink-100 text-pink-700 border border-pink-200 rounded-xl text-xs font-bold transition cursor-pointer"
-              >
-                <Plus size={14} />
-                <span>+ Log First Operating Expense</span>
-              </button>
-            </div>
-          ) : (
+          {openSections.collections && (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
-                  <tr className="bg-pink-50/40 text-gray-500 font-bold uppercase tracking-wider text-[10px] border-b border-pink-100">
-                    <th className="p-4">Expense Title</th>
-                    <th className="p-4">Date</th>
-                    <th className="p-4">Amount (PHP)</th>
-                    <th className="p-4">Purpose / Notes</th>
-                    <th className="p-4 text-right">Action</th>
+                  <tr className="bg-pink-50/50 text-gray-500 font-bold uppercase tracking-wider text-[10px] border-b border-pink-100">
+                    <th className="p-4">Student</th>
+                    <th className="p-4">Country</th>
+                    <th className="p-4">Gross Collected</th>
+                    <th className="p-4">Transfer / Bank Fee</th>
+                    <th className="p-4">Net Realized Cash</th>
+                    <th className="p-4 text-right">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-pink-50">
-                  {expenses.map((exp) => (
-                    <tr key={exp.id} className="hover:bg-pink-50/20 transition">
-                      <td className="p-4 font-bold text-gray-800">{exp.title}</td>
-                      <td className="p-4 text-gray-500 font-mono">{exp.expense_date}</td>
-                      <td className="p-4 font-bold text-rose-600">
-                        ₱{Number(exp.amount_php).toLocaleString()} PHP
-                      </td>
-                      <td className="p-4 text-gray-600">{exp.notes || "—"}</td>
-                      <td className="p-4 text-right">
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteExpense(exp.id)}
-                          className="text-gray-400 hover:text-red-600 p-1 transition cursor-pointer"
-                          title="Delete Expense"
-                        >
-                          <Trash2 size={14} />
-                        </button>
+                  {loading ? (
+                    <tr>
+                      <td colSpan={6} className="p-8 text-center text-pink-600 font-medium">
+                        Loading financial records...
                       </td>
                     </tr>
-                  ))}
+                  ) : studentBreakdown.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="p-8 text-center text-gray-400 text-xs">
+                        No active collections or sessions found for this {timeframe} period.
+                      </td>
+                    </tr>
+                  ) : (
+                    studentBreakdown.map((s) => (
+                      <tr key={s.id} className="hover:bg-pink-50/20 transition">
+                        <td className="p-4 font-bold text-gray-900">{s.name}</td>
+                        <td className="p-4 text-gray-600">{s.country}</td>
+                        <td className="p-4 font-semibold text-gray-700">
+                          ₱{s.grossPackagePhp.toLocaleString()} PHP
+                        </td>
+                        <td className="p-4 font-medium text-rose-600">
+                          {s.totalFeesForStudent > 0
+                            ? `-₱${s.totalFeesForStudent.toLocaleString()} PHP`
+                            : "₱0"}
+                        </td>
+                        <td className="p-4 font-bold text-pink-600">
+                          ₱{s.netPackagePhp.toLocaleString()} PHP
+                        </td>
+                        <td className="p-4 text-right">
+                          <span className="px-2.5 py-1 bg-pink-50 text-pink-700 border border-pink-200 text-[10px] font-bold rounded-lg uppercase">
+                            Paid
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
           )}
         </div>
 
-        {/* Student Revenue Ledger (Cash-Basis Realized) */}
-        <div className="bg-white border border-pink-100 rounded-3xl shadow-xs overflow-hidden">
-          <div className="p-5 border-b border-pink-100 flex items-center justify-between">
-            <div>
-              <h3 className="text-sm font-bold text-pink-950">Student Revenue Ledger (Cash Basis)</h3>
-              <p className="text-xs text-gray-500">Gross collections, bank transfer fees, and net realized cash receipts</p>
+        {/* 2. OPERATING EXPENSES */}
+        <div className="bg-white border border-pink-100 rounded-3xl shadow-xs overflow-hidden transition-all duration-200">
+          <button
+            type="button"
+            onClick={() => toggleSection("expenses")}
+            className="w-full p-5 flex items-center justify-between bg-white hover:bg-pink-50/30 transition text-left cursor-pointer border-b border-pink-50"
+          >
+            <div className="flex items-center gap-3">
+              <span className="p-2.5 bg-pink-50 text-pink-600 rounded-2xl">
+                <Wifi size={18} />
+              </span>
+              <div>
+                <h3 className="text-base font-bold text-pink-950">
+                  2. Operating & Software Expenses
+                </h3>
+                <p className="text-xs text-gray-500">
+                  Filtered for {timeframe} ({selectedDate})
+                </p>
+              </div>
             </div>
-            <span className="text-xs font-bold text-pink-600 bg-pink-50 px-3 py-1.5 rounded-xl border border-pink-100">
-              Total Collections: ₱{totalContractCommitment.toLocaleString()} PHP
-            </span>
-          </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="bg-pink-50/50 text-gray-500 font-bold uppercase tracking-wider text-[10px] border-b border-pink-100">
-                  <th className="p-4">Student</th>
-                  <th className="p-4">Country</th>
-                  <th className="p-4">Gross Collected</th>
-                  <th className="p-4">Transfer / Bank Fee</th>
-                  <th className="p-4">Net Realized Cash</th>
-                  <th className="p-4 text-right">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-pink-50">
-                {loading ? (
-                  <tr>
-                    <td colSpan={6} className="p-8 text-center text-pink-600 font-medium">
-                      Loading financial records...
-                    </td>
-                  </tr>
-                ) : studentBreakdown.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="p-8 text-center text-gray-400 text-xs">
-                      No student records found.
-                    </td>
-                  </tr>
-                ) : (
-                  studentBreakdown.map((s) => (
-                    <tr key={s.id} className="hover:bg-pink-50/20 transition">
-                      <td className="p-4 font-bold text-gray-900">{s.name}</td>
-                      <td className="p-4 text-gray-600">{s.country}</td>
-                      <td className="p-4 font-semibold text-gray-700">
-                        ₱{s.grossPackagePhp.toLocaleString()} PHP
-                      </td>
-                      <td className="p-4 font-medium text-rose-600">
-                        {s.totalFeesForStudent > 0 ? `-₱${s.totalFeesForStudent.toLocaleString()} PHP` : "₱0"}
-                      </td>
-                      <td className="p-4 font-bold text-pink-600">
-                        ₱{s.netPackagePhp.toLocaleString()} PHP
-                      </td>
-                      <td className="p-4 text-right">
-                        <span className="px-2.5 py-1 bg-pink-50 text-pink-700 border border-pink-200 text-[10px] font-bold rounded-lg uppercase">
-                          Paid
-                        </span>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+            <div className="flex items-center gap-3">
+              <span className="hidden sm:inline-block text-xs font-bold text-rose-600 bg-rose-50 px-3 py-1.5 rounded-xl border border-rose-100">
+                Total: ₱{totalTelecomSoftwareExpense.toLocaleString()} PHP
+              </span>
+              <div className="flex items-center gap-1 text-pink-600">
+                <span className="text-xs font-semibold">
+                  {openSections.expenses ? "Collapse" : "Expand"}
+                </span>
+                <ChevronDown
+                  size={18}
+                  className={`transition-transform duration-200 ${
+                    openSections.expenses ? "rotate-180" : ""
+                  }`}
+                />
+              </div>
+            </div>
+          </button>
+
+          {openSections.expenses && (
+            <div>
+              <div className="p-4 bg-pink-50/20 border-b border-pink-100 flex items-center justify-between">
+                <p className="text-xs text-gray-600">Track and deduct operational subscriptions</p>
+                <button
+                  type="button"
+                  onClick={() => setShowExpenseModal(true)}
+                  className="px-3.5 py-1.5 bg-pink-600 hover:bg-pink-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                >
+                  <Plus size={14} />
+                  <span>Add Expense</span>
+                </button>
+              </div>
+
+              {filteredExpenses.length === 0 ? (
+                <div className="p-8 text-center text-xs text-gray-400 space-y-3">
+                  <p className="italic">No operating expenses recorded for this {timeframe} period.</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-pink-50/40 text-gray-500 font-bold uppercase tracking-wider text-[10px] border-b border-pink-100">
+                        <th className="p-4">Expense Title</th>
+                        <th className="p-4">Date</th>
+                        <th className="p-4">Amount (PHP)</th>
+                        <th className="p-4">Purpose / Notes</th>
+                        <th className="p-4 text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-pink-50">
+                      {filteredExpenses.map((exp) => (
+                        <tr key={exp.id} className="hover:bg-pink-50/20 transition">
+                          <td className="p-4 font-bold text-gray-800">{exp.title}</td>
+                          <td className="p-4 text-gray-500 font-mono">{exp.expense_date}</td>
+                          <td className="p-4 font-bold text-rose-600">
+                            ₱{Number(exp.amount_php).toLocaleString()} PHP
+                          </td>
+                          <td className="p-4 text-gray-600">{exp.notes || "—"}</td>
+                          <td className="p-4 text-right">
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteExpense(exp.id)}
+                              className="text-gray-400 hover:text-red-600 p-1 transition cursor-pointer"
+                              title="Delete Expense"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* 3. BIR GENERAL JOURNAL */}
+        <div className="bg-white border border-pink-100 rounded-3xl shadow-xs overflow-hidden transition-all duration-200">
+          <button
+            type="button"
+            onClick={() => toggleSection("journal")}
+            className="w-full p-5 flex items-center justify-between bg-white hover:bg-pink-50/30 transition text-left cursor-pointer border-b border-pink-50"
+          >
+            <div className="flex items-center gap-3">
+              <span className="p-2.5 bg-pink-50 text-pink-600 rounded-2xl">
+                <BookOpen size={18} />
+              </span>
+              <div>
+                <h3 className="text-base font-bold text-pink-950">
+                  3. BIR General Journal / Cash Receipts Entries
+                </h3>
+                <p className="text-xs text-gray-500">
+                  Standard 2-line double-entry format ready for official BIR manual books.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 text-pink-600">
+              <span className="text-xs font-semibold">
+                {openSections.journal ? "Collapse" : "Expand"}
+              </span>
+              <ChevronDown
+                size={18}
+                className={`transition-transform duration-200 ${
+                  openSections.journal ? "rotate-180" : ""
+                }`}
+              />
+            </div>
+          </button>
+
+          {openSections.journal && (
+            <div className="p-5 pt-2">
+              <JournalReport
+                payments={payments}
+                students={students}
+                selectedDate={selectedDate}
+                timeframe={timeframe}
+              />
+            </div>
+          )}
         </div>
       </div>
 
@@ -582,16 +829,35 @@ export default function ReportsPage() {
 
             <form onSubmit={handleAddExpense} className="space-y-3.5">
               <div>
-                <label className="block mb-1 font-semibold text-gray-700">Expense Title *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. PLDT Home Fiber 200Mbps, Zoom Pro"
-                  className="input w-full text-xs"
-                  value={expenseTitle}
-                  onChange={(e) => setExpenseTitle(e.target.value)}
-                />
+                <label className="block mb-1 font-semibold text-gray-700">Common Expense Type *</label>
+                <select
+                  className="input w-full text-xs bg-white cursor-pointer"
+                  value={selectedCategory}
+                  onChange={(e) => setSelectedCategory(e.target.value)}
+                >
+                  <option value="Transfer Fees">Transfer Fees / Remittance Deductions</option>
+                  <option value="Zoom Pro Subscription">Zoom Pro Subscription</option>
+                  <option value="PLDT / Broadband Internet">PLDT / Broadband Internet</option>
+                  <option value="Mobile Data / Hotspot">Mobile Data / Hotspot</option>
+                  <option value="Teaching Materials & Books">Teaching Materials & Books</option>
+                  <option value="Canva / Software Subscriptions">Canva / Software Subscriptions</option>
+                  <option value="Other">+ Other (Custom Expense)</option>
+                </select>
               </div>
+
+              {selectedCategory === "Other" && (
+                <div>
+                  <label className="block mb-1 font-semibold text-gray-700">Custom Expense Title *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Office Supplies, Headset"
+                    className="input w-full text-xs"
+                    value={expenseTitle}
+                    onChange={(e) => setExpenseTitle(e.target.value)}
+                  />
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -627,11 +893,11 @@ export default function ReportsPage() {
 
               <div>
                 <label className="block mb-1 font-semibold text-gray-700">
-                  Purpose / Notes (What is it for?) 📝
+                  Purpose / Notes (Optional) 📝
                 </label>
                 <textarea
                   rows={2}
-                  placeholder="e.g. Primary broadband connection used for all online video lessons."
+                  placeholder="e.g. Monthly broadband bill payment."
                   className="input w-full text-xs"
                   value={expenseNotes}
                   onChange={(e) => setExpenseNotes(e.target.value)}
@@ -669,7 +935,6 @@ export default function ReportsPage() {
             className="bg-white border border-pink-200 rounded-3xl p-6 w-full max-w-2xl shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150 max-h-[92vh] flex flex-col relative z-60"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-pink-100 pb-3">
               <div className="flex items-center gap-2">
                 <span className="p-2 bg-pink-50 text-pink-600 rounded-xl">
@@ -693,136 +958,161 @@ export default function ReportsPage() {
               </button>
             </div>
 
-            {/* Printable Statement Sheet */}
+            {/* Inline Controls for Company & Signer Name */}
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] font-bold text-gray-700 mb-1">
+                  Company / Business Name:
+                </label>
+                <input
+                  type="text"
+                  className="input text-xs font-bold text-gray-900 w-full py-1.5 px-3 bg-white"
+                  value={businessName}
+                  onChange={(e) => setBusinessName(e.target.value)}
+                  placeholder="Enter company name..."
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold text-gray-700 mb-1">
+                  Signer / Proprietor Name:
+                </label>
+                <input
+                  type="text"
+                  className="input text-xs font-bold text-gray-900 w-full py-1.5 px-3 bg-white"
+                  value={statementSigner}
+                  onChange={(e) => setStatementSigner(e.target.value)}
+                  placeholder="Enter signer full name..."
+                />
+              </div>
+            </div>
+
             <div className="flex-1 overflow-y-auto border border-gray-200 rounded-2xl p-6 bg-white shadow-inner">
               <div
                 ref={statementPdfRef}
-                style={{ backgroundColor: "#ffffff", color: "#000000", fontFamily: "serif" }}
-                className="space-y-6 text-xs p-4 bg-white"
+                style={{
+                  backgroundColor: "#ffffff",
+                  color: "#000000",
+                  fontFamily: "Helvetica, Arial, sans-serif",
+                  padding: "36px 40px",
+                  borderRadius: "8px",
+                  border: "1px solid #000000",
+                  boxSizing: "border-box",
+                }}
+                className="text-xs"
               >
-                {/* Formal Entity Title */}
-                <div style={{ textAlign: "center", borderBottom: "2px solid #000000", paddingBottom: "12px" }}>
-                  <input
-                    type="text"
-                    value={businessName}
-                    onChange={(e) => setBusinessName(e.target.value)}
-                    style={{
-                      fontSize: "16px",
-                      fontWeight: "bold",
-                      textTransform: "uppercase",
-                      textAlign: "center",
-                      width: "100%",
-                      border: "1px dashed #d1d5db",
-                      padding: "4px",
-                      borderRadius: "4px",
-                      background: "transparent",
-                      color: "#000000",
-                    }}
-                    placeholder="Enter Business Name"
-                  />
-                  <p style={{ fontSize: "12px", fontWeight: "600", margin: "6px 0 2px 0", color: "#000000" }}>
-                    STATEMENT OF CASH RECEIPTS (CASH BASIS)
+                {/* Document Header */}
+                <div style={{ textAlign: "center", borderBottom: "2px solid #000000", paddingBottom: "16px" }}>
+                  <h1 style={{ fontSize: "16px", fontWeight: "900", color: "#000000", margin: "0 0 4px 0", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                    {businessName || "Private ESL Tutoring Services"}
+                  </h1>
+                  <h2 style={{ fontSize: "13px", fontWeight: "800", color: "#000000", margin: "0 0 4px 0", letterSpacing: "0.3px" }}>
+                    STATEMENT OF CASH RECEIPTS & DISBURSEMENTS
+                  </h2>
+                  <p style={{ fontSize: "11px", color: "#333333", margin: 0, fontWeight: "600" }}>
+                    Period: {timeframe.toUpperCase()} • Ended {selectedDate}
                   </p>
-                  <p style={{ fontSize: "10px", color: "#000000", margin: 0, fontStyle: "italic" }}>
-                    For the {timeframe === "weekly" ? "Week" : timeframe === "annual" ? "Year" : "Month"} Ended {new Date().toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" })}
+                  <p style={{ fontSize: "10px", color: "#555555", margin: "2px 0 0 0" }}>
+                    (Cash Basis Approach for Professional Tax Compliance)
                   </p>
-                  <p style={{ fontSize: "9px", color: "#000000", margin: "2px 0 0 0" }}>
-                    (Amounts Expressed in Philippine Peso - PHP ₱)
+                  <p style={{ fontSize: "9.5px", color: "#666666", margin: "2px 0 0 0" }}>
+                    Amounts Expressed in Philippine Peso (PHP)
                   </p>
                 </div>
 
-                {/* Structured Financial Rows */}
-                <div style={{ fontFamily: "sans-serif", fontSize: "11px", color: "#000000" }} className="space-y-3">
-                  {/* Revenue Section */}
-                  <div>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "bold", borderBottom: "1px solid #000000", paddingBottom: "4px", color: "#000000" }}>
-                      <span>GROSS CASH RECEIPTS (Collections)</span>
-                      <span>₱{totalGrossRevenue.toLocaleString("en-PH", { minimumFractionDigits: 2 })}</span>
-                    </div>
-                    <p style={{ fontSize: "9.5px", color: "#000000", margin: "4px 0 0 0" }}>
-                      Note 1: Total realized cash collections received upfront from active student packages.
-                    </p>
-                  </div>
-
-                  {/* Gross Operating Profit */}
-                  <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "bold", backgroundColor: "#f9fafb", padding: "6px 8px", borderRadius: "6px", color: "#000000" }}>
-                    <span>TOTAL CASH INFLOWS</span>
-                    <span>₱{totalGrossRevenue.toLocaleString("en-PH", { minimumFractionDigits: 2 })}</span>
-                  </div>
-
-                  {/* Operating Expenses */}
-                  <div style={{ paddingTop: "6px" }}>
-                    <span style={{ fontWeight: "bold", display: "block", marginBottom: "4px", color: "#000000" }}>
-                      LESS: DISBURSEMENTS & OPERATING EXPENSES:
+                {/* Gross Collections */}
+                <div style={{ marginTop: "20px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #000000", paddingBottom: "6px" }}>
+                    <span style={{ fontSize: "11.5px", fontWeight: "800", color: "#000000", textTransform: "uppercase" }}>
+                      Gross Cash Receipts (Collections)
                     </span>
-                    <div style={{ paddingLeft: "12px" }} className="space-y-1.5">
-                      <div style={{ display: "flex", justifyContent: "space-between", color: "#000000" }}>
-                        <span>International Remittance & Bank Transfer Fees</span>
-                        <span style={{ color: "#000000" }}>
-                          (₱{totalTransferFees.toLocaleString("en-PH", { minimumFractionDigits: 2 })})
-                        </span>
-                      </div>
+                    <span style={{ fontSize: "12px", fontWeight: "900", color: "#000000", fontFamily: "monospace" }}>
+                      PHP {Number(totalGrossRevenue || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <p style={{ fontSize: "9.5px", color: "#555555", margin: "4px 0 0 4px", fontStyle: "italic" }}>
+                    Note: Total realized cash collections received upfront from active student lesson packages.
+                  </p>
+                </div>
 
-                      {/* Telecommunications, Software & Internet Access */}
-                      <div>
-                        <div style={{ display: "flex", justifyContent: "space-between", color: "#000000" }}>
-                          <span>Telecommunications, Software & Internet Access</span>
-                          <span style={{ color: "#000000" }}>
-                            {totalTelecomSoftwareExpense > 0
-                              ? `(₱${totalTelecomSoftwareExpense.toLocaleString("en-PH", { minimumFractionDigits: 2 })})`
-                              : "₱0.00"}
-                          </span>
-                        </div>
-                        {expenses.length > 0 && (
-                          <div style={{ marginTop: "4px", paddingLeft: "8px", borderLeft: "2px solid #000000" }}>
-                            {expenses.map((exp) => (
-                              <p key={exp.id} style={{ fontSize: "9px", color: "#000000", margin: "1px 0" }}>
-                                • <strong>{exp.title}</strong>: ₱{Number(exp.amount_php).toLocaleString("en-PH", { minimumFractionDigits: 2 })} — {exp.notes || "Operational utility"}
-                              </p>
-                            ))}
-                          </div>
-                        )}
-                      </div>
+                {/* Total Cash Inflows */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1.5px solid #000000", marginTop: "8px", fontSize: "11px" }}>
+                  <span style={{ fontWeight: "800", color: "#000000" }}>TOTAL CASH INFLOWS</span>
+                  <span style={{ fontWeight: "900", color: "#000000", fontFamily: "monospace" }}>
+                    PHP {Number(totalGrossRevenue || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
 
-                      <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "600", borderTop: "1px dashed #000000", paddingTop: "4px", color: "#000000" }}>
-                        <span>Total Cash Disbursements</span>
-                        <span style={{ color: "#000000" }}>
-                          (₱{totalOperatingExpenses.toLocaleString("en-PH", { minimumFractionDigits: 2 })})
-                        </span>
-                      </div>
-                    </div>
+                {/* Disbursements Section */}
+                <div style={{ marginTop: "16px" }}>
+                  <div style={{ borderBottom: "1px solid #000000", paddingBottom: "4px", marginBottom: "8px" }}>
+                    <span style={{ fontSize: "11px", fontWeight: "800", color: "#000000", textTransform: "uppercase" }}>
+                      Less: Operating Disbursements & Bank Fees
+                    </span>
                   </div>
 
-                  {/* Net Taxable Cash Receipts */}
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      fontWeight: "900",
-                      fontSize: "13px",
-                      borderTop: "1.5px solid #000000",
-                      borderBottom: "4px double #000000",
-                      padding: "8px 0",
-                      marginTop: "12px",
-                      color: "#000000",
-                    }}
-                  >
-                    <span>NET TAXABLE CASH RECEIPTS / TAKE-HOME</span>
-                    <span>₱{totalNetOperatingIncome.toLocaleString("en-PH", { minimumFractionDigits: 2 })}</span>
+                  <div style={{ paddingLeft: "8px", fontSize: "10.5px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
+                      <span style={{ color: "#222222", fontWeight: "600" }}>International Remittance & Bank Transfer Fees</span>
+                      <span style={{ color: "#222222", fontFamily: "monospace", fontWeight: "700" }}>
+                        (PHP {Number(totalTransferFees || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
+                      </span>
+                    </div>
+
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
+                      <span style={{ color: "#222222", fontWeight: "600" }}>Bank & Transfer Fees (Recorded Expenses)</span>
+                      <span style={{ color: "#222222", fontFamily: "monospace", fontWeight: "700" }}>
+                        (PHP {Number(totalTelecomSoftwareExpense || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
+                      </span>
+                    </div>
+
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid #000000", paddingTop: "6px", marginTop: "6px", fontSize: "11px" }}>
+                      <span style={{ fontWeight: "800", color: "#000000" }}>Total Cash Disbursements</span>
+                      <span style={{ fontWeight: "800", color: "#000000", fontFamily: "monospace" }}>
+                        (PHP {Number(totalOperatingExpenses || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
+                      </span>
+                    </div>
                   </div>
                 </div>
 
-                {/* Sign-off Block */}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px", paddingTop: "24px", borderTop: "1px solid #000000", color: "#000000" }}>
+                {/* Net Taxable Receipts */}
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    borderTop: "2px solid #000000",
+                    borderBottom: "2px solid #000000",
+                    padding: "10px 4px",
+                    marginTop: "20px",
+                  }}
+                >
+                  <span style={{ fontSize: "12px", fontWeight: "900", color: "#000000", textTransform: "uppercase" }}>
+                    Net Taxable Cash Receipts / Take-Home
+                  </span>
+                  <span style={{ fontSize: "14px", fontWeight: "900", color: "#000000", fontFamily: "monospace" }}>
+                    PHP {Number(totalNetOperatingIncome || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+
+                {/* Signatures */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "32px", marginTop: "50px", paddingTop: "16px" }}>
                   <div>
-                    <div style={{ borderBottom: "1px solid #000000", height: "24px" }} />
-                    <p style={{ fontSize: "9px", color: "#000000", margin: "4px 0 0 0" }}>
+                    <div style={{ borderBottom: "1.5px solid #000000", width: "100%", height: "24px", display: "flex", alignItems: "flex-end", paddingBottom: "2px" }}>
+                      <span style={{ fontSize: "11px", fontWeight: "800", color: "#000000", fontFamily: "sans-serif" }}>
+                        {statementSigner || "Teacher Gabi"}
+                      </span>
+                    </div>
+                    <p style={{ fontSize: "10px", color: "#000000", marginTop: "6px", fontWeight: "700" }}>
                       Certified Correct: Taxpayer / Proprietor
                     </p>
                   </div>
                   <div>
-                    <div style={{ borderBottom: "1px solid #000000", height: "24px" }} />
-                    <p style={{ fontSize: "9px", color: "#000000", margin: "4px 0 0 0" }}>
+                    <div style={{ borderBottom: "1.5px solid #000000", width: "100%", height: "24px", display: "flex", alignItems: "flex-end", paddingBottom: "2px" }}>
+                      <span style={{ fontSize: "11px", fontWeight: "700", color: "#000000", fontFamily: "monospace" }}>
+                        {new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
+                      </span>
+                    </div>
+                    <p style={{ fontSize: "10px", color: "#000000", marginTop: "6px", fontWeight: "700" }}>
                       Date Acknowledged
                     </p>
                   </div>
@@ -830,7 +1120,6 @@ export default function ReportsPage() {
               </div>
             </div>
 
-            {/* Actions */}
             <div className="flex items-center justify-between pt-2">
               <button
                 type="button"

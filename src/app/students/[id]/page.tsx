@@ -20,7 +20,13 @@ import {
   Video,
   ChevronDown,
   ChevronUp,
+  Receipt,
+  X,
+  Download,
+  Calendar,
 } from "lucide-react";
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
 
 const DEFAULT_ALIASES = ["Teacher Gabi", "Teacher Princess"];
 const DAYS_OF_WEEK = [
@@ -45,7 +51,6 @@ const DAY_ORDER = [
 function groupSchedules(schedList: any[]) {
   if (!schedList || schedList.length === 0) return [];
 
-  // Group by unique time + duration
   const groups: Record<string, { days: string[]; time: string; duration: number; ids: string[] }> = {};
 
   schedList.forEach((s) => {
@@ -63,7 +68,6 @@ function groupSchedules(schedList: any[]) {
   });
 
   return Object.values(groups).map((group) => {
-    // Sort days chronologically
     group.days.sort((a, b) => DAY_ORDER.indexOf(a) - DAY_ORDER.indexOf(b));
     return group;
   });
@@ -88,8 +92,23 @@ export default function StudentDetailsPage({
   const [teacherAliases, setTeacherAliases] = useState<string[]>(DEFAULT_ALIASES);
   const [loading, setLoading] = useState(true);
   const [copiedPortal, setCopiedPortal] = useState(false);
+  const [copiedRenewalNotice, setCopiedRenewalNotice] = useState(false);
   const [expandedReportIds, setExpandedReportIds] = useState<string[]>([]);
   const [isParentRequestsOpen, setIsParentRequestsOpen] = useState(true);
+
+  // Renewal Modal & PDF State
+  const [isRenewalModalOpen, setIsRenewalModalOpen] = useState(false);
+  const [renewalClassesCount, setRenewalClassesCount] = useState("20");
+  const [renewalFreeCount, setRenewalFreeCount] = useState("0");
+  const [renewalRate, setRenewalRate] = useState("");
+  const [renewalDuration, setRenewalDuration] = useState("40");
+  const [renewalStartDate, setRenewalStartDate] = useState(
+    new Date().toISOString().split("T")[0]
+  );
+  const [renewalCustomNotes, setRenewalCustomNotes] = useState("");
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [invoiceQrDataUrl, setInvoiceQrDataUrl] = useState<string>("");
+  const invoicePdfRef = useRef<HTMLDivElement>(null);
 
   function toggleExpandReport(id: string) {
     setExpandedReportIds((prev) =>
@@ -146,21 +165,8 @@ export default function StudentDetailsPage({
   const [isSavingSchedule, setIsSavingSchedule] = useState(false);
 
   // Report Modal State
-  const [isReportModalOpen, setIsReportModalOpen] = useState(() => {
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      return params.get("action") === "log_lesson";
-    }
-    return false;
-  });
-
-  const [reportDate, setReportDate] = useState(() => {
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      return params.get("date") || new Date().toISOString().split("T")[0];
-    }
-    return new Date().toISOString().split("T")[0];
-  });
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [reportDate, setReportDate] = useState(new Date().toISOString().split("T")[0]);
   const [vocabulary, setVocabulary] = useState("");
   const [strengths, setStrengths] = useState("");
   const [improvements, setImprovements] = useState("");
@@ -171,10 +177,15 @@ export default function StudentDetailsPage({
   const [startPageInput, setStartPageInput] = useState("");
   const [endPageInput, setEndPageInput] = useState("");
 
+  // Handle URL Query Params
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const action = params.get("action");
-    const dateParam = params.get("date");
+    const action = searchParams?.get("action");
+    const renew = searchParams?.get("renew");
+    const dateParam = searchParams?.get("date");
+
+    if (action === "renew" || renew === "true") {
+      setIsRenewalModalOpen(true);
+    }
 
     if (action === "log_lesson") {
       if (dateParam) {
@@ -182,7 +193,7 @@ export default function StudentDetailsPage({
       }
       setIsReportModalOpen(true);
     }
-  }, []);
+  }, [searchParams]);
 
   const fetchStudentData = useCallback(async () => {
     try {
@@ -224,38 +235,50 @@ export default function StudentDetailsPage({
       setCountry(studentData.country || "");
       setPaymentType(studentData.payment_type || "Monthly");
       setPaymentCurrency(studentData.payment_currency || "PHP");
+
+      const rawAmount = studentData.payment_amount ? String(studentData.payment_amount) : "";
       setPaymentAmount(
-        studentData.payment_amount
-          ? Number(studentData.payment_amount).toLocaleString()
-          : ""
+        rawAmount ? Number(rawAmount.replace(/[^0-9.]/g, "")).toLocaleString() : ""
       );
+      setRenewalRate(rawAmount);
+
+      if (studentData.access_token) {
+        const portalLink = `${window.location.origin}/portal/${studentData.access_token}`;
+        QRCode.toDataURL(portalLink, { width: 120, margin: 1 })
+          .then((url) => setInvoiceQrDataUrl(url))
+          .catch(() => {});
+      }
+
       setPhpEquivalent(
         studentData.php_equivalent
           ? Number(studentData.php_equivalent).toLocaleString()
           : ""
       );
-      setClassesIncluded(
-  studentData.classes_included !== undefined && studentData.classes_included !== null
-    ? String(studentData.classes_included)
-    : "0"
-);
-      setFreeClasses(
+
+      const incClasses =
+        studentData.classes_included !== undefined && studentData.classes_included !== null
+          ? String(studentData.classes_included)
+          : "0";
+      setClassesIncluded(incClasses);
+      setRenewalClassesCount(incClasses !== "0" ? incClasses : "20");
+
+      const freeCls =
         studentData.free_classes !== undefined && studentData.free_classes !== null
           ? String(studentData.free_classes)
-          : "0"
-      );
+          : "0";
+      setFreeClasses(freeCls);
+      setRenewalFreeCount(freeCls);
+
       setClassesCompleted(
-        studentData.classes_completed
-          ? String(studentData.classes_completed)
-          : "0"
+        studentData.classes_completed ? String(studentData.classes_completed) : "0"
       );
-      setClassDuration(
-        studentData.class_duration ? String(studentData.class_duration) : "40"
-      );
+
+      const durationVal = studentData.class_duration ? String(studentData.class_duration) : "40";
+      setClassDuration(durationVal);
+      setRenewalDuration(durationVal);
+
       setPaymentStatus(studentData.payment_status || "Active");
-      setStartDate(
-        studentData.start_date || studentData.contract_start_date || ""
-      );
+      setStartDate(studentData.start_date || studentData.contract_start_date || "");
       setEndDate(studentData.end_date || studentData.contract_end_date || "");
       setNotes(studentData.notes || "");
 
@@ -273,17 +296,13 @@ export default function StudentDetailsPage({
           .select("*")
           .eq("student_id", studentId)
           .order("report_date", { ascending: false }),
+        supabase.from("student_books").select("*").eq("student_id", studentId),
         supabase
-          .from("student_books")
+          .from("payments")
           .select("*")
-          .eq("student_id", studentId),
-       // Replace the payment fetch query with:
-supabase
-  .from("payments")
-  .select("*")
-  .or(`student_id.eq.${studentId},student_name.ilike.%${studentData.name.trim()}%`)
-  .order("created_at", { ascending: false })
-  .limit(1),
+          .or(`student_id.eq.${studentId},student_name.ilike.%${studentData.name.trim()}%`)
+          .order("created_at", { ascending: false })
+          .limit(1),
       ]);
 
       if (scheds) setSchedules(scheds);
@@ -371,10 +390,7 @@ supabase
         return;
       }
 
-      await supabase
-        .from("student_books")
-        .delete()
-        .eq("student_id", studentId);
+      await supabase.from("student_books").delete().eq("student_id", studentId);
 
       if (selectedBookIds.length > 0) {
         const rows = selectedBookIds.map((bookId) => ({
@@ -431,10 +447,7 @@ supabase
   async function handleDeleteSchedule(scheduleId: string) {
     if (!confirm("Are you sure you want to delete this schedule slot?")) return;
     try {
-      const { error } = await supabase
-        .from("schedules")
-        .delete()
-        .eq("id", scheduleId);
+      const { error } = await supabase.from("schedules").delete().eq("id", scheduleId);
       if (error) throw error;
       fetchStudentData();
     } catch (err: any) {
@@ -442,10 +455,7 @@ supabase
     }
   }
 
-  async function handleDeleteReport(
-    reportId: string,
-    homeworkFileUrl?: string | null
-  ) {
+  async function handleDeleteReport(reportId: string, homeworkFileUrl?: string | null) {
     if (
       !confirm(
         "Are you sure you want to delete this lesson report? This will decrease the completed class count by 1."
@@ -464,16 +474,10 @@ supabase
         }
       }
 
-      const { error } = await supabase
-        .from("class_reports")
-        .delete()
-        .eq("id", reportId);
+      const { error } = await supabase.from("class_reports").delete().eq("id", reportId);
       if (error) throw error;
 
-      const newCompletedCount = Math.max(
-        (student?.classes_completed || 1) - 1,
-        0
-      );
+      const newCompletedCount = Math.max((student?.classes_completed || 1) - 1, 0);
       await supabase
         .from("students")
         .update({ classes_completed: newCompletedCount })
@@ -492,7 +496,9 @@ supabase
 
     setIsSubmittingReport(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       let uploadedFileUrl: string | null = null;
 
       if (homeworkFile) {
@@ -609,10 +615,7 @@ supabase
 
   async function handleDeleteStudent() {
     if (!confirm(`Are you sure you want to delete ${student?.name}?`)) return;
-    const { error } = await supabase
-      .from("students")
-      .delete()
-      .eq("id", studentId);
+    const { error } = await supabase.from("students").delete().eq("id", studentId);
     if (!error) {
       router.push("/students");
     } else {
@@ -628,7 +631,72 @@ supabase
     setTimeout(() => setCopiedPortal(false), 2000);
   }
 
-  const combinedTotalClasses = Number(student?.classes_included || 0) + Number(student?.free_classes || 0);
+  function handleCopyRenewalMessage() {
+    const portalUrl = student?.access_token
+      ? `${window.location.origin}/portal/${student.access_token}`
+      : "";
+
+    const freeText = Number(renewalFreeCount) > 0 ? ` (+${renewalFreeCount} Free Bonus Classes)` : "";
+    const currency = student?.payment_currency || "VND";
+    const cleanNum = Number(String(renewalRate).replace(/[^0-9.]/g, "")) || 0;
+    const formattedAmount = cleanNum.toLocaleString("en-US");
+    const teacherName = student?.teacher_alias || teacherAlias || "Teacher Gabi";
+
+    const renewalText = `🌟 CLASS PACKAGE RENEWAL NOTICE 🌟
+
+Dear Parent,
+
+Thank you for continuing with ${teacherName}'s private English classes! Here are the details for ${student?.name}'s upcoming lesson package:
+
+📚 Package Details:
+• Total Classes: ${renewalClassesCount} Classes${freeText}
+• Class Duration: ${renewalDuration} minutes per session
+• Tuition Fee: ${formattedAmount} ${currency}
+• Target Start Date: ${renewalStartDate}
+
+${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCustomNotes ? `📝 Note:\n${renewalCustomNotes}\n\n` : ""}Please let me know once payment has been sent so we can secure the weekly schedule slots. Thank you very much! 😊`;
+
+    navigator.clipboard.writeText(renewalText);
+    setCopiedRenewalNotice(true);
+    setTimeout(() => setCopiedRenewalNotice(false), 2000);
+  }
+
+async function handleDownloadInvoicePdf() {
+    if (!invoicePdfRef.current) return;
+    setIsGeneratingPdf(true);
+
+    try {
+      // @ts-ignore
+      const html2pdf = (await import("html2pdf.js")).default;
+      const element = invoicePdfRef.current;
+      const opt = {
+        margin: 10,
+        filename: `Renewal_Invoice_${student?.name?.replace(/\s+/g, "_") || "Student"}_${renewalStartDate}.pdf`,
+        image: { type: "png" as const, quality: 1.0 },
+        html2canvas: {
+          scale: 3,
+          useCORS: true,
+          backgroundColor: "#ffffff",
+          letterRendering: true,
+        },
+        jsPDF: {
+          unit: "mm" as const,
+          format: "a4" as const,
+          orientation: "portrait" as const,
+        },
+      };
+
+      await html2pdf().set(opt).from(element).save();
+    } catch (err) {
+      console.error("Invoice PDF export error:", err);
+      alert("Failed to export Invoice PDF.");
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  }
+
+  const combinedTotalClasses =
+    Number(student?.classes_included || 0) + Number(student?.free_classes || 0);
 
   const dynamicCompletedCount = reports ? reports.length : 0;
   const dynamicRemainingCount = Math.max(combinedTotalClasses - dynamicCompletedCount, 0);
@@ -637,7 +705,6 @@ supabase
     100
   );
 
- // Treat as Paid if they only have free classes, have a logged payment, or have active/paid status
   const totalRegularClasses = Number(student?.classes_included || 0);
   const totalFreeClasses = Number(student?.free_classes || 0);
   const isFreePackage = totalRegularClasses === 0 && totalFreeClasses > 0;
@@ -666,10 +733,13 @@ supabase
 
   const countryObj = countries.find((c) => c.name === student?.country);
   const currencyObj = currencies[student?.payment_currency];
+  const teacherBrandName = student?.teacher_alias || teacherAlias || "Teacher Gabi";
+  const cleanRenewAmount = Number(String(renewalRate).replace(/[^0-9.]/g, "")) || 0;
+  const formattedRenewRate = cleanRenewAmount.toLocaleString("en-US");
 
   return (
     <div className="p-8 max-w-6xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <Link
           href="/students"
           className="text-xs font-semibold text-pink-600 hover:text-pink-700 flex items-center gap-1.5 transition"
@@ -677,7 +747,7 @@ supabase
           <ArrowLeft size={16} />
           <span>Back to Students</span>
         </Link>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {student?.access_token && (
             <button
               onClick={handleCopyPortalLink}
@@ -693,6 +763,16 @@ supabase
               </span>
             </button>
           )}
+
+          {/* Renewal Invoice / Notice Trigger Button */}
+          <button
+            type="button"
+            onClick={() => setIsRenewalModalOpen(true)}
+            className="px-3.5 py-2 bg-pink-100/70 hover:bg-pink-200/80 text-pink-900 border border-pink-300 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
+          >
+            <Receipt size={14} className="text-pink-600" />
+            <span>Renewal Notice & Invoice</span>
+          </button>
 
           <button
             onClick={() => {
@@ -906,12 +986,10 @@ supabase
         </div>
       </div>
 
-    {/* 2-Column Main Workspace: Left (Schedule & Notes) | Right (Logged Lessons & Reports) */}
+      {/* 2-Column Main Workspace */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        
         {/* Left Column (5/12): Weekly Schedule & Notes */}
         <div className="lg:col-span-5 space-y-5">
-          {/* Weekly Schedule Card (No scrollbar, auto-height) */}
           <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-gray-900">Weekly Schedule</h3>
@@ -933,16 +1011,7 @@ supabase
               <div className="space-y-1.5">
                 {[...schedules]
                   .sort((a, b) => {
-                    const order = [
-                      "Monday",
-                      "Tuesday",
-                      "Wednesday",
-                      "Thursday",
-                      "Friday",
-                      "Saturday",
-                      "Sunday",
-                    ];
-                    return order.indexOf(a.day_of_week) - order.indexOf(b.day_of_week);
+                    return DAY_ORDER.indexOf(a.day_of_week) - DAY_ORDER.indexOf(b.day_of_week);
                   })
                   .map((s) => (
                     <div
@@ -973,7 +1042,6 @@ supabase
             )}
           </div>
 
-          {/* Teacher Notes & Collapsible Parent Requests Card */}
           <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs space-y-3">
             <div>
               <h3 className="text-sm font-bold text-gray-900">Teacher Notes & Objectives</h3>
@@ -982,7 +1050,6 @@ supabase
               </p>
             </div>
 
-            {/* Collapsible Parent Requests */}
             <div className="pt-2 border-t border-pink-100">
               <div
                 onClick={() => setIsParentRequestsOpen(!isParentRequestsOpen)}
@@ -1158,8 +1225,326 @@ supabase
             )}
           </div>
         </div>
-
       </div>
+
+      {/* ========================================================================= */}
+      {/* MODAL: RENEWAL INVOICE & PARENT NOTICE (WITH PDF GENERATION) */}
+      {/* ========================================================================= */}
+      {isRenewalModalOpen && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="card bg-white w-full max-w-2xl max-h-[92vh] overflow-y-auto p-6 rounded-3xl shadow-2xl space-y-4 text-xs animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-pink-100 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="p-2 bg-pink-50 text-pink-600 rounded-xl">
+                  <Receipt size={18} />
+                </span>
+                <div>
+                  <h2 className="text-lg font-bold text-pink-950">
+                    Package Renewal Notice & Invoice
+                  </h2>
+                  <p className="text-[11px] text-gray-500">
+                    Generate, copy, or download a formal renewal invoice PDF for {student?.name}&apos;s parents.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsRenewalModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600 p-1 rounded-lg transition cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-3.5">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block mb-1 font-semibold text-gray-700">
+                    Regular Classes Included *
+                  </label>
+                  <input
+                    type="number"
+                    className="input w-full text-xs font-semibold"
+                    value={renewalClassesCount}
+                    onChange={(e) => setRenewalClassesCount(e.target.value)}
+                    placeholder="e.g. 20"
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1 font-semibold text-gray-700">
+                    Free / Bonus Classes
+                  </label>
+                  <input
+                    type="number"
+                    className="input w-full text-xs"
+                    value={renewalFreeCount}
+                    onChange={(e) => setRenewalFreeCount(e.target.value)}
+                    placeholder="e.g. 0"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                {/* Tuition Rate Input with Comma Formatting */}
+                <div>
+                  <label className="block mb-1 font-semibold text-gray-700">
+                    Tuition Rate ({student?.payment_currency || "VND"}) *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. 2,500,000"
+                    className="input w-full text-xs font-bold text-pink-900"
+                    value={
+                      renewalRate
+                        ? Number(String(renewalRate).replace(/[^0-9.]/g, "")).toLocaleString("en-US")
+                        : ""
+                    }
+                    onChange={(e) => {
+                      const raw = e.target.value.replace(/[^0-9]/g, "");
+                      setRenewalRate(raw);
+                    }}
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1 font-semibold text-gray-700">
+                    Class Duration (mins)
+                  </label>
+                  <select
+                    className="input w-full text-xs bg-white cursor-pointer"
+                    value={renewalDuration}
+                    onChange={(e) => setRenewalDuration(e.target.value)}
+                  >
+                    <option value="25">25 minutes</option>
+                    <option value="40">40 minutes</option>
+                    <option value="50">50 minutes</option>
+                    <option value="60">60 minutes</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block mb-1 font-semibold text-gray-700">
+                  Target Renewal Start Date
+                </label>
+                <input
+                  type="date"
+                  className="input w-full text-xs"
+                  value={renewalStartDate}
+                  onChange={(e) => setRenewalStartDate(e.target.value)}
+                />
+              </div>
+
+              <div>
+                <label className="block mb-1 font-semibold text-gray-700">
+                  Custom Parent Note / Bank Instructions (Optional)
+                </label>
+                <textarea
+                  rows={2}
+                  className="input w-full text-xs"
+                  value={renewalCustomNotes}
+                  onChange={(e) => setRenewalCustomNotes(e.target.value)}
+                  placeholder="e.g. Please send remittance via Wise / WeChat / Bank transfer and reply with receipt."
+                />
+              </div>
+
+              {/* PDF Document Render Container */}
+              <div className="space-y-1.5 pt-1">
+                <span className="block text-[11px] font-bold uppercase text-gray-400">
+                  Document Preview & Printable Layout:
+                </span>
+
+                <div
+                  ref={invoicePdfRef}
+                  style={{
+                    backgroundColor: "#ffffff",
+                    color: "#1e293b",
+                    fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+                    padding: "32px",
+                    borderRadius: "16px",
+                    border: "1px solid #f1f5f9",
+                    boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+                  }}
+                  className="space-y-6 text-xs"
+                >
+                  {/* Clean Modern Header */}
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", borderBottom: "1.5px solid #f472b6", paddingBottom: "16px" }}>
+                    <div>
+                      <h1 style={{ fontSize: "22px", fontWeight: "800", color: "#831843", margin: 0, letterSpacing: "-0.5px" }}>
+                        {teacherBrandName}
+                      </h1>
+                      <p style={{ fontSize: "11px", color: "#64748b", margin: "4px 0 0 0", fontWeight: "500" }}>
+                        Private ESL & English Language Tutoring Services
+                      </p>
+                    </div>
+
+                    <div style={{ textAlign: "right" }}>
+                      <h2 style={{ fontSize: "16px", fontWeight: "800", color: "#db2777", margin: 0, letterSpacing: "0.5px" }}>
+                        RENEWAL INVOICE
+                      </h2>
+                      <p style={{ fontSize: "10px", color: "#94a3b8", margin: "4px 0 0 0" }}>
+                        Date: {new Date().toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Metadata 2-Column Cards */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                    <div style={{ backgroundColor: "#fdf2f8", padding: "14px 16px", borderRadius: "12px", border: "1px solid #fce7f3" }}>
+                      <p style={{ fontSize: "10px", fontWeight: "700", color: "#be185d", textTransform: "uppercase", letterSpacing: "0.5px", margin: 0 }}>
+                        STUDENT DETAILS
+                      </p>
+                      <p style={{ fontSize: "15px", fontWeight: "800", color: "#500724", margin: "4px 0 0 0" }}>
+                        {student?.name}
+                      </p>
+                      <p style={{ fontSize: "11px", color: "#64748b", margin: "2px 0 0 0" }}>
+                        Country: {student?.country || "International"}
+                      </p>
+                    </div>
+
+                    <div style={{ backgroundColor: "#f8fafc", padding: "14px 16px", borderRadius: "12px", border: "1px solid #e2e8f0", textAlign: "right" }}>
+                      <p style={{ fontSize: "10px", fontWeight: "700", color: "#475569", textTransform: "uppercase", letterSpacing: "0.5px", margin: 0 }}>
+                        SCHEDULE INFORMATION
+                      </p>
+                      <p style={{ fontSize: "13px", fontWeight: "700", color: "#0f172a", margin: "4px 0 0 0" }}>
+                        Starts: {renewalStartDate}
+                      </p>
+                      <p style={{ fontSize: "11px", color: "#64748b", margin: "2px 0 0 0" }}>
+                        Class Duration: {renewalDuration} mins / session
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Table */}
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "11px" }}>
+                    <thead>
+                      <tr style={{ backgroundColor: "#fdf2f8", borderBottom: "1.5px solid #fbcfe8", color: "#831843", textAlign: "left" }}>
+                        <th style={{ padding: "10px 12px", fontWeight: "700" }}>Lesson Package Description</th>
+                        <th style={{ padding: "10px 12px", textAlign: "center", fontWeight: "700" }}>Classes</th>
+                        <th style={{ padding: "10px 12px", textAlign: "right", fontWeight: "700" }}>Tuition Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
+                        <td style={{ padding: "14px 12px", verticalAlign: "top" }}>
+                          <p style={{ fontWeight: "700", color: "#0f172a", margin: 0, fontSize: "12px" }}>
+                            Private 1-on-1 English Course ({renewalDuration}m)
+                          </p>
+                          <p style={{ color: "#64748b", fontSize: "10.5px", margin: "4px 0 0 0", lineHeight: "1.4" }}>
+                            Tailored curriculum, personalized homework review, and parent progress tracking.
+                          </p>
+                          {Number(renewalFreeCount) > 0 && (
+                            <p style={{ color: "#059669", fontWeight: "700", fontSize: "10px", margin: "4px 0 0 0" }}>
+                              🎁 Includes {renewalFreeCount} Complimentary Bonus Classes
+                            </p>
+                          )}
+                        </td>
+                        <td style={{ padding: "14px 12px", textAlign: "center", fontWeight: "700", color: "#334155", verticalAlign: "top" }}>
+                          {renewalClassesCount} {Number(renewalFreeCount) > 0 ? `(+${renewalFreeCount})` : ""}
+                        </td>
+                        <td style={{ padding: "14px 12px", textAlign: "right", fontWeight: "800", color: "#be185d", fontSize: "12px", verticalAlign: "top" }}>
+                          {formattedRenewRate} {student?.payment_currency || "VND"}
+                        </td>
+                      </tr>
+                    </tbody>
+                    <tfoot>
+                      <tr>
+                        <td colSpan={2} style={{ padding: "14px 12px 6px 12px", textAlign: "right", fontWeight: "700", color: "#64748b", fontSize: "11px" }}>
+                          Total Package Amount:
+                        </td>
+                        <td style={{ padding: "14px 12px 6px 12px", textAlign: "right", fontWeight: "900", fontSize: "15px", color: "#db2777" }}>
+                          {formattedRenewRate} {student?.payment_currency || "VND"}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+
+                  {/* Footer Notes & QR Code */}
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid #f1f5f9", paddingTop: "16px", gap: "16px" }}>
+                    <div style={{ flex: 1 }}>
+                      {renewalCustomNotes ? (
+                        <div style={{ backgroundColor: "#fef2f2", border: "1px solid #fee2e2", padding: "10px 12px", borderRadius: "10px" }}>
+                          <p style={{ fontSize: "10px", fontWeight: "700", color: "#991b1b", textTransform: "uppercase", margin: 0 }}>
+                            Payment / Bank Instructions:
+                          </p>
+                          <p style={{ fontSize: "11px", color: "#334155", margin: "4px 0 0 0", whiteSpace: "pre-wrap", lineHeight: "1.4" }}>
+                            {renewalCustomNotes}
+                          </p>
+                        </div>
+                      ) : (
+                        <p style={{ fontSize: "10.5px", color: "#64748b", margin: 0, lineHeight: "1.4" }}>
+                          Thank you for learning with us! Please confirm once payment is sent to secure your schedule slots.
+                        </p>
+                      )}
+
+                      {student?.access_token && (
+                        <p style={{ fontSize: "10px", color: "#db2777", marginTop: "10px", fontWeight: "600" }}>
+                          Student Portal: {window.location.origin}/portal/{student.access_token}
+                        </p>
+                      )}
+                    </div>
+
+                    {invoiceQrDataUrl && (
+                      <div style={{ textAlign: "center", flexShrink: 0 }}>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={invoiceQrDataUrl}
+                          alt="Portal QR"
+                          style={{ width: "68px", height: "68px", borderRadius: "8px", border: "1px solid #fce7f3", padding: "2px", backgroundColor: "#ffffff" }}
+                        />
+                        <span style={{ fontSize: "8.5px", color: "#94a3b8", display: "block", marginTop: "4px", fontWeight: "600" }}>
+                          Scan for Portal
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Bottom Actions */}
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-pink-100">
+              <button
+                type="button"
+                onClick={() => setIsRenewalModalOpen(false)}
+                className="px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 font-semibold text-gray-600 transition cursor-pointer"
+              >
+                Close
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleCopyRenewalMessage}
+                  className="px-4 py-2 bg-pink-50 hover:bg-pink-100 text-pink-700 border border-pink-200 rounded-xl font-bold transition flex items-center gap-1.5 cursor-pointer"
+                >
+                  {copiedRenewalNotice ? (
+                    <>
+                      <Check size={14} className="text-emerald-600" />
+                      <span>Copied Text!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy size={14} />
+                      <span>Copy Message</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleDownloadInvoicePdf}
+                  disabled={isGeneratingPdf}
+                  className="btn-primary text-xs px-5 py-2 flex items-center gap-1.5 cursor-pointer shadow-xs"
+                >
+                  <Download size={14} />
+                  <span>{isGeneratingPdf ? "Generating PDF..." : "Download Invoice PDF"}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MODAL: LOG LESSON & HOMEWORK */}
       {isReportModalOpen && (
@@ -1515,17 +1900,33 @@ supabase
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
                   <label className="block mb-1 text-xs font-semibold text-gray-700">
                     Contract / Package Start Date
                   </label>
-                  <input
-                    type="date"
-                    className="input w-full text-xs"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                  />
+                  <div className="relative">
+                    <DatePicker
+                      selected={startDate ? new Date(startDate) : null}
+                      onChange={(date: Date | null) => {
+                        if (date) {
+                          const y = date.getFullYear();
+                          const m = String(date.getMonth() + 1).padStart(2, "0");
+                          const d = String(date.getDate()).padStart(2, "0");
+                          setStartDate(`${y}-${m}-${d}`);
+                        } else {
+                          setStartDate("");
+                        }
+                      }}
+                      dateFormat="yyyy-MM-dd"
+                      placeholderText="Select start date"
+                      className="input w-full text-xs bg-white cursor-pointer pr-9"
+                      wrapperClassName="w-full"
+                    />
+                    <div className="absolute right-3 top-2.5 text-pink-600 pointer-events-none">
+                      <Calendar size={14} />
+                    </div>
+                  </div>
                 </div>
                 <div>
                   <label className="block mb-1 text-xs font-semibold text-gray-700">
@@ -1535,10 +1936,10 @@ supabase
                     className="input w-full text-xs"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
+                    placeholder="parent@example.com"
                   />
                 </div>
               </div>
-
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
                   <label className="block mb-1 text-xs font-semibold text-gray-700">

@@ -10,6 +10,7 @@ export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const [dashboardTitle, setDashboardTitle] = useState("ESL Teacher's Private Class Dashboard");
+  const [logoUrl, setLogoUrl] = useState("/logo.png");
 
   useEffect(() => {
     async function loadTeacherProfile() {
@@ -18,12 +19,15 @@ export default function Sidebar() {
 
       const { data: profile } = await supabase
         .from("profiles")
-        .select("dashboard_title")
+        .select("dashboard_title, logo_url")
         .eq("user_id", user.id)
         .maybeSingle();
 
       if (profile?.dashboard_title) {
         setDashboardTitle(profile.dashboard_title);
+      }
+      if (profile?.logo_url) {
+        setLogoUrl(profile.logo_url);
       }
     }
 
@@ -38,11 +42,19 @@ export default function Sidebar() {
   return (
     <aside className="w-64 min-h-screen bg-[#6b0f3b] text-white p-5 flex flex-col justify-between">
       <div>
-        {/* Title and Sign Out Row */}
-        <div className="mb-8 flex items-start justify-between gap-2">
-          <h1 className="text-xl font-bold leading-tight">
-            {dashboardTitle}
-          </h1>
+       <div className="mb-8 flex items-start justify-between gap-2">
+          <div className="flex items-center gap-3">
+            <div className="w-14 h-14 rounded-2xl bg-white border border-pink-400/40 shadow-xs shrink-0 flex items-center justify-center overflow-hidden p-1.5">
+              <img
+                src={logoUrl}
+                alt="Logo"
+                className="w-full h-full object-contain"
+              />
+            </div>
+            <h1 className="text-sm font-bold leading-snug text-white break-words">
+              {dashboardTitle}
+            </h1>
+          </div>
           <button
             onClick={handleSignOut}
             title="Sign Out"

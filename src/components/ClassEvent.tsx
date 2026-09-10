@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { RotateCcw, Trash2 } from "lucide-react";
 
@@ -38,60 +38,28 @@ export default function ClassEvent({
   const [currentStatus, setCurrentStatus] = useState(status);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showActions, setShowActions] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setCurrentStatus(status);
   }, [status]);
 
-  async function handleMarkPresent() {
-    if (!studentId || isSubmitting) return;
-
-    setIsSubmitting(true);
-    setCurrentStatus("Completed");
-    setShowActions(false);
-
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { data: existingLesson } = await supabase
-        .from("lessons")
-        .select("id")
-        .eq("student_id", studentId)
-        .eq("lesson_date", dateString)
-        .maybeSingle();
-
-      if (existingLesson) {
-        await supabase
-          .from("lessons")
-          .update({
-            status: "Completed",
-            description: "Class marked as Completed"
-          })
-          .eq("id", existingLesson.id);
-      } else {
-        await supabase
-          .from("lessons")
-          .insert({
-            student_id: studentId,
-            teacher_id: user.id,
-            title: `Completed: ${topic}`,
-            lesson_date: dateString,
-            duration: Number(duration),
-            status: "Completed",
-            description: "Class marked as Completed",
-          });
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setShowActions(false);
       }
-
-      if (onStatusUpdate) onStatusUpdate();
-    } catch (err) {
-      console.error("Error marking present:", err);
-    } finally {
-      setIsSubmitting(false);
     }
-  }
+    if (showActions) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [showActions]);
 
- async function handleRedoStatus() {
+  async function handleRedoStatus() {
     if (isSubmitting || !studentId) return;
 
     setIsSubmitting(true);
@@ -100,28 +68,24 @@ export default function ClassEvent({
 
     try {
       if (type === "makeup") {
-        // 1. Reset make-up status back to Scheduled
         await supabase
           .from("makeup_classes")
           .update({ status: "Scheduled" })
           .eq("id", id);
       }
 
-      // 2. Delete the record from 'lessons' table (clears calendar completion)
       await supabase
         .from("lessons")
         .delete()
         .eq("student_id", studentId)
         .eq("lesson_date", dateString);
 
-      // 3. Delete the corresponding logged lesson report from 'class_reports'
       await supabase
         .from("class_reports")
         .delete()
         .eq("student_id", studentId)
         .or(`report_date.eq.${dateString},lesson_date.eq.${dateString}`);
 
-      // 4. Decrement classes_completed count on the student profile
       const { data: studentData } = await supabase
         .from("students")
         .select("classes_completed")
@@ -176,7 +140,7 @@ export default function ClassEvent({
   const isMarked = isCompleted || isAbsent || isCancelled;
 
   return (
-    <div className="relative my-0.5">
+    <div className="relative my-0.5" ref={containerRef}>
       <div
         onClick={() => setShowActions(!showActions)}
         className={`px-2 py-1 rounded-lg text-xs flex flex-col gap-1 transition font-medium cursor-pointer shadow-xs z-30 relative ${
@@ -195,9 +159,9 @@ export default function ClassEvent({
         </div>
 
         {showActions && (
-          <div className="pt-1 mt-1 border-t border-pink-200 flex flex-col gap-1 w-full" onClick={(e) => e.stopPropagation()}>
+          <div className="pt-2 mt-1.5 border-t border-pink-200 flex flex-col gap-1 w-full" onClick={(e) => e.stopPropagation()}>
             {!isMarked ? (
-              <div className="flex items-center justify-between gap-1">
+              <div className="flex flex-col gap-1 w-full">
                 <button
                   type="button"
                   disabled={isSubmitting}
@@ -208,9 +172,9 @@ export default function ClassEvent({
                       onOpenModal("present");
                     }
                   }}
-                  className="flex-1 py-1 bg-pink-600 hover:bg-pink-700 text-white font-bold text-[10px] rounded-md transition text-center cursor-pointer"
+                  className="w-full py-1.5 px-2 bg-pink-600 hover:bg-pink-700 text-white font-bold text-[11px] rounded-lg transition text-center cursor-pointer shadow-2xs"
                 >
-                  Present
+                  ✓ Present
                 </button>
         
                 <button
@@ -219,9 +183,9 @@ export default function ClassEvent({
                     setShowActions(false);
                     if (onOpenModal) onOpenModal("absent");
                   }}
-                  className="flex-1 py-1 bg-pink-100 hover:bg-pink-200 text-pink-900 border border-pink-200 font-bold text-[10px] rounded-md transition text-center cursor-pointer"
+                  className="w-full py-1.5 px-2 bg-pink-100 hover:bg-pink-200 text-pink-950 border border-pink-200 font-bold text-[11px] rounded-lg transition text-center cursor-pointer shadow-2xs"
                 >
-                  Absent
+                  ✕ Absent
                 </button>
                 <button
                   type="button"
@@ -229,13 +193,13 @@ export default function ClassEvent({
                     setShowActions(false);
                     if (onOpenModal) onOpenModal("cancelled");
                   }}
-                  className="flex-1 py-1 bg-pink-50 hover:bg-pink-100 text-pink-700 border border-pink-200 font-bold text-[10px] rounded-md transition text-center cursor-pointer"
+                  className="w-full py-1.5 px-2 bg-pink-50 hover:bg-pink-100 text-pink-800 border border-pink-200 font-bold text-[11px] rounded-lg transition text-center cursor-pointer shadow-2xs"
                 >
-                  Cancel
+                  ⃠ Cancel
                 </button>
               </div>
             ) : (
-              <div className="flex items-center justify-between px-1 text-[10px] gap-1">
+              <div className="flex items-center justify-between px-1 py-1 text-[11px] gap-1">
                 <span className="text-gray-500 font-medium truncate">
                   {currentStatus}
                 </span>
@@ -244,7 +208,7 @@ export default function ClassEvent({
                     type="button"
                     disabled={isSubmitting}
                     onClick={handleRedoStatus}
-                    className="py-0.5 px-1.5 bg-pink-50 hover:bg-pink-100 text-pink-700 border border-pink-200 font-bold rounded-md transition flex items-center gap-0.5 cursor-pointer"
+                    className="py-1 px-2 bg-pink-50 hover:bg-pink-100 text-pink-700 border border-pink-200 font-bold rounded-lg transition flex items-center gap-1 cursor-pointer"
                     title="Undo status back to scheduled"
                   >
                     <RotateCcw size={10} />
@@ -254,7 +218,7 @@ export default function ClassEvent({
                     type="button"
                     disabled={isSubmitting}
                     onClick={handleDeleteEvent}
-                    className="py-0.5 px-1.5 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 font-bold rounded-md transition flex items-center gap-0.5 cursor-pointer"
+                    className="py-1 px-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 font-bold rounded-lg transition flex items-center gap-1 cursor-pointer"
                     title="Remove from calendar"
                   >
                     <Trash2 size={10} />
