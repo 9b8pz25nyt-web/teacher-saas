@@ -673,12 +673,12 @@ ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCust
       // @ts-ignore
       const html2pdf = (await import("html2pdf.js")).default;
       const element = invoicePdfRef.current;
-      const opt = {
+     const opt = {
         margin: 10,
         filename: `Renewal_Invoice_${student?.name?.replace(/\s+/g, "_") || "Student"}_${renewalStartDate}.pdf`,
         image: { type: "png" as const, quality: 1.0 },
         html2canvas: {
-          scale: 3,
+          scale: 4, // Increased from 3 to 4 for ultra-sharp high resolution
           useCORS: true,
           backgroundColor: "#ffffff",
           letterRendering: true,
@@ -1326,16 +1326,32 @@ ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCust
                 </div>
               </div>
 
-              <div>
+             <div>
                 <label className="block mb-1 font-semibold text-gray-700">
                   Target Renewal Start Date
                 </label>
-                <input
-                  type="date"
-                  className="input w-full text-xs"
-                  value={renewalStartDate}
-                  onChange={(e) => setRenewalStartDate(e.target.value)}
-                />
+                <div className="relative">
+                  <DatePicker
+                    selected={renewalStartDate ? new Date(renewalStartDate) : null}
+                    onChange={(date: Date | null) => {
+                      if (date) {
+                        const y = date.getFullYear();
+                        const m = String(date.getMonth() + 1).padStart(2, "0");
+                        const d = String(date.getDate()).padStart(2, "0");
+                        setRenewalStartDate(`${y}-${m}-${d}`);
+                      } else {
+                        setRenewalStartDate("");
+                      }
+                    }}
+                    dateFormat="yyyy-MM-dd"
+                    placeholderText="Select start date"
+                    className="input w-full text-xs bg-white cursor-pointer pr-9"
+                    wrapperClassName="w-full"
+                  />
+                  <div className="absolute right-3 top-2.5 text-pink-600 pointer-events-none">
+                    <Calendar size={14} />
+                  </div>
+                </div>
               </div>
 
               <div>
