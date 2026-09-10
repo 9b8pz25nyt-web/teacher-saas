@@ -246,8 +246,9 @@ export default function StudentDetailsPage({
       );
       setRenewalRate(rawAmount);
 
-      if (studentData.access_token) {
-        const portalLink = `${window.location.origin}/portal/${studentData.access_token}`;
+     if (studentData.access_token) {
+        const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || window.location.origin;
+        const portalLink = `${baseUrl}/portal/${studentData.access_token}`;
         QRCode.toDataURL(portalLink, { width: 120, margin: 1 })
           .then((url) => setInvoiceQrDataUrl(url))
           .catch(() => {});
