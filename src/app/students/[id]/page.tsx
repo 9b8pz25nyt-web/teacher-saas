@@ -96,6 +96,10 @@ export default function StudentDetailsPage({
   const [expandedReportIds, setExpandedReportIds] = useState<string[]>([]);
   const [isParentRequestsOpen, setIsParentRequestsOpen] = useState(true);
 
+  // Payment Instructions & QR Upload State
+  const [paymentQrFile, setPaymentQrFile] = useState<File | null>(null);
+  const [paymentQrPreviewUrl, setPaymentQrPreviewUrl] = useState<string>("");
+
   // Renewal Modal & PDF State
   const [isRenewalModalOpen, setIsRenewalModalOpen] = useState(false);
   const [renewalClassesCount, setRenewalClassesCount] = useState("20");
@@ -661,7 +665,7 @@ ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCust
     setTimeout(() => setCopiedRenewalNotice(false), 2000);
   }
 
-async function handleDownloadInvoicePdf() {
+  async function handleDownloadInvoicePdf() {
     if (!invoicePdfRef.current) return;
     setIsGeneratingPdf(true);
 
@@ -1348,6 +1352,27 @@ async function handleDownloadInvoicePdf() {
                 />
               </div>
 
+              {/* Upload Payment QR Image Box */}
+              <div className="space-y-1">
+                <label className="block text-[11px] font-semibold text-gray-700">
+                  Upload Payment QR Image (Optional)
+                </label>
+                <div className="p-2 bg-white rounded-xl border border-gray-200 flex items-center">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0] || null;
+                      setPaymentQrFile(file);
+                      if (file) {
+                        setPaymentQrPreviewUrl(URL.createObjectURL(file));
+                      }
+                    }}
+                    className="file:mr-3 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-[11px] file:font-bold file:bg-pink-600 file:text-white hover:file:bg-pink-700 text-xs text-gray-500 w-full cursor-pointer"
+                  />
+                </div>
+              </div>
+
               {/* PDF Document Render Container */}
               <div className="space-y-1.5 pt-1">
                 <span className="block text-[11px] font-bold uppercase text-gray-400">
@@ -1367,26 +1392,42 @@ async function handleDownloadInvoicePdf() {
                   }}
                   className="space-y-6 text-xs"
                 >
-                  {/* Clean Modern Header */}
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", borderBottom: "1.5px solid #f472b6", paddingBottom: "16px" }}>
-                    <div>
-                      <h1 style={{ fontSize: "22px", fontWeight: "800", color: "#831843", margin: 0, letterSpacing: "-0.5px" }}>
-                        {teacherBrandName}
-                      </h1>
-                      <p style={{ fontSize: "11px", color: "#64748b", margin: "4px 0 0 0", fontWeight: "500" }}>
-                        Private ESL & English Language Tutoring Services
-                      </p>
-                    </div>
+                {/* Clean Modern Header with Centered Portal QR Code */}
+<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1.5px solid #f472b6", paddingBottom: "16px" }}>
+  <div>
+    <h1 style={{ fontSize: "22px", fontWeight: "800", color: "#831843", margin: 0, letterSpacing: "-0.5px" }}>
+      {teacherBrandName}
+    </h1>
+    <p style={{ fontSize: "11px", color: "#64748b", margin: "4px 0 0 0", fontWeight: "500" }}>
+      Private ESL & English Language Tutoring Services
+    </p>
+  </div>
 
-                    <div style={{ textAlign: "right" }}>
-                      <h2 style={{ fontSize: "16px", fontWeight: "800", color: "#db2777", margin: 0, letterSpacing: "0.5px" }}>
-                        RENEWAL INVOICE
-                      </h2>
-                      <p style={{ fontSize: "10px", color: "#94a3b8", margin: "4px 0 0 0" }}>
-                        Date: {new Date().toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })}
-                      </p>
-                    </div>
-                  </div>
+  <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+    <div style={{ textAlign: "right" }}>
+      <h2 style={{ fontSize: "16px", fontWeight: "800", color: "#db2777", margin: 0, letterSpacing: "0.5px" }}>
+        RENEWAL INVOICE
+      </h2>
+      <p style={{ fontSize: "10px", color: "#94a3b8", margin: "4px 0 0 0" }}>
+        Date: {new Date().toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })}
+      </p>
+    </div>
+
+ {invoiceQrDataUrl && (
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", backgroundColor: "#fdf2f8", padding: "6px", borderRadius: "8px", border: "1px solid #fce7f3", flexShrink: 0 }}>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={invoiceQrDataUrl}
+                            alt="Portal QR"
+                            style={{ width: "48px", height: "48px", borderRadius: "6px", backgroundColor: "#ffffff", display: "block", margin: "0 auto" }}
+                          />
+                          <span style={{ fontSize: "7px", color: "#db2777", display: "block", marginTop: "2px", fontWeight: "700", textTransform: "uppercase", textAlign: "center", width: "100%" }}>
+                            Student Portal
+                          </span>
+                        </div>
+                      )}
+  </div>
+</div>
 
                   {/* Metadata 2-Column Cards */}
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
@@ -1459,19 +1500,51 @@ async function handleDownloadInvoicePdf() {
                     </tfoot>
                   </table>
 
-                  {/* Footer Notes & QR Code */}
+                  {/* Footer Notes & Payment QR Code Only */}
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid #f1f5f9", paddingTop: "16px", gap: "16px" }}>
                     <div style={{ flex: 1 }}>
-                      {renewalCustomNotes ? (
-                        <div style={{ backgroundColor: "#fef2f2", border: "1px solid #fee2e2", padding: "10px 12px", borderRadius: "10px" }}>
-                          <p style={{ fontSize: "10px", fontWeight: "700", color: "#991b1b", textTransform: "uppercase", margin: 0 }}>
-                            Payment / Bank Instructions:
-                          </p>
-                          <p style={{ fontSize: "11px", color: "#334155", margin: "4px 0 0 0", whiteSpace: "pre-wrap", lineHeight: "1.4" }}>
-                            {renewalCustomNotes}
-                          </p>
+                     {/* Unified Box: Payment Instructions (Left) & Payment QR Code (Right) */}
+                  {(renewalCustomNotes || paymentQrPreviewUrl) && (
+                    <div style={{ backgroundColor: "#fdf2f8", border: "1px solid #fce7f3", padding: "12px 14px", borderRadius: "12px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "16px" }}>
+                      <div style={{ flex: 1 }}>
+                        <p style={{ fontSize: "10px", fontWeight: "700", color: "#831843", textTransform: "uppercase", margin: 0 }}>
+                          Payment Instructions:
+                        </p>
+                        <p style={{ fontSize: "11px", color: "#334155", margin: "4px 0 0 0", whiteSpace: "pre-wrap", lineHeight: "1.4" }}>
+                          {renewalCustomNotes || "Please send remittance via bank transfer or local payment method and reply with receipt."}
+                        </p>
+                      </div>
+
+                      {paymentQrPreviewUrl && (
+                        <div style={{ textAlign: "center", flexShrink: 0, backgroundColor: "#ffffff", padding: "6px", borderRadius: "8px", border: "1px solid #fce7f3" }}>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={paymentQrPreviewUrl}
+                            alt="Payment QR"
+                            style={{ width: "65px", height: "65px", borderRadius: "6px", display: "block", margin: "0 auto" }}
+                          />
+                          <span style={{ fontSize: "8px", color: "#db2777", display: "block", marginTop: "3px", fontWeight: "700", textTransform: "uppercase" }}>
+                            Scan to Pay
+                          </span>
                         </div>
-                      ) : (
+                      )}
+                    </div>
+                  )}
+
+                  {!renewalCustomNotes && !paymentQrPreviewUrl && (
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid #f1f5f9", paddingTop: "12px" }}>
+                      <p style={{ fontSize: "10.5px", color: "#64748b", margin: 0, lineHeight: "1.4" }}>
+                        Thank you for learning with us! Please confirm once payment is sent to secure your schedule slots.
+                      </p>
+                      {student?.access_token && (
+                        <p style={{ fontSize: "10px", color: "#db2777", margin: 0, fontWeight: "600" }}>
+                          Portal Link: {window.location.origin}/portal/{student.access_token}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                      {!renewalCustomNotes && (
                         <p style={{ fontSize: "10.5px", color: "#64748b", margin: 0, lineHeight: "1.4" }}>
                           Thank you for learning with us! Please confirm once payment is sent to secure your schedule slots.
                         </p>
@@ -1479,24 +1552,10 @@ async function handleDownloadInvoicePdf() {
 
                       {student?.access_token && (
                         <p style={{ fontSize: "10px", color: "#db2777", marginTop: "10px", fontWeight: "600" }}>
-                          Student Portal: {window.location.origin}/portal/{student.access_token}
+                          Student Portal Link: {window.location.origin}/portal/{student.access_token}
                         </p>
                       )}
                     </div>
-
-                    {invoiceQrDataUrl && (
-                      <div style={{ textAlign: "center", flexShrink: 0 }}>
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={invoiceQrDataUrl}
-                          alt="Portal QR"
-                          style={{ width: "68px", height: "68px", borderRadius: "8px", border: "1px solid #fce7f3", padding: "2px", backgroundColor: "#ffffff" }}
-                        />
-                        <span style={{ fontSize: "8.5px", color: "#94a3b8", display: "block", marginTop: "4px", fontWeight: "600" }}>
-                          Scan for Portal
-                        </span>
-                      </div>
-                    )}
                   </div>
                 </div>
               </div>

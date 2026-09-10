@@ -18,6 +18,9 @@ export default function ContractsPage() {
   const [students, setStudents] = useState<any[]>([]);
   const [schedules, setSchedules] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [paymentInstructions, setPaymentInstructions] = useState("");
+  const [paymentQrFile, setPaymentQrFile] = useState<File | null>(null);
+  const [paymentQrPreviewUrl, setPaymentQrPreviewUrl] = useState<string>("");
 
   // Modal states
   const [selectedStudentForAgreement, setSelectedStudentForAgreement] = useState<any | null>(null);
@@ -359,6 +362,37 @@ export default function ContractsPage() {
               </div>
             </div>
 
+            {/* Payment Instructions & QR Upload Inputs */}
+            <div className="space-y-3 p-3 bg-pink-50/40 rounded-2xl border border-pink-100">
+              <label className="block font-semibold text-pink-900 text-xs">
+                Payment Instructions & QR Code (Optional)
+              </label>
+              <textarea
+                rows={2}
+                placeholder="e.g. Bank transfer details or instructions..."
+                className="input w-full text-xs bg-white"
+                value={paymentInstructions}
+                onChange={(e) => setPaymentInstructions(e.target.value)}
+              />
+              <div className="space-y-1">
+                <label className="block text-[11px] text-gray-500">Upload Payment QR Image</label>
+                <div className="p-2 bg-white rounded-xl border border-gray-200 flex items-center">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0] || null;
+                      setPaymentQrFile(file);
+                      if (file) {
+                        setPaymentQrPreviewUrl(URL.createObjectURL(file));
+                      }
+                    }}
+                    className="file:mr-3 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-[11px] file:font-bold file:bg-pink-600 file:text-white hover:file:bg-pink-700 text-xs text-gray-500 w-full cursor-pointer"
+                  />
+                </div>
+              </div>
+            </div>
+
             {/* Printable Preview Sheet */}
             <div className="flex-1 overflow-y-auto border border-gray-200 rounded-2xl p-6 bg-white shadow-inner">
               <div
@@ -458,6 +492,36 @@ export default function ContractsPage() {
                     If you ever need to reschedule a session, simply message your teacher in advance and we will easily set up a makeup class.
                   </p>
                 </div>
+
+                {/* Payment Instructions & Uploaded QR Code Preview Block */}
+                {(paymentInstructions || paymentQrPreviewUrl) && (
+                  <div style={{ display: "flex", gap: "16px", marginTop: "12px", alignItems: "center" }}>
+                    {paymentInstructions && (
+                      <div style={{ flex: 1, backgroundColor: "#fdf2f8", border: "1px solid #fce7f3", padding: "10px 12px", borderRadius: "10px" }}>
+                        <p style={{ fontSize: "10px", fontWeight: "700", color: "#831843", textTransform: "uppercase", margin: 0 }}>
+                          Payment Instructions:
+                        </p>
+                        <p style={{ fontSize: "11px", color: "#334155", margin: "4px 0 0 0", whiteSpace: "pre-wrap" }}>
+                          {paymentInstructions}
+                        </p>
+                      </div>
+                    )}
+
+                    {paymentQrPreviewUrl && (
+                      <div style={{ textAlign: "center", flexShrink: 0 }}>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={paymentQrPreviewUrl}
+                          alt="Payment QR"
+                          style={{ width: "75px", height: "75px", borderRadius: "8px", border: "1px solid #fce7f3", padding: "2px", backgroundColor: "#ffffff" }}
+                        />
+                        <span style={{ fontSize: "8.5px", color: "#94a3b8", display: "block", marginTop: "3px", fontWeight: "600" }}>
+                          Scan to Pay
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div style={{ paddingTop: "8px", textAlign: "center", fontSize: "10px", color: "#9ca3af" }}>
                   {teacherName} • Dedicated to your English fluency and confidence!
