@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import DatePicker from 'react-datepicker'
+import 'react-datepicker/dist/react-datepicker.css'
 
 interface AttendanceModalProps {
   isOpen: boolean
@@ -26,13 +28,17 @@ export default function AttendanceModal({
 }: AttendanceModalProps) {
   const [status, setStatus] = useState<'absent' | 'cancelled'>(initialStatus)
   const [makeupRequested, setMakeupRequested] = useState(false)
-  const [makeupDateTime, setMakeupDateTime] = useState('')
+  const [makeupDate, setMakeupDate] = useState<Date | null>(null)
+  const [customTime, setCustomTime] = useState('16:40')
+  const [makeupDuration, setMakeupDuration] = useState<number>(40)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   useEffect(() => {
     setStatus(initialStatus)
     setMakeupRequested(false)
-    setMakeupDateTime('')
+    setMakeupDate(null)
+    setCustomTime('16:40')
+    setMakeupDuration(40)
   }, [initialStatus, isOpen])
 
   if (!isOpen) return null
@@ -50,9 +56,18 @@ export default function AttendanceModal({
 
       const targetDate = dateString || new Date().toISOString().split("T")[0]
       const formattedStatus = status === 'cancelled' ? 'Cancelled' : 'Absent'
+      
+      // Merge selected date with custom time (e.g. "16:40") into ISO format
+      let makeupIsoString: string | null = null
+      if (makeupDate && customTime) {
+        const yyyy = makeupDate.getFullYear()
+        const mm = String(makeupDate.getMonth() + 1).padStart(2, '0')
+        const dd = String(makeupDate.getDate()).padStart(2, '0')
+        const combined = new Date(`${yyyy}-${mm}-${dd}T${customTime}:00`)
+        makeupIsoString = combined.toISOString()
+      }
 
       // 1. If modifying an existing make-up event directly
-    // 1. If modifying an existing make-up event directly
       if (eventType === 'makeup') {
         const { error: makeupError } = await supabase
           .from("makeup_classes")
@@ -62,15 +77,15 @@ export default function AttendanceModal({
         if (makeupError) throw makeupError
 
         // Allow creating a new make-up session when canceling an existing make-up class
-        if (makeupRequested && makeupDateTime) {
+        if (makeupRequested && makeupIsoString) {
           const { error: newMakeupErr } = await supabase
             .from('makeup_classes')
             .insert({
               student_id: studentId,
               teacher_id: user.id,
               original_event_id: eventId,
-              makeup_date: makeupDateTime,
-              duration: 40,
+              makeup_date: makeupIsoString,
+              duration: makeupDuration,
               topic: 'Make-up Class (Rescheduled)',
               status: 'Scheduled'
             })
@@ -112,7 +127,7 @@ export default function AttendanceModal({
         }
 
         // 3. Create the new Make-up Class entry if requested
-        if (makeupRequested && makeupDateTime) {
+        if (makeupRequested && makeupIsoString) {
           const { data: scheduleData } = await supabase
             .from('schedules')
             .select('*')
@@ -125,8 +140,8 @@ export default function AttendanceModal({
               student_id: studentId,
               teacher_id: user.id,
               original_event_id: eventId,
-              makeup_date: makeupDateTime,
-              duration: scheduleData?.duration || 40,
+              makeup_date: makeupIsoString,
+              duration: makeupDuration,
               topic: `Make-up: ${scheduleData?.topic || 'Regular Class'}`,
               status: 'Scheduled'
             })
@@ -167,7 +182,7 @@ export default function AttendanceModal({
             <select
               value={status}
               onChange={(e) => setStatus(e.target.value as 'absent' | 'cancelled')}
-              className="w-full border border-gray-200 rounded-xl p-2 text-sm focus:ring-2 focus:ring-pink-500 outline-hidden bg-white"
+              className="w-full border border-gray-200 rounded-xl p-2 text-sm focus:ring-2 focus:ring-pink-500 outline-hidden bg-white cursor-pointer"
             >
               <option value="absent">Absent</option>
               <option value="cancelled">Cancelled</option>
@@ -175,32 +190,82 @@ export default function AttendanceModal({
           </div>
 
           {eventType === 'regular' && (
-           <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="makeup"
-              checked={makeupRequested}
-              onChange={(e) => setMakeupRequested(e.target.checked)}
-              className="rounded border-gray-300 text-pink-600 focus:ring-pink-500 w-4 h-4 cursor-pointer"
-            />
-            <label htmlFor="makeup" className="text-xs font-bold text-gray-700 cursor-pointer">
-              Request Make-up Class
-            </label>
-          </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="makeup"
+                checked={makeupRequested}
+                onChange={(e) => setMakeupRequested(e.target.checked)}
+                className="rounded border-gray-300 text-pink-600 focus:ring-pink-500 w-4 h-4 cursor-pointer"
+              />
+              <label htmlFor="makeup" className="text-xs font-bold text-gray-700 cursor-pointer">
+                Request Make-up Class
+              </label>
+            </div>
           )}
 
           {makeupRequested && (
-            <div className="space-y-1.5 p-3.5 bg-pink-50/50 rounded-2xl border border-pink-100">
-              <label className="block text-xs font-bold text-pink-900">
-                Make-up Date & Time 📅
-              </label>
-              <input
-                type="datetime-local"
-                value={makeupDateTime}
-                onChange={(e) => setMakeupDateTime(e.target.value)}
-                className="w-full bg-white border border-pink-200 text-pink-950 font-semibold text-xs rounded-xl px-3.5 py-2.5 outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 shadow-xs cursor-pointer scheme-pink [color-scheme:light] accent-pink-600"
-                required={makeupRequested}
-              />
+            <div className="space-y-3 p-3.5 bg-pink-50/50 rounded-2xl border border-pink-100">
+              <div className="grid grid-cols-2 gap-2">
+                {/* Date Selection */}
+                <div>
+                  <label className="block text-xs font-bold text-pink-900 mb-1">
+                    Make-up Date 📅
+                  </label>
+                  <DatePicker
+                    selected={makeupDate}
+                    onChange={(date: Date | null) => setMakeupDate(date)}
+                    dateFormat="yyyy-MM-dd"
+                    placeholderText="Select date"
+                    className="w-full p-2.5 border border-pink-200 rounded-xl bg-white text-pink-950 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-pink-400 cursor-pointer"
+                    wrapperClassName="w-full"
+                  />
+                </div>
+
+                {/* Editable Custom Time Input */}
+                <div>
+                  <label className="block text-xs font-bold text-pink-900 mb-1">
+                    Start Time ⏰
+                  </label>
+                  <input
+                    type="time"
+                    value={customTime}
+                    onChange={(e) => setCustomTime(e.target.value)}
+                    className="w-full p-2.5 border border-pink-200 rounded-xl bg-white text-pink-950 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-pink-400 cursor-pointer"
+                  />
+                </div>
+              </div>
+
+              {/* Class Duration Options */}
+              <div>
+                <label className="block text-xs font-bold text-pink-900 mb-1">
+                  Class Duration ⏱️
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setMakeupDuration(25)}
+                    className={`py-2 px-3 text-xs font-bold rounded-xl border transition cursor-pointer ${
+                      makeupDuration === 25
+                        ? "bg-pink-600 text-white border-pink-600 shadow-xs"
+                        : "bg-white text-pink-900 border-pink-200 hover:bg-pink-100/50"
+                    }`}
+                  >
+                    25 Minutes
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMakeupDuration(40)}
+                    className={`py-2 px-3 text-xs font-bold rounded-xl border transition cursor-pointer ${
+                      makeupDuration === 40
+                        ? "bg-pink-600 text-white border-pink-600 shadow-xs"
+                        : "bg-white text-pink-900 border-pink-200 hover:bg-pink-100/50"
+                    }`}
+                  >
+                    40 Minutes
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 

@@ -150,3 +150,65 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
 .react-datepicker__navigation-icon::before {
   border-color: #db2777 !important;
 }
+/* Custom Pink Theme for Native Date/Time Pickers */
+input[type="datetime-local"],
+input[type="date"],
+input[type="time"] {
+  accent-color: #db2777; /* Tailwind pink-600 */
+}
+
+/* Force webkit picker elements to inherit pink accents */
+::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  filter: invert(27%) sepia(91%) saturate(2352%) hue-rotate(312deg) brightness(92%) contrast(95%);
+}
+/* Force Chrome/Safari Date-Time Popup Selection Colors */
+input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  filter: invert(34%) sepia(85%) saturate(3025%) hue-rotate(315deg) brightness(90%) contrast(96%);
+}
+
+/* Override selection highlight inside WebKit popups */
+::selection {
+  background-color: #fbcfe8 !important; /* pink-200 */
+  color: #831843 !important; /* pink-900 */
+}
+.react-datepicker__day--selected,
+.react-datepicker__time-container .react-datepicker__time .react-datepicker__time-box ul.react-datepicker__time-list li.react-datepicker__time-list-item--selected {
+  background-color: #db2777 !important; /* Tailwind pink-600 */
+  color: white !important;
+  border-radius: 0.5rem;
+}
+/* Custom Pink Styling for React DatePicker */
+.react-datepicker {
+  border-color: #fbcfe8 !important; /* pink-200 */
+  border-radius: 1rem !important;
+  font-family: inherit !important;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1) !important;
+  overflow: hidden;
+}
+
+.react-datepicker__header {
+  background-color: #fdf2f8 !important; /* pink-50 */
+  border-bottom-color: #fbcfe8 !important;
+}
+
+.react-datepicker__current-month,
+.react-datepicker-time__header {
+  color: #831843 !important; /* pink-900 */
+  font-weight: 700 !important;
+}
+
+.react-datepicker__day--selected,
+.react-datepicker__day--keyboard-selected,
+.react-datepicker__time-container .react-datepicker__time .react-datepicker__time-box ul.react-datepicker__time-list li.react-datepicker__time-list-item--selected {
+  background-color: #db2777 !important; /* pink-600 */
+  color: white !important;
+  border-radius: 0.5rem !important;
+}
+
+.react-datepicker__day:hover,
+.react-datepicker__time-list-item:hover {
+  background-color: #fce7f3 !important; /* pink-100 */
+  border-radius: 0.5rem !important;
+}
