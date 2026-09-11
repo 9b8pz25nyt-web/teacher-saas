@@ -24,6 +24,7 @@ import {
   X,
   Download,
   Calendar,
+  Edit2,
 } from "lucide-react";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
@@ -47,31 +48,6 @@ const DAY_ORDER = [
   "Saturday",
   "Sunday",
 ];
-
-function groupSchedules(schedList: any[]) {
-  if (!schedList || schedList.length === 0) return [];
-
-  const groups: Record<string, { days: string[]; time: string; duration: number; ids: string[] }> = {};
-
-  schedList.forEach((s) => {
-    const time = s.start_time || s.schedule_time || s.time || "TBA";
-    const duration = s.duration || 25;
-    const key = `${time}-${duration}`;
-
-    if (!groups[key]) {
-      groups[key] = { days: [], time, duration, ids: [] };
-    }
-    if (s.day_of_week && !groups[key].days.includes(s.day_of_week)) {
-      groups[key].days.push(s.day_of_week);
-    }
-    groups[key].ids.push(s.id);
-  });
-
-  return Object.values(groups).map((group) => {
-    group.days.sort((a, b) => DAY_ORDER.indexOf(a) - DAY_ORDER.indexOf(b));
-    return group;
-  });
-}
 
 export default function StudentDetailsPage({
   params,
@@ -120,7 +96,7 @@ export default function StudentDetailsPage({
     );
   }
 
-  // Edit Modal State
+  // Edit Student Modal State
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [name, setName] = useState("");
   const [teacherAlias, setTeacherAlias] = useState("Teacher Gabi");
@@ -147,18 +123,54 @@ export default function StudentDetailsPage({
   const [selectedChapterIndex, setSelectedChapterIndex] = useState<string>("");
   const [isChapterComplete, setIsChapterComplete] = useState(false);
 
-  function handleOpenEditReport(rep: any) {
-    setEditingReportId(rep.id);
-    setLessonTitle(rep.lesson_title || rep.title || "");
-    setReportDate(rep.report_date || rep.lesson_date || new Date().toISOString().split("T")[0]);
-    setReportBookId(rep.book_id || "");
-    setVocabulary(rep.vocabulary || "");
-    setStrengths(rep.strengths || "");
-    setImprovements(rep.improvements || "");
-    setHomework(rep.homework || "");
-    setHomeworkFile(null);
-    setIsReportModalOpen(true);
+  // Edit Schedule Modal State
+  const [editingSchedule, setEditingSchedule] = useState<any>(null);
+  const [editDayOfWeek, setEditDayOfWeek] = useState("");
+  const [editStartTime, setEditStartTime] = useState("");
+  const [editDuration, setEditDuration] = useState(40);
+  const [isUpdatingSchedule, setIsUpdatingSchedule] = useState(false);
+
+  function handleOpenEditSchedule(sched: any) {
+    setEditingSchedule(sched);
+    setEditDayOfWeek(sched.day_of_week || "Tuesday");
+    setEditStartTime(sched.start_time || sched.schedule_time || sched.time || "17:00");
+    setEditDuration(Number(sched.duration_minutes || sched.duration || 40));
   }
+
+async function handleUpdateSchedule(e: React.FormEvent) {
+  e.preventDefault();
+  if (!editingSchedule) return;
+
+  setIsUpdatingSchedule(true);
+
+  try {
+    const { data, error } = await supabase
+      .from("schedules")
+      .update({
+        day_of_week: editDayOfWeek,
+        schedule_time: editStartTime, // 👈 Target exact column name from your SQL schema
+        duration: editDuration,
+      })
+      .eq("id", editingSchedule.id)
+      .select();
+
+    if (error) throw error;
+
+    setEditingSchedule(null);
+
+    // Refresh page data to reflect updated schedule instantly
+    if (typeof fetchStudentData === "function") {
+      await fetchStudentData();
+    } else {
+      window.location.reload();
+    }
+  } catch (err: any) {
+    console.error("Error updating schedule:", err);
+    alert("Failed to update schedule: " + err.message);
+  } finally {
+    setIsUpdatingSchedule(false);
+  }
+}
 
   // Schedule Modal State
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
@@ -180,6 +192,19 @@ export default function StudentDetailsPage({
   const [lessonTitle, setLessonTitle] = useState("");
   const [startPageInput, setStartPageInput] = useState("");
   const [endPageInput, setEndPageInput] = useState("");
+
+  function handleOpenEditReport(rep: any) {
+    setEditingReportId(rep.id);
+    setLessonTitle(rep.lesson_title || rep.title || "");
+    setReportDate(rep.report_date || rep.lesson_date || new Date().toISOString().split("T")[0]);
+    setReportBookId(rep.book_id || "");
+    setVocabulary(rep.vocabulary || "");
+    setStrengths(rep.strengths || "");
+    setImprovements(rep.improvements || "");
+    setHomework(rep.homework || "");
+    setHomeworkFile(null);
+    setIsReportModalOpen(true);
+  }
 
   // Handle URL Query Params
   useEffect(() => {
@@ -246,7 +271,7 @@ export default function StudentDetailsPage({
       );
       setRenewalRate(rawAmount);
 
-  if (studentData.access_token) {
+      if (studentData.access_token) {
         const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://teacher-saas-pink.vercel.app";
         const portalLink = `${baseUrl}/portal/${studentData.access_token}`;
         QRCode.toDataURL(portalLink, { width: 120, margin: 1 })
@@ -412,42 +437,51 @@ export default function StudentDetailsPage({
     }
   }
 
-  async function handleAddSchedule(e: React.FormEvent) {
-    e.preventDefault();
-    if (scheduleDays.length === 0) {
-      alert("Please select at least one day of the week.");
-      return;
-    }
-    if (!scheduleTime) {
-      alert("Please select a time.");
-      return;
-    }
-
-    setIsSavingSchedule(true);
-    try {
-      const insertPayload = scheduleDays.map((day) => ({
-        student_id: studentId,
-        day_of_week: day,
-        schedule_time: scheduleTime,
-        duration: Number(scheduleDuration) || 40,
-        topic: scheduleTopic.trim() || "Regular Class",
-        status: "Active",
-      }));
-
-      const { error } = await supabase.from("schedules").insert(insertPayload);
-      if (error) throw error;
-
-      setIsScheduleModalOpen(false);
-      setScheduleDays([]);
-      setScheduleTopic("Regular Class");
-      fetchStudentData();
-    } catch (err: any) {
-      console.error("Error adding schedule:", err);
-      alert(err.message || "Failed to add schedule");
-    } finally {
-      setIsSavingSchedule(false);
-    }
+ async function handleAddSchedule(e: React.FormEvent) {
+  e.preventDefault();
+  if (scheduleDays.length === 0) {
+    alert("Please select at least one day of the week.");
+    return;
   }
+
+  setIsSavingSchedule(true);
+
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    // Map through selected days and insert using your exact Supabase column names
+    const insertPayload = scheduleDays.map((day) => ({
+      student_id: studentId, // or student.id
+      teacher_id: user?.id,
+      day_of_week: day,
+      schedule_time: scheduleTime, // 👈 Uses 'schedule_time' instead of 'start_time'
+      duration: Number(scheduleDuration), // 👈 Uses 'duration' instead of 'duration_minutes'
+      topic: scheduleTopic || "Regular Class",
+    }));
+
+    const { error } = await supabase.from("schedules").insert(insertPayload);
+
+    if (error) throw error;
+
+    setIsScheduleModalOpen(false);
+    setScheduleDays([]);
+    setScheduleTopic("");
+    
+    // Refresh page data to display the new schedule slots
+    if (typeof fetchStudentData === "function") {
+      await fetchStudentData();
+    } else {
+      window.location.reload();
+    }
+  } catch (err: any) {
+    console.error("Error adding schedule:", err);
+    alert("Failed to add schedule: " + err.message);
+  } finally {
+    setIsSavingSchedule(false);
+  }
+}
 
   async function handleDeleteSchedule(scheduleId: string) {
     if (!confirm("Are you sure you want to delete this schedule slot?")) return;
@@ -674,12 +708,12 @@ ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCust
       // @ts-ignore
       const html2pdf = (await import("html2pdf.js")).default;
       const element = invoicePdfRef.current;
-     const opt = {
+      const opt = {
         margin: 10,
         filename: `Renewal_Invoice_${student?.name?.replace(/\s+/g, "_") || "Student"}_${renewalStartDate}.pdf`,
         image: { type: "png" as const, quality: 1.0 },
         html2canvas: {
-          scale: 4, // Increased from 3 to 4 for ultra-sharp high resolution
+          scale: 4,
           useCORS: true,
           backgroundColor: "#ffffff",
           letterRendering: true,
@@ -769,7 +803,6 @@ ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCust
             </button>
           )}
 
-          {/* Renewal Invoice / Notice Trigger Button */}
           <button
             type="button"
             onClick={() => setIsRenewalModalOpen(true)}
@@ -995,6 +1028,7 @@ ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCust
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Left Column (5/12): Weekly Schedule & Notes */}
         <div className="lg:col-span-5 space-y-5">
+          {/* Weekly Schedule Section */}
           <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-gray-900">Weekly Schedule</h3>
@@ -1021,26 +1055,38 @@ ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCust
                   .map((s) => (
                     <div
                       key={s.id}
-                      className="grid grid-cols-[85px_65px_1fr_auto] items-center text-xs p-2.5 bg-pink-50/40 rounded-xl border border-pink-100/70 hover:bg-pink-50/80 transition"
+                      className="flex items-center justify-between text-xs p-2.5 bg-pink-50/40 rounded-xl border border-pink-100/70 hover:bg-pink-50/80 transition"
                     >
-                      <span className="font-bold text-gray-800">
-                        {s.day_of_week}
-                      </span>
-                      <span className="text-pink-600 font-bold font-mono text-[12px]">
-                        {s.start_time || s.schedule_time || s.time}
-                      </span>
-                      <div>
-                        <span className="px-2 py-0.5 bg-white text-gray-600 text-[10px] font-semibold rounded-md border border-pink-100 shadow-2xs">
-                          {s.duration || 25}m
+                      <div className="flex items-center gap-3">
+                        <span className="font-bold text-gray-800 w-16">
+                          {s.day_of_week}
+                        </span>
+                        <span className="text-pink-600 font-bold font-mono text-[12px] bg-pink-50 px-2 py-0.5 rounded-md border border-pink-100">
+                          {s.start_time || s.schedule_time || s.time || "17:00"}
+                        </span>
+                        <span className="text-gray-400 font-medium text-[10px]">
+                          {s.duration_minutes || s.duration || 40}m
                         </span>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteSchedule(s.id)}
-                        className="text-gray-400 hover:text-red-600 p-1 transition cursor-pointer"
-                      >
-                        <Trash2 size={13} />
-                      </button>
+
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditSchedule(s)}
+                          className="text-gray-400 hover:text-pink-600 p-1 transition cursor-pointer"
+                          title="Edit Schedule Time"
+                        >
+                          <Edit2 size={13} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteSchedule(s.id)}
+                          className="text-gray-400 hover:text-red-600 p-1 transition cursor-pointer"
+                          title="Delete Schedule"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
                     </div>
                   ))}
               </div>
@@ -1098,14 +1144,14 @@ ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCust
 
         {/* Right Column (7/12): Logged Lessons & Reports */}
         <div className="lg:col-span-7">
-          <div className="bg-white border border-pink-100 rounded-3xl p-6 shadow-xs space-y-4">
+          <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <h3 className="text-sm font-bold text-gray-900">
                   Logged Lessons & Reports
                 </h3>
-                <span className="text-[11px] font-bold text-pink-600 bg-pink-50 px-2 py-0.5 rounded-lg border border-pink-200">
-                  {dynamicCompletedCount}
+                <span className="px-2 py-0.5 bg-pink-50 text-pink-600 font-bold text-xs rounded-full border border-pink-100">
+                  {reports.length}
                 </span>
               </div>
               <button
@@ -1131,94 +1177,145 @@ ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCust
             </div>
 
             {reports.length === 0 ? (
-              <p className="text-xs text-gray-400 italic">
-                No lessons logged yet for this student.
-              </p>
+              <div className="p-8 text-center text-xs text-gray-400 space-y-2">
+                <p className="italic">No class reports logged yet.</p>
+                <button
+                  type="button"
+                  onClick={() => setIsReportModalOpen(true)}
+                  className="text-pink-600 font-bold hover:underline"
+                >
+                  Click here to log your first lesson
+                </button>
+              </div>
             ) : (
-              <div className="space-y-2.5">
+              <div className="space-y-3">
                 {reports.map((rep) => {
                   const isExpanded = expandedReportIds.includes(rep.id);
+                  const matchedBook = books.find((b) => b.id === rep.book_id);
 
                   return (
                     <div
                       key={rep.id}
-                      className="bg-pink-50/30 rounded-2xl border border-pink-100 text-xs transition-all overflow-hidden"
+                      className="border border-pink-100 rounded-2xl overflow-hidden transition-all duration-200 bg-white"
                     >
                       <div
                         onClick={() => toggleExpandReport(rep.id)}
-                        className="p-3.5 flex items-center justify-between cursor-pointer hover:bg-pink-50/60 select-none"
+                        className="p-3.5 bg-pink-50/30 hover:bg-pink-50/60 flex items-center justify-between cursor-pointer select-none transition"
                       >
                         <div className="flex items-center gap-3">
                           <button
                             type="button"
-                            className="p-1 rounded-lg text-pink-500 bg-white border border-pink-100 shadow-2xs cursor-pointer"
+                            className="p-1 rounded-lg text-pink-600 bg-white border border-pink-100"
                           >
-                            {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                            {isExpanded ? (
+                              <ChevronUp size={14} />
+                            ) : (
+                              <ChevronDown size={14} />
+                            )}
                           </button>
-                          <span className="font-bold text-gray-900 text-sm">
-                            {rep.lesson_title || rep.title}
-                          </span>
+                          <div>
+                            <h4 className="font-bold text-gray-900 text-xs">
+                              {rep.lesson_title || rep.title || "Lesson"}
+                            </h4>
+                            {matchedBook && (
+                              <p className="text-[10px] text-pink-600 font-semibold mt-0.5">
+                                📖 {matchedBook.title}
+                                {rep.start_page && rep.end_page
+                                  ? ` (Pages ${rep.start_page}-${rep.end_page})`
+                                  : ""}
+                              </p>
+                            )}
+                          </div>
                         </div>
 
-                        <div
-                          className="flex items-center gap-3"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <span className="text-gray-400 text-[11px] font-mono">
+                        <div className="flex items-center gap-3">
+                          <span className="text-[11px] font-medium text-gray-400 font-mono">
                             {rep.report_date || rep.lesson_date}
                           </span>
-                          <button
-                            type="button"
-                            onClick={() => handleOpenEditReport(rep)}
-                            className="text-gray-400 hover:text-pink-600 transition p-1 cursor-pointer"
-                          >
-                            <Edit size={14} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleDeleteReport(rep.id, rep.homework_file_url)
-                            }
-                            className="text-gray-400 hover:text-red-600 transition p-1 cursor-pointer"
-                          >
-                            <Trash2 size={14} />
-                          </button>
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenEditReport(rep);
+                              }}
+                              className="p-1 text-gray-400 hover:text-pink-600 transition cursor-pointer"
+                              title="Edit Report"
+                            >
+                              <Edit size={13} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteReport(rep.id, rep.homework_file_url);
+                              }}
+                              className="p-1 text-gray-400 hover:text-red-600 transition cursor-pointer"
+                              title="Delete Report"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
                         </div>
                       </div>
 
                       {isExpanded && (
-                        <div className="px-4 pb-4 pt-1 border-t border-pink-100/60 space-y-2.5 bg-white/40">
+                        <div className="p-4 border-t border-pink-100 space-y-3 text-xs text-gray-700 bg-white">
                           {rep.vocabulary && (
-                            <div className="text-gray-600 font-mono text-[11px] bg-white/80 p-2.5 rounded-xl border border-pink-50 whitespace-pre-wrap">
-                              <strong className="text-pink-900 font-sans">Vocab/Structures:</strong>
-                              <p className="mt-1">{rep.vocabulary}</p>
+                            <div>
+                              <span className="font-bold text-pink-900 block mb-0.5">
+                                Vocabulary & Target Patterns:
+                              </span>
+                              <p className="text-gray-600 bg-pink-50/30 p-2.5 rounded-xl border border-pink-100/50 whitespace-pre-wrap">
+                                {rep.vocabulary}
+                              </p>
                             </div>
                           )}
 
-                          {(rep.strengths || rep.improvements) && (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px]">
-                              {rep.strengths && (
-                                <div className="p-2.5 bg-emerald-50/60 border border-emerald-100 rounded-xl text-emerald-950">
-                                  <strong className="text-emerald-800">Strengths & Highlights:</strong>
-                                  <p className="mt-0.5 whitespace-pre-wrap">{rep.strengths}</p>
-                                </div>
-                              )}
-                              {rep.improvements && (
-                                <div className="p-2.5 bg-amber-50/60 border border-amber-100 rounded-xl text-amber-950">
-                                  <strong className="text-amber-800">Next Focus:</strong>
-                                  <p className="mt-0.5 whitespace-pre-wrap">{rep.improvements}</p>
-                                </div>
-                              )}
+                          {rep.strengths && (
+                            <div>
+                              <span className="font-bold text-emerald-800 block mb-0.5">
+                                Strengths & Highlights:
+                              </span>
+                              <p className="text-gray-600 bg-emerald-50/30 p-2.5 rounded-xl border border-emerald-100/50 whitespace-pre-wrap">
+                                {rep.strengths}
+                              </p>
+                            </div>
+                          )}
+
+                          {rep.improvements && (
+                            <div>
+                              <span className="font-bold text-amber-800 block mb-0.5">
+                                Next Focus / Improvement:
+                              </span>
+                              <p className="text-gray-600 bg-amber-50/30 p-2.5 rounded-xl border border-amber-100/50 whitespace-pre-wrap">
+                                {rep.improvements}
+                              </p>
                             </div>
                           )}
 
                           {rep.homework && (
-                            <div className="p-2.5 bg-pink-100/50 rounded-xl border border-pink-200 text-pink-950 flex items-start gap-1.5">
-                              <FileCheck size={14} className="text-pink-600 mt-0.5 shrink-0" />
-                              <div>
-                                <strong className="text-pink-900 text-[11px]">Homework:</strong>
-                                <p className="text-[11px] text-gray-800 whitespace-pre-wrap">{rep.homework}</p>
-                              </div>
+                            <div>
+                              <span className="font-bold text-pink-900 block mb-0.5">
+                                Assigned Homework:
+                              </span>
+                              <p className="text-gray-600 bg-pink-50/30 p-2.5 rounded-xl border border-pink-100/50 whitespace-pre-wrap">
+                                {rep.homework}
+                              </p>
+                            </div>
+                          )}
+
+                          {rep.homework_file_url && (
+                            <div className="pt-1">
+                              <a
+                                href={rep.homework_file_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-pink-50 text-pink-700 border border-pink-200 rounded-xl text-xs font-bold hover:bg-pink-100 transition"
+                              >
+                                <FileCheck size={14} />
+                                <span>View Attachment File</span>
+                              </a>
                             </div>
                           )}
                         </div>
@@ -1233,7 +1330,7 @@ ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCust
       </div>
 
       {/* ========================================================================= */}
-      {/* MODAL: RENEWAL INVOICE & PARENT NOTICE (WITH PDF GENERATION) */}
+      {/* MODAL: RENEWAL INVOICE & PARENT NOTICE */}
       {/* ========================================================================= */}
       {isRenewalModalOpen && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto">
@@ -1327,7 +1424,7 @@ ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCust
                 </div>
               </div>
 
-             <div>
+              <div>
                 <label className="block mb-1 font-semibold text-gray-700">
                   Target Renewal Start Date
                 </label>
@@ -1368,7 +1465,6 @@ ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCust
                 />
               </div>
 
-              {/* Upload Payment QR Image Box */}
               <div className="space-y-1">
                 <label className="block text-[11px] font-semibold text-gray-700">
                   Upload Payment QR Image (Optional)
@@ -1389,7 +1485,6 @@ ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCust
                 </div>
               </div>
 
-              {/* PDF Document Render Container */}
               <div className="space-y-1.5 pt-1">
                 <span className="block text-[11px] font-bold uppercase text-gray-400">
                   Document Preview & Printable Layout:
@@ -1408,7 +1503,6 @@ ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCust
                   }}
                   className="space-y-6 text-xs"
                 >
-                  {/* Clean Modern Header with Portal QR Code on Top */}
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1.5px solid #f472b6", paddingBottom: "16px" }}>
                     <div>
                       <h1 style={{ fontSize: "22px", fontWeight: "800", color: "#831843", margin: 0, letterSpacing: "-0.5px" }}>
@@ -1445,7 +1539,6 @@ ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCust
                     </div>
                   </div>
 
-                  {/* Metadata 2-Column Cards */}
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
                     <div style={{ backgroundColor: "#fdf2f8", padding: "14px 16px", borderRadius: "12px", border: "1px solid #fce7f3" }}>
                       <p style={{ fontSize: "10px", fontWeight: "700", color: "#be185d", textTransform: "uppercase", letterSpacing: "0.5px", margin: 0 }}>
@@ -1472,7 +1565,6 @@ ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCust
                     </div>
                   </div>
 
-                  {/* Table */}
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "11px" }}>
                     <thead>
                       <tr style={{ backgroundColor: "#fdf2f8", borderBottom: "1.5px solid #fbcfe8", color: "#831843", textAlign: "left" }}>
@@ -1516,7 +1608,6 @@ ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCust
                     </tfoot>
                   </table>
 
-                  {/* Footer Notes & Payment QR Code (Unified Box) */}
                   {(renewalCustomNotes || paymentQrPreviewUrl) ? (
                     <div style={{ backgroundColor: "#fdf2f8", border: "1px solid #fce7f3", padding: "12px 14px", borderRadius: "12px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "16px" }}>
                       <div style={{ flex: 1 }}>
@@ -1553,7 +1644,6 @@ ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCust
               </div>
             </div>
 
-            {/* Modal Bottom Actions */}
             <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-pink-100">
               <button
                 type="button"
@@ -1597,7 +1687,9 @@ ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCust
         </div>
       )}
 
+      {/* ========================================================================= */}
       {/* MODAL: LOG LESSON & HOMEWORK */}
+      {/* ========================================================================= */}
       {isReportModalOpen && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto">
           <div className="card bg-white w-full max-w-xl max-h-[90vh] overflow-y-auto p-6 rounded-3xl shadow-xl space-y-4">
@@ -1844,7 +1936,9 @@ ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCust
         </div>
       )}
 
+      {/* ========================================================================= */}
       {/* MODAL: EDIT STUDENT */}
+      {/* ========================================================================= */}
       {isEditModalOpen && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto">
           <div className="card bg-white w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 rounded-3xl shadow-xl space-y-4">
@@ -1951,7 +2045,7 @@ ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCust
                 </div>
               </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
                   <label className="block mb-1 text-xs font-semibold text-gray-700">
                     Contract / Package Start Date
@@ -2096,7 +2190,9 @@ ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCust
         </div>
       )}
 
+      {/* ========================================================================= */}
       {/* MODAL: ADD WEEKLY SCHEDULE */}
+      {/* ========================================================================= */}
       {isScheduleModalOpen && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
           <div className="card bg-white w-full max-w-md p-6 rounded-3xl shadow-xl space-y-4 text-xs">
@@ -2196,6 +2292,85 @@ ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCust
                   className="btn-primary text-xs px-5 py-2 cursor-pointer"
                 >
                   {isSavingSchedule ? "Saving..." : "Save Schedule"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: EDIT WEEKLY SCHEDULE */}
+      {/* ========================================================================= */}
+      {editingSchedule && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white border border-pink-100 rounded-3xl p-6 w-full max-w-sm shadow-xl space-y-4 text-xs">
+            <div className="flex items-center justify-between border-b border-pink-100 pb-3">
+              <h3 className="font-bold text-sm text-pink-950">Edit Class Schedule</h3>
+              <button
+                type="button"
+                onClick={() => setEditingSchedule(null)}
+                className="text-gray-400 hover:text-gray-600 p-1 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateSchedule} className="space-y-3">
+              <div>
+                <label className="block mb-1 font-semibold text-gray-700">Day of Week *</label>
+                <select
+                  className="input w-full text-xs bg-white cursor-pointer"
+                  value={editDayOfWeek}
+                  onChange={(e) => setEditDayOfWeek(e.target.value)}
+                >
+                  {DAYS_OF_WEEK.map((day) => (
+                    <option key={day} value={day}>
+                      {day}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block mb-1 font-semibold text-gray-700">Start Time *</label>
+                  <input
+                    type="time"
+                    required
+                    className="input w-full text-xs font-bold text-pink-950"
+                    value={editStartTime}
+                    onChange={(e) => setEditStartTime(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1 font-semibold text-gray-700">Duration (mins)</label>
+                  <input
+                    type="number"
+                    required
+                    min={15}
+                    max={180}
+                    className="input w-full text-xs font-bold"
+                    value={editDuration}
+                    onChange={(e) => setEditDuration(Number(e.target.value))}
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-pink-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingSchedule(null)}
+                  className="px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 font-semibold text-gray-600 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isUpdatingSchedule}
+                  className="btn-primary text-xs px-5 py-2 cursor-pointer"
+                >
+                  {isUpdatingSchedule ? "Saving..." : "Update Schedule"}
                 </button>
               </div>
             </form>

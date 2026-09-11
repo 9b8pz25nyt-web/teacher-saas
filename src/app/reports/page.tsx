@@ -66,7 +66,7 @@ export default function ReportsPage() {
 
   // New Expense Form State
   const [expenseTitle, setExpenseTitle] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState("Transfer Fees");
+  const [selectedCategory, setSelectedCategory] = useState("Zoom Pro Subscription");
   const [expenseAmountPhp, setExpenseAmountPhp] = useState("");
   const [expenseDate, setExpenseDate] = useState(new Date().toISOString().split("T")[0]);
   const [expenseNotes, setExpenseNotes] = useState("");
@@ -99,41 +99,13 @@ export default function ReportsPage() {
       ] = await Promise.all([
         supabase.from("students").select("*"),
         supabase.from("lessons").select("*"),
-        supabase
-          .from("payments")
-          .select(`
-            id,
-            created_at,
-            payment_date,
-            currency,
-            original_amount,
-            net_amount_php,
-            gross_amount_php,
-            php_equivalent,
-            payment_amount,
-            transfer_fee_php,
-            payment_method,
-            reference_no,
-            status,
-            payment_status,
-            student_id,
-            students (
-              name
-            )
-          `)
-          .order("payment_date", { ascending: false }),
+        supabase.from("payments").select("*"),
         supabase.from("expenses").select("*").order("expense_date", { ascending: false }),
       ]);
 
       if (studentsData) setStudents(studentsData);
       if (lessonsData) setLessons(lessonsData);
-      if (paymentsData) {
-        const formatted = paymentsData.map((p: any) => ({
-          ...p,
-          student_name: p.students?.name || "Private Student",
-        }));
-        setPayments(formatted);
-      }
+      if (paymentsData) setPayments(paymentsData);
       if (expensesData) setExpenses(expensesData);
     } catch (error) {
       console.error("Error loading reports data:", error);
@@ -155,17 +127,16 @@ export default function ReportsPage() {
       ? monthlyTarget * 12
       : monthlyTarget;
 
-  // Filter helper for synchronized date/timeframe
   const matchesFilter = (dateStr?: string) => {
     if (!dateStr) return false;
     const formatted = dateStr.split("T")[0];
-    const currentMonth = selectedDate.substring(0, 7);
-    const currentYear = selectedDate.substring(0, 4);
+    const currentMonth = selectedDate.slice(0, 7);
+    const currentYear = selectedDate.slice(0, 4);
 
     if (timeframe === "daily") return formatted === selectedDate;
     if (timeframe === "monthly") return formatted.startsWith(currentMonth);
     if (timeframe === "annual") return formatted.startsWith(currentYear);
-    
+
     const itemTime = new Date(formatted).getTime();
     const selTime = new Date(selectedDate).getTime();
     return Math.abs(selTime - itemTime) / (1000 * 3600 * 24) <= 7;
@@ -173,46 +144,46 @@ export default function ReportsPage() {
 
   const studentBreakdown = students
     .map((s) => {
-      const studentPayments = payments.filter(
-        (p) =>
-          p.student_id === s.id &&
-          matchesFilter(p.payment_date || p.created_at) &&
-          ((p.payment_status || p.status || "").toLowerCase() === "paid" ||
-            (p.payment_status || p.status || "").toLowerCase() === "completed")
-      );
+      const sId = String(s.id || "").trim().toLowerCase();
 
+      // Match payments by UUID student_id
+      const studentPayments = payments.filter((p) => {
+        const pStudentId = String(p.student_id || "").trim().toLowerCase();
+        return sId !== "" && pStudentId === sId;
+      });
+
+      // Sum Gross Revenue
       const paymentsSum = studentPayments.reduce(
         (acc, curr) =>
           acc +
-          (Number(curr.gross_amount_php) ||
-            Number(curr.php_equivalent) ||
+          (Number(curr.php_equivalent) ||
+            Number(curr.gross_amount_php) ||
             Number(curr.payment_amount) ||
             Number(curr.net_amount_php) ||
             0),
         0
       );
 
-      const studentCreatedDate = s.start_date || s.created_at || "";
-      const studentRateMatches = matchesFilter(studentCreatedDate);
-      const fallbackStudentRate = studentRateMatches
-        ? Number(s.php_equivalent || s.payment_amount || 0)
-        : 0;
-
+      const fallbackStudentRate = Number(s.php_equivalent || s.payment_amount || 0);
       const grossPackagePhp = paymentsSum > 0 ? paymentsSum : fallbackStudentRate;
 
+      // Extract transfer fee directly checking transfer_fee_php and transfer_fee columns from Supabase
       const totalFeesForStudent = studentPayments.reduce(
-        (acc, curr) => acc + (Number(curr.transfer_fee_php) || 0),
+        (acc, curr) =>
+          acc +
+          (Number(curr.transfer_fee_php) ||
+            Number(curr.transfer_fee) ||
+            0),
         0
       );
 
       const netPackagePhp = Math.max(0, grossPackagePhp - totalFeesForStudent);
 
-      const studentLessons = lessons.filter(
-        (l) =>
-          l.student_id === s.id &&
-          matchesFilter(l.lesson_date || l.created_at) &&
-          l.status !== "Cancelled"
-      );
+      const studentLessons = lessons.filter((l) => {
+        const lStudentId = String(l.student_id || "").trim().toLowerCase();
+        return sId !== "" && lStudentId === sId && l.status !== "Cancelled";
+      });
+
       const completedClasses = Number(studentLessons.length || 0);
       const minutesPerClass = Number(s.class_duration || 40);
       const totalHoursTaught = (completedClasses * minutesPerClass) / 60;
@@ -230,7 +201,11 @@ export default function ReportsPage() {
 
   const filteredExpenses = expenses.filter((exp) => matchesFilter(exp.expense_date));
 
-  const totalTelecomSoftwareExpense = filteredExpenses.reduce(
+  const generalSoftwareExpenses = filteredExpenses.filter(
+    (exp) => (exp.category || "").toLowerCase() !== "transfer fees"
+  );
+
+  const totalTelecomSoftwareExpense = generalSoftwareExpenses.reduce(
     (acc, curr) => acc + (Number(curr.amount_php) || 0),
     0
   );
@@ -289,7 +264,7 @@ export default function ReportsPage() {
 
       setShowExpenseModal(false);
       setExpenseTitle("");
-      setSelectedCategory("Transfer Fees");
+      setSelectedCategory("Zoom Pro Subscription");
       setExpenseAmountPhp("");
       setExpenseNotes("");
       fetchData();
@@ -643,11 +618,16 @@ export default function ReportsPage() {
                         <td className="p-4 font-semibold text-gray-700">
                           ₱{s.grossPackagePhp.toLocaleString()} PHP
                         </td>
-                        <td className="p-4 font-medium text-rose-600">
-                          {s.totalFeesForStudent > 0
-                            ? `-₱${s.totalFeesForStudent.toLocaleString()} PHP`
-                            : "₱0"}
+
+                        {/* Read-Only Transfer / Bank Fee Column */}
+                        <td className="p-4">
+                          <span className="font-medium text-rose-600">
+                            {s.totalFeesForStudent > 0
+                              ? `-₱${s.totalFeesForStudent.toLocaleString()} PHP`
+                              : "₱0"}
+                          </span>
                         </td>
+
                         <td className="p-4 font-bold text-pink-600">
                           ₱{s.netPackagePhp.toLocaleString()} PHP
                         </td>
@@ -801,6 +781,7 @@ export default function ReportsPage() {
               <JournalReport
                 payments={payments}
                 students={students}
+                expenses={expenses}
                 selectedDate={selectedDate}
                 timeframe={timeframe}
               />
@@ -835,7 +816,6 @@ export default function ReportsPage() {
                   value={selectedCategory}
                   onChange={(e) => setSelectedCategory(e.target.value)}
                 >
-                  <option value="Transfer Fees">Transfer Fees / Remittance Deductions</option>
                   <option value="Zoom Pro Subscription">Zoom Pro Subscription</option>
                   <option value="PLDT / Broadband Internet">PLDT / Broadband Internet</option>
                   <option value="Mobile Data / Hotspot">Mobile Data / Hotspot</option>
@@ -1046,29 +1026,33 @@ export default function ReportsPage() {
                 <div style={{ marginTop: "16px" }}>
                   <div style={{ borderBottom: "1px solid #000000", paddingBottom: "4px", marginBottom: "8px" }}>
                     <span style={{ fontSize: "11px", fontWeight: "800", color: "#000000", textTransform: "uppercase" }}>
-                      Less: Operating Disbursements & Bank Fees
+                      Less: Deductions & Operating Expenses
                     </span>
                   </div>
 
                   <div style={{ paddingLeft: "8px", fontSize: "10.5px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
-                      <span style={{ color: "#222222", fontWeight: "600" }}>International Remittance & Bank Transfer Fees</span>
+                      <span style={{ color: "#222222", fontWeight: "600" }}>
+                        International Remittance & Payment Gateway Fees
+                      </span>
                       <span style={{ color: "#222222", fontFamily: "monospace", fontWeight: "700" }}>
                         (PHP {Number(totalTransferFees || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
                       </span>
                     </div>
 
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
-                      <span style={{ color: "#222222", fontWeight: "600" }}>Bank & Transfer Fees (Recorded Expenses)</span>
+                      <span style={{ color: "#222222", fontWeight: "600" }}>
+                        General Operating Overhead (Internet, Subscriptions & Software)
+                      </span>
                       <span style={{ color: "#222222", fontFamily: "monospace", fontWeight: "700" }}>
                         (PHP {Number(totalTelecomSoftwareExpense || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
                       </span>
                     </div>
 
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid #000000", paddingTop: "6px", marginTop: "6px", fontSize: "11px" }}>
-                      <span style={{ fontWeight: "800", color: "#000000" }}>Total Cash Disbursements</span>
+                      <span style={{ fontWeight: "800", color: "#000000" }}>Total Operating Deductions</span>
                       <span style={{ fontWeight: "800", color: "#000000", fontFamily: "monospace" }}>
-                        (PHP {Number(totalOperatingExpenses || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
+                        (PHP {Number((Number(totalTransferFees || 0) + Number(totalTelecomSoftwareExpense || 0))).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
                       </span>
                     </div>
                   </div>
