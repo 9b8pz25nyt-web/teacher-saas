@@ -201,16 +201,22 @@ export default function DashboardPage() {
         );
 
         if (matchesSchedule) {
-          const lessonRecord = recordedLessons.find(
-            (l) => l.student_id === student.id && l.lesson_date?.substring(0, 10) === dateString
-          );
-          const isCancelled = lessonRecord?.status === "Cancelled";
+       const lessonRecord = recordedLessons.find(
+  (l) => l.student_id === student.id && l.lesson_date?.substring(0, 10) === dateString
+);
 
-          dates.push(dateString);
+// Absences and Cancellations will NOT consume package quota
+const isQuotaExempt = 
+  lessonRecord?.status === "Cancelled" || 
+  lessonRecord?.status === "Absent" ||
+  lessonRecord?.status === "absent";
 
-          if (!isCancelled) {
-            countedSlots++;
-          }
+dates.push(dateString);
+
+// Only increment counted slots if the lesson was completed or not marked exempt
+if (!isQuotaExempt) {
+  countedSlots++;
+}
         }
 
         curr.setDate(curr.getDate() + 1);
