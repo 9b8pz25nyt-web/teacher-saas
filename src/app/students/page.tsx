@@ -110,11 +110,11 @@ export default function StudentsPage() {
       setTeacherAlias(profile.teacher_aliases[0]);
     }
 
-    const { data: studentList, error } = await supabase
+ const { data: studentList, error } = await supabase
       .from("students")
       .select("*")
       .eq("teacher_id", user.id)
-      .order("created_at", { ascending: false });
+      .order("name", { ascending: true });
 
     if (!error && studentList) {
       setStudents(studentList);
