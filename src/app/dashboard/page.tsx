@@ -18,6 +18,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [isCleaning, setIsCleaning] = useState(false);
   const [payments, setPayments] = useState<any[]>([]);
+  const [classesFilter, setClassesFilter] = useState<"weekly" | "monthly" | "yearly">("monthly");
   const [hoursFilter, setHoursFilter] = useState<"daily" | "monthly" | "yearly">("monthly");
   const [incomeFilter, setIncomeFilter] = useState<"daily" | "monthly" | "yearly">("monthly");
 
@@ -277,7 +278,34 @@ if (!isQuotaExempt) {
       count: filtered.length,
     };
   })();
+// Total Classes Count Calculation based on Recorded Lessons
+  const calculatedClasses = (() => {
+    const targetMonthStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}`;
+    const targetYearStr = `${selectedYear}`;
 
+    // Get ISO date bounds for current week
+    const now = new Date();
+    const firstDayOfWeek = new Date(now.setDate(now.getDate() - now.getDay()));
+    const firstDayStr = firstDayOfWeek.toISOString().substring(0, 10);
+
+    const filtered = recordedLessons.filter((l) => {
+      if (!l.lesson_date) return false;
+      const statusLower = String(l.status || "").toLowerCase();
+      if (statusLower === "cancelled") return false;
+
+      const lDate = l.lesson_date.substring(0, 10);
+
+      if (classesFilter === "weekly") {
+        return lDate >= firstDayStr;
+      }
+      if (classesFilter === "monthly") {
+        return lDate.startsWith(targetMonthStr);
+      }
+      return lDate.startsWith(targetYearStr);
+    });
+
+    return filtered.length;
+  })();
   return (
     <div className="flex flex-col min-h-screen bg-gray-50/50">
       {/* Pass the students list directly to the banner */}
@@ -307,9 +335,9 @@ if (!isQuotaExempt) {
           </div>
         </div>
 
-        {/* 1. KPI Metrics Row */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-          {/* Card 1: Today's Class Overview */}
+       {/* 1. KPI Metrics Row */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+          {/* Card 1: Today's Schedule Overview */}
           <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs flex flex-col justify-between space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
@@ -329,7 +357,33 @@ if (!isQuotaExempt) {
             </div>
           </div>
 
-          {/* Card 2: Teaching Hours */}
+          {/* Card 2: Total Classes Conducted (Dropdown) */}
+          <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs flex flex-col justify-between space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                Total Classes
+              </span>
+              <select
+                value={classesFilter}
+                onChange={(e) => setClassesFilter(e.target.value as any)}
+                className="text-xs font-bold text-pink-700 bg-pink-50 border border-pink-200 rounded-xl px-2.5 py-1 focus:outline-none cursor-pointer"
+              >
+                <option value="weekly">This Week</option>
+                <option value="monthly">This Month</option>
+                <option value="yearly">This Year</option>
+              </select>
+            </div>
+            <div>
+              <p className="text-3xl font-extrabold text-pink-950">
+                {calculatedClasses} <span className="text-base font-semibold text-gray-500">Lessons</span>
+              </p>
+              <p className="text-xs text-gray-400 mt-1">
+                Completed or recorded slots
+              </p>
+            </div>
+          </div>
+
+          {/* Card 3: Teaching Hours */}
           <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs flex flex-col justify-between space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
@@ -355,7 +409,7 @@ if (!isQuotaExempt) {
             </div>
           </div>
 
-          {/* Card 3: Total Income */}
+          {/* Card 4: Total Income */}
           <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs flex flex-col justify-between space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
