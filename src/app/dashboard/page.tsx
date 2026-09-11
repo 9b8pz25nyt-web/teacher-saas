@@ -612,9 +612,10 @@ export default function DashboardPage() {
                       })
                       .map((sched) => {
                         const matchingLesson = recordedLessons.find(
-                          (l) => l.student_id === sched.student_id && l.lesson_date?.substring(0, 10) === dateString
-                        );
-                        const currentEventStatus = matchingLesson ? matchingLesson.status : (sched.status || "Scheduled");
+  (l) => l.student_id === sched.student_id && l.lesson_date?.substring(0, 10) === dateString
+);
+// Only use matching lesson status for this specific date; fallback strictly to "Scheduled"
+const currentEventStatus = matchingLesson ? matchingLesson.status : "Scheduled";
 
                         return (
                           <ClassEvent
@@ -630,25 +631,25 @@ export default function DashboardPage() {
                             topic={sched.topic || "Regular Class"}
                             onStatusUpdate={fetchDashboardData}
                             onOpenModal={(statusPreset = "absent") => {
-                              if (statusPreset === "present") {
-                                setSelectedLesson({
-                                  eventId: sched.id,
-                                  studentId: sched.student_id,
-                                  studentName: sched.students?.name || "Student",
-                                  type: "regular",
-                                  dateString
-                                });
-                              } else {
-                                setSelectedAttendance({
-                                  eventId: sched.id,
-                                  studentId: sched.student_id,
-                                  studentName: sched.students?.name || "Student",
-                                  status: statusPreset,
-                                  eventType: "regular",
-                                  dateString
-                                });
-                              }
-                            }}
+  if (statusPreset === "present") {
+    setSelectedLesson({
+      eventId: sched.id,
+      studentId: sched.student_id,
+      studentName: sched.students?.name || "Student",
+      type: "regular",
+      dateString // 👈 Ensure dateString is passed here
+    });
+  } else {
+    setSelectedAttendance({
+      eventId: sched.id,
+      studentId: sched.student_id,
+      studentName: sched.students?.name || "Student",
+      status: statusPreset,
+      eventType: "regular",
+      dateString
+    });
+  }
+}}
                           />
                         );
                       })}
