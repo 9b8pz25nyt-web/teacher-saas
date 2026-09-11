@@ -459,8 +459,7 @@ export default function StudentsPage() {
                 </div>
               </div>
 
-            <div className="grid grid-cols-2 gap-3">
-             <div className="grid grid-cols-2 gap-3">
+         <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block mb-1 text-xs font-semibold text-gray-700">
                     Contract Start Date
@@ -487,18 +486,7 @@ export default function StudentsPage() {
                     />
                   </div>
                 </div>
-                <div>
-                  <label className="block mb-1 text-xs font-semibold text-gray-700">
-                    Contract End Date (Auto-calculated)
-                  </label>
-                  <input
-                    type="date"
-                    className="input w-full text-xs bg-gray-50"
-                    value={contractEndDate}
-                    onChange={(e) => setContractEndDate(e.target.value)}
-                  />
-                </div>
-              </div>
+
                 <div>
                   <label className="block mb-1 text-xs font-semibold text-gray-700">
                     Contract End Date (Auto-calculated)
