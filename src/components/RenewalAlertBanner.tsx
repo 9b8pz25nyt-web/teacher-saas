@@ -14,8 +14,16 @@ export default function RenewalAlertBanner({ students: propStudents }: RenewalAl
   useEffect(() => {
     async function loadExpiring() {
       let list = propStudents;
-      if (!list || list.length === 0) {
-        const { data } = await supabase.from("students").select("*");
+
+      // If no students array was passed in props, fetch scoped to current user
+      if (list === undefined) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const { data } = await supabase
+          .from("students")
+          .select("*")
+          .eq("user_id", user.id); // 👈 Scoped strictly to current user
         list = data || [];
       }
 
