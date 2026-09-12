@@ -27,6 +27,7 @@ export default function StudentPortalPage({
   const [student, setStudent] = useState<any>(null);
   const [schedules, setSchedules] = useState<any[]>([]);
   const [reports, setReports] = useState<any[]>([]);
+  const [lessons, setLessons] = useState<any[]>([]);
   const [studentBooks, setStudentBooks] = useState<any[]>([]);
   const [allBooks, setAllBooks] = useState<any[]>([]);
   const [parentRequestText, setParentRequestText] = useState("");
@@ -50,7 +51,7 @@ export default function StudentPortalPage({
     setUploadingReportId(reportId);
 
     try {
-      const fileExt = file.name.split('.').pop();
+      const fileExt = file.name.split(".").pop();
       const fileName = `submissions/${student.id}/${reportId}-${Date.now()}.${fileExt}`;
 
       const { error: uploadError } = await supabase.storage
@@ -112,7 +113,13 @@ export default function StudentPortalPage({
         setStudent(studentData);
         setParentRequestText(studentData.parent_requests || "");
 
-        const [{ data: scheds }, { data: repList }, { data: studentBks }, { data: booksData }] = await Promise.all([
+        const [
+          { data: scheds },
+          { data: repList },
+          { data: studentBks },
+          { data: booksData },
+          { data: lessonList },
+        ] = await Promise.all([
           supabase.from("schedules").select("*").eq("student_id", studentData.id),
           supabase
             .from("class_reports")
@@ -121,16 +128,21 @@ export default function StudentPortalPage({
             .order("report_date", { ascending: false }),
           supabase.from("student_books").select("*").eq("student_id", studentData.id),
           supabase.from("books").select("*"),
+          supabase
+            .from("lessons")
+            .select("*")
+            .eq("student_id", studentData.id)
+            .order("lesson_date", { ascending: false }),
         ]);
 
         if (scheds) setSchedules(scheds);
         if (repList) {
           setReports(repList);
-          // Expand latest lesson report by default
           if (repList.length > 0) {
             setExpandedReportIds([repList[0].id]);
           }
         }
+        if (lessonList) setLessons(lessonList);
         if (studentBks) setStudentBooks(studentBks);
         if (booksData) setAllBooks(booksData);
       } catch (err) {
@@ -172,7 +184,7 @@ export default function StudentPortalPage({
     );
   }
 
-  const dynamicCompletedClasses = reports ? reports.length : 0;
+  const dynamicCompletedClasses = Math.max(reports.length, lessons.length, Number(student.classes_completed || 0));
   const totalIncludedClasses = Number(student.classes_included || 0) + Number(student.free_classes || 0);
   const remainingClasses = Math.max(totalIncludedClasses - dynamicCompletedClasses, 0);
   const progressPercentage = Math.min(
@@ -243,7 +255,7 @@ export default function StudentPortalPage({
                   <div key={s.id} className="flex flex-col p-2.5 bg-pink-50/60 rounded-xl border border-pink-200 gap-0.5">
                     <span className="font-bold text-gray-800">{s.day_of_week}</span>
                     <span className="text-pink-700 font-semibold text-[11px]">
-                      {s.start_time || s.time || s.class_time || s.schedule_time || "Time TBA"} {s.duration ? `(${s.duration})` : ""}
+                      {s.start_time || s.time || s.class_time || s.schedule_time || "Time TBA"} {s.duration ? `(${s.duration}m)` : ""}
                     </span>
                   </div>
                 ))}
@@ -289,7 +301,7 @@ export default function StudentPortalPage({
 
         {/* Right Main Area (Cols 2-4) */}
         <div className="lg:col-span-3 space-y-6">
-          {/* Pending Homework Notification Banner */}
+          {/* Action Required Banner */}
           {pendingHomeworkCount > 0 && (
             <div className="bg-gradient-to-r from-rose-50 to-pink-50 border-2 border-rose-300 text-rose-950 rounded-3xl p-6 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
               <div>
@@ -327,9 +339,27 @@ export default function StudentPortalPage({
                   
                   let bookProgress = 0;
                   if (book) {
-                    const bookReports = reports.filter((r) => r.book_id === book.id);
                     if (isPageBased) {
-                      const maxPageReached = bookReports.reduce((max: number, r: any) => Math.max(max, r.end_page || 0), 0);
+                      const reportMax = reports
+                        .filter((r) => r.book_id === book.id)
+                        .reduce((max: number, r: any) => Math.max(max, r.end_page || 0), 0);
+
+                      let lessonMax = 0;
+                      lessons.forEach((l) => {
+                        if (Array.isArray(l.book_progress)) {
+                          l.book_progress.forEach((bp: any) => {
+                            if (bp.book_id === book.id) {
+                              const ep = Number(bp.end_page) || 0;
+                              if (ep > lessonMax) lessonMax = ep;
+                            }
+                          });
+                        } else if (l.book_id === book.id) {
+                          const ep = Number(l.end_page) || 0;
+                          if (ep > lessonMax) lessonMax = ep;
+                        }
+                      });
+
+                      const maxPageReached = Math.max(reportMax, lessonMax);
                       const totalPages = book.total_pages || 1;
                       bookProgress = Math.min(100, Math.round((maxPageReached / totalPages) * 100));
                     } else {
@@ -357,7 +387,7 @@ export default function StudentPortalPage({
             </div>
           </div>
 
-          {/* Daily Class Reports with Accordion Dropdown */}
+          {/* Daily Class Reports & Lessons */}
           <div id="lesson-history" className="bg-white border-2 border-pink-300 rounded-3xl p-6 shadow-xs space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="font-bold text-gray-900 text-sm flex items-center gap-2">
@@ -365,17 +395,18 @@ export default function StudentPortalPage({
                 <span>Daily Lesson History & Teacher Feedback</span>
               </h3>
               <span className="text-[11px] font-bold text-pink-700 bg-pink-100 px-2.5 py-0.5 rounded-lg border border-pink-300">
-                {reports.length} {reports.length === 1 ? "Session" : "Sessions"} Logged
+                {reports.length + lessons.length} Sessions Logged
               </span>
             </div>
 
-            {reports.length === 0 ? (
+            {reports.length === 0 && lessons.length === 0 ? (
               <div className="p-8 text-center bg-pink-50/40 rounded-2xl border-2 border-pink-200">
                 <p className="text-xs text-gray-500 italic">No daily lesson reports recorded yet.</p>
                 <p className="text-[11px] text-gray-400 mt-1">Lesson notes, new vocabulary, and homework will appear here after class.</p>
               </div>
             ) : (
               <div className="space-y-3">
+                {/* Render Class Reports */}
                 {reports.map((rep, idx) => {
                   const isExpanded = expandedReportIds.includes(rep.id);
 
@@ -384,7 +415,6 @@ export default function StudentPortalPage({
                       key={rep.id || idx}
                       className="bg-pink-50/40 rounded-2xl border-2 border-pink-200 text-xs transition-all overflow-hidden"
                     >
-                      {/* Accordion Toggle Bar */}
                       <div
                         onClick={() => toggleExpandReport(rep.id)}
                         className="p-4 flex items-center justify-between cursor-pointer hover:bg-pink-100/50 select-none transition"
@@ -397,7 +427,7 @@ export default function StudentPortalPage({
                             {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                           </button>
                           <span className="px-2 py-0.5 bg-pink-600 text-white text-[10px] font-extrabold rounded-md uppercase">
-                            Lesson
+                            Report
                           </span>
                           <h4 className="font-bold text-pink-950 text-sm">{rep.lesson_title || rep.title}</h4>
                         </div>
@@ -407,10 +437,8 @@ export default function StudentPortalPage({
                         </span>
                       </div>
 
-                      {/* Collapsible Content */}
                       {isExpanded && (
                         <div className="px-5 pb-5 pt-2 border-t border-pink-200 space-y-3.5 bg-white/60">
-                          {/* Vocabulary & Target Patterns */}
                           {rep.vocabulary && (
                             <div className="space-y-1">
                               <span className="font-bold text-gray-900 flex items-center gap-1.5 text-[11px]">
@@ -422,7 +450,6 @@ export default function StudentPortalPage({
                             </div>
                           )}
 
-                          {/* Feedback: Strengths & Improvement */}
                           {(rep.strengths || rep.improvements) && (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                               {rep.strengths && (
@@ -445,7 +472,6 @@ export default function StudentPortalPage({
                             </div>
                           )}
 
-                          {/* Homework Section */}
                           {(rep.homework || rep.homework_file_url) && (
                             <div className="p-4 bg-pink-100/60 rounded-2xl border-2 border-pink-300 text-pink-950 space-y-3">
                               <div className="flex items-center justify-between">
@@ -530,6 +556,42 @@ export default function StudentPortalPage({
                     </div>
                   );
                 })}
+
+                {/* Render Lessons */}
+                {lessons.map((les) => (
+                  <div key={les.id} className="p-4 bg-pink-50/40 rounded-2xl border-2 border-pink-200 text-xs space-y-2">
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center gap-2">
+                        <span className="px-2 py-0.5 bg-pink-600 text-white text-[10px] font-extrabold rounded-md uppercase">
+                          Lesson
+                        </span>
+                        <h4 className="font-bold text-pink-950 text-sm">{les.title || "Lesson Log"}</h4>
+                      </div>
+                      <span className="text-gray-500 text-[11px] flex items-center gap-1 font-mono font-semibold">
+                        <Calendar size={12} /> {les.lesson_date?.substring(0, 10)}
+                      </span>
+                    </div>
+
+                    {Array.isArray(les.book_progress) && les.book_progress.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        {les.book_progress.map((bp: any, idx: number) => {
+                          const matchedBook = allBooks.find((b) => b.id === bp.book_id);
+                          return (
+                            <span key={idx} className="text-[10px] font-bold text-pink-800 bg-pink-100/70 px-2.5 py-0.5 rounded-lg border border-pink-300">
+                              📖 {matchedBook?.title || "Book"}: p. {bp.start_page || 1} - {bp.end_page}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {les.description && (
+                      <p className="text-xs text-gray-700 italic bg-white p-2.5 rounded-xl border border-pink-200 whitespace-pre-wrap">
+                        {les.description}
+                      </p>
+                    )}
+                  </div>
+                ))}
               </div>
             )}
           </div>
