@@ -150,6 +150,7 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
 .react-datepicker__navigation-icon::before {
   border-color: #db2777 !important;
 }
+
 /* Custom Pink Theme for Native Date/Time Pickers */
 input[type="datetime-local"],
 input[type="date"],
@@ -162,6 +163,7 @@ input[type="time"] {
   cursor: pointer;
   filter: invert(27%) sepia(91%) saturate(2352%) hue-rotate(312deg) brightness(92%) contrast(95%);
 }
+
 /* Force Chrome/Safari Date-Time Popup Selection Colors */
 input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   cursor: pointer;
@@ -173,12 +175,14 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   background-color: #fbcfe8 !important; /* pink-200 */
   color: #831843 !important; /* pink-900 */
 }
+
 .react-datepicker__day--selected,
 .react-datepicker__time-container .react-datepicker__time .react-datepicker__time-box ul.react-datepicker__time-list li.react-datepicker__time-list-item--selected {
   background-color: #db2777 !important; /* Tailwind pink-600 */
   color: white !important;
   border-radius: 0.5rem;
 }
+
 /* Custom Pink Styling for React DatePicker */
 .react-datepicker {
   border-color: #fbcfe8 !important; /* pink-200 */
@@ -212,6 +216,7 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   background-color: #fce7f3 !important; /* pink-100 */
   border-radius: 0.5rem !important;
 }
+
 /* Custom Pink Theme for Date Picker Popup */
 input[type="date"] {
   accent-color: #db2777; /* Tailwind pink-600 */
@@ -251,4 +256,67 @@ input[type="date"] {
 input[type="date"]::-webkit-calendar-picker-indicator {
   cursor: pointer;
   filter: invert(30%) sepia(85%) saturate(1800%) hue-rotate(305deg) brightness(95%) contrast(95%);
+}
+
+/* ==========================================================================
+   HIGH-RESOLUTION PRINT RULES FOR BIR GENERAL JOURNAL / REPORTS
+   ========================================================================== */
+@media print {
+  /* 1. Set Page Size & Zero Page Margins */
+  @page {
+    size: A4 landscape;
+    margin: 0 !important;
+  }
+
+  /* 2. Hide Sidebar, Navigation, Buttons & Non-Print Layout Elements */
+  aside,
+  nav,
+  header,
+  .no-print,
+  button {
+    display: none !important;
+  }
+
+  /* 3. Hide all default body elements */
+  body * {
+    visibility: hidden;
+  }
+
+  /* 4. Display and stretch ONLY the Printable Journal Area */
+  .printable-journal-area,
+  .printable-journal-area * {
+    visibility: visible;
+  }
+
+  .printable-journal-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100vw !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 12px !important;
+    background: white !important;
+    box-sizing: border-box !important;
+  }
+
+  /* 5. Prevent Multi-Page Table Row Splitting */
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    page-break-inside: auto;
+  }
+
+  tr {
+    page-break-inside: avoid !important;
+    page-break-after: auto;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  tfoot {
+    display: table-footer-group;
+  }
 }

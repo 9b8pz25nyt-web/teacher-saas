@@ -777,12 +777,18 @@ ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCust
   const combinedTotalClasses =
     Number(student?.classes_included || 0) + Number(student?.free_classes || 0);
 
-  const dynamicCompletedCount = reports ? reports.length : 0;
-  const dynamicRemainingCount = Math.max(combinedTotalClasses - dynamicCompletedCount, 0);
-  const dynamicProgressPercent = Math.min(
-    Math.round((dynamicCompletedCount / (combinedTotalClasses || 1)) * 100),
-    100
-  );
+ // Inside StudentDetailsPage component:
+
+// Fallback to student.classes_completed if reports array is empty but stored count exists
+const dynamicCompletedCount = reports.length > 0 
+  ? reports.length 
+  : Number(student?.classes_completed || 0);
+
+const dynamicRemainingCount = Math.max(combinedTotalClasses - dynamicCompletedCount, 0);
+const dynamicProgressPercent = Math.min(
+  Math.round((dynamicCompletedCount / (combinedTotalClasses || 1)) * 100),
+  100
+);
 
   const totalRegularClasses = Number(student?.classes_included || 0);
   const totalFreeClasses = Number(student?.free_classes || 0);
