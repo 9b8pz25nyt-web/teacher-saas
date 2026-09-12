@@ -123,6 +123,11 @@ export default function StudentDetailsPage({
   const [selectedChapterIndex, setSelectedChapterIndex] = useState<string>("");
   const [isChapterComplete, setIsChapterComplete] = useState(false);
 
+  // Duration State
+  const [durationSelect, setDurationSelect] = useState<string>("40");
+  const [customDuration, setCustomDuration] = useState<number>(40);
+  const finalDuration = durationSelect === "custom" ? Number(customDuration) : Number(durationSelect);
+
   // Edit Schedule Modal State
   const [editingSchedule, setEditingSchedule] = useState<any>(null);
   const [editDayOfWeek, setEditDayOfWeek] = useState("");
@@ -137,40 +142,36 @@ export default function StudentDetailsPage({
     setEditDuration(Number(sched.duration_minutes || sched.duration || 40));
   }
 
-async function handleUpdateSchedule(e: React.FormEvent) {
-  e.preventDefault();
-  if (!editingSchedule) return;
+  async function handleUpdateSchedule(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingSchedule) return;
 
-  setIsUpdatingSchedule(true);
+    setIsUpdatingSchedule(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
 
-  try {
-    const { data, error } = await supabase
-      .from("schedules")
-      .update({
-        day_of_week: editDayOfWeek,
-        schedule_time: editStartTime, // 👈 Target exact column name from your SQL schema
-        duration: editDuration,
-      })
-      .eq("id", editingSchedule.id)
-      .select();
+      const { error } = await supabase
+        .from("schedules")
+        .update({
+          day_of_week: editDayOfWeek,
+          schedule_time: editStartTime,
+          duration: editDuration,
+        })
+        .eq("id", editingSchedule.id)
+        .eq("user_id", user.id);
 
-    if (error) throw error;
+      if (error) throw error;
 
-    setEditingSchedule(null);
-
-    // Refresh page data to reflect updated schedule instantly
-    if (typeof fetchStudentData === "function") {
+      setEditingSchedule(null);
       await fetchStudentData();
-    } else {
-      window.location.reload();
+    } catch (err: any) {
+      console.error("Error updating schedule:", err);
+      alert("Failed to update schedule: " + err.message);
+    } finally {
+      setIsUpdatingSchedule(false);
     }
-  } catch (err: any) {
-    console.error("Error updating schedule:", err);
-    alert("Failed to update schedule: " + err.message);
-  } finally {
-    setIsUpdatingSchedule(false);
   }
-}
 
   // Schedule Modal State
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
@@ -246,6 +247,7 @@ async function handleUpdateSchedule(e: React.FormEvent) {
         .from("students")
         .select("*")
         .eq("id", studentId)
+        .eq("user_id", user.id)
         .single();
 
       if (error || !studentData) {
@@ -314,12 +316,6 @@ async function handleUpdateSchedule(e: React.FormEvent) {
         setDurationSelect("custom");
         setCustomDuration(Number(durationVal));
       }
-      // 👆 END OF ADDED BLOCK 👆
-
-      setPaymentStatus(studentData.payment_status || "Active");
-      setStartDate(studentData.start_date || studentData.contract_start_date || "");
-      setEndDate(studentData.end_date || studentData.contract_end_date || "");
-      setNotes(studentData.notes || "");
 
       setPaymentStatus(studentData.payment_status || "Active");
       setStartDate(studentData.start_date || studentData.contract_start_date || "");
@@ -333,18 +329,20 @@ async function handleUpdateSchedule(e: React.FormEvent) {
         { data: studentBks },
         { data: paymentList },
       ] = await Promise.all([
-        supabase.from("schedules").select("*").eq("student_id", studentId),
-        supabase.from("books").select("*").order("title", { ascending: true }),
+        supabase.from("schedules").select("*").eq("student_id", studentId).eq("user_id", user.id),
+        supabase.from("books").select("*").eq("user_id", user.id).order("title", { ascending: true }),
         supabase
           .from("class_reports")
           .select("*")
           .eq("student_id", studentId)
+          .eq("user_id", user.id)
           .order("report_date", { ascending: false }),
         supabase.from("student_books").select("*").eq("student_id", studentId),
         supabase
           .from("payments")
           .select("*")
-          .or(`student_id.eq.${studentId},student_name.ilike.%${studentData.name.trim()}%`)
+          .eq("student_id", studentId)
+          .eq("user_id", user.id)
           .order("created_at", { ascending: false })
           .limit(1),
       ]);
@@ -399,8 +397,11 @@ async function handleUpdateSchedule(e: React.FormEvent) {
     }
   }
 
- async function handleUpdateStudent() {
+  async function handleUpdateStudent() {
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
       const { error } = await supabase
         .from("students")
         .update({
@@ -420,14 +421,15 @@ async function handleUpdateSchedule(e: React.FormEvent) {
           classes_included: Number(classesIncluded) || 0,
           free_classes: Number(freeClasses) || 0,
           classes_completed: Number(classesCompleted) || 0,
-          class_duration: finalDuration, // 👈 Insert finalDuration here
+          class_duration: finalDuration,
           payment_status: paymentStatus,
           start_date: startDate || null,
           contract_start_date: startDate || null,
           end_date: endDate || null,
           notes: notes.trim() || null,
         })
-        .eq("id", studentId);
+        .eq("id", studentId)
+        .eq("user_id", user.id);
 
       if (error) {
         alert(error.message);
@@ -451,56 +453,59 @@ async function handleUpdateSchedule(e: React.FormEvent) {
     }
   }
 
- async function handleAddSchedule(e: React.FormEvent) {
-  e.preventDefault();
-  if (scheduleDays.length === 0) {
-    alert("Please select at least one day of the week.");
-    return;
-  }
-
-  setIsSavingSchedule(true);
-
-  try {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    // Map through selected days and insert using your exact Supabase column names
-    const insertPayload = scheduleDays.map((day) => ({
-      student_id: studentId, // or student.id
-      teacher_id: user?.id,
-      day_of_week: day,
-      schedule_time: scheduleTime, // 👈 Uses 'schedule_time' instead of 'start_time'
-      duration: Number(scheduleDuration), // 👈 Uses 'duration' instead of 'duration_minutes'
-      topic: scheduleTopic || "Regular Class",
-    }));
-
-    const { error } = await supabase.from("schedules").insert(insertPayload);
-
-    if (error) throw error;
-
-    setIsScheduleModalOpen(false);
-    setScheduleDays([]);
-    setScheduleTopic("");
-    
-    // Refresh page data to display the new schedule slots
-    if (typeof fetchStudentData === "function") {
-      await fetchStudentData();
-    } else {
-      window.location.reload();
+  async function handleAddSchedule(e: React.FormEvent) {
+    e.preventDefault();
+    if (scheduleDays.length === 0) {
+      alert("Please select at least one day of the week.");
+      return;
     }
-  } catch (err: any) {
-    console.error("Error adding schedule:", err);
-    alert("Failed to add schedule: " + err.message);
-  } finally {
-    setIsSavingSchedule(false);
+
+    setIsSavingSchedule(true);
+
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const insertPayload = scheduleDays.map((day) => ({
+        user_id: user.id, // 👈 Scoped to user_id for multi-tenant isolation
+        student_id: studentId,
+        day_of_week: day,
+        schedule_time: scheduleTime,
+        duration: Number(scheduleDuration),
+        topic: scheduleTopic || "Regular Class",
+      }));
+
+      const { error } = await supabase.from("schedules").insert(insertPayload);
+
+      if (error) throw error;
+
+      setIsScheduleModalOpen(false);
+      setScheduleDays([]);
+      setScheduleTopic("");
+
+      await fetchStudentData();
+    } catch (err: any) {
+      console.error("Error adding schedule:", err);
+      alert("Failed to add schedule: " + err.message);
+    } finally {
+      setIsSavingSchedule(false);
+    }
   }
-}
 
   async function handleDeleteSchedule(scheduleId: string) {
     if (!confirm("Are you sure you want to delete this schedule slot?")) return;
     try {
-      const { error } = await supabase.from("schedules").delete().eq("id", scheduleId);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { error } = await supabase
+        .from("schedules")
+        .delete()
+        .eq("id", scheduleId)
+        .eq("user_id", user.id);
+
       if (error) throw error;
       fetchStudentData();
     } catch (err: any) {
@@ -518,6 +523,9 @@ async function handleUpdateSchedule(e: React.FormEvent) {
     }
 
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
       if (homeworkFileUrl) {
         const parts = homeworkFileUrl.split("/homework-files/");
         if (parts[1]) {
@@ -527,14 +535,20 @@ async function handleUpdateSchedule(e: React.FormEvent) {
         }
       }
 
-      const { error } = await supabase.from("class_reports").delete().eq("id", reportId);
+      const { error } = await supabase
+        .from("class_reports")
+        .delete()
+        .eq("id", reportId)
+        .eq("user_id", user.id);
+
       if (error) throw error;
 
       const newCompletedCount = Math.max((student?.classes_completed || 1) - 1, 0);
       await supabase
         .from("students")
         .update({ classes_completed: newCompletedCount })
-        .eq("id", studentId);
+        .eq("id", studentId)
+        .eq("user_id", user.id);
 
       fetchStudentData();
     } catch (err: any) {
@@ -552,6 +566,8 @@ async function handleUpdateSchedule(e: React.FormEvent) {
       const {
         data: { user },
       } = await supabase.auth.getUser();
+      if (!user) return;
+
       let uploadedFileUrl: string | null = null;
 
       if (homeworkFile) {
@@ -574,6 +590,7 @@ async function handleUpdateSchedule(e: React.FormEvent) {
       const validBookId = reportBookId && reportBookId.trim() !== "" ? reportBookId : null;
 
       const payload: any = {
+        user_id: user.id, // 👈 Scoped to user_id
         lesson_title: lessonTitle.trim(),
         title: lessonTitle.trim(),
         report_date: reportDate,
@@ -601,12 +618,12 @@ async function handleUpdateSchedule(e: React.FormEvent) {
         const { error: updateError } = await supabase
           .from("class_reports")
           .update(payload)
-          .eq("id", editingReportId);
+          .eq("id", editingReportId)
+          .eq("user_id", user.id);
 
         if (updateError) throw updateError;
       } else {
         payload.student_id = studentId;
-        payload.teacher_id = user?.id;
 
         const { error: reportError } = await supabase
           .from("class_reports")
@@ -615,8 +632,8 @@ async function handleUpdateSchedule(e: React.FormEvent) {
         if (reportError) throw reportError;
 
         await supabase.from("lessons").insert({
+          user_id: user.id, // 👈 Scoped to user_id
           student_id: studentId,
-          teacher_id: user?.id,
           title: lessonTitle.trim(),
           lesson_date: reportDate,
           status: "Completed",
@@ -644,7 +661,8 @@ async function handleUpdateSchedule(e: React.FormEvent) {
         await supabase
           .from("students")
           .update({ classes_completed: currentCompleted + 1 })
-          .eq("id", studentId);
+          .eq("id", studentId)
+          .eq("user_id", user.id);
       }
 
       setEditingReportId(null);
@@ -668,7 +686,15 @@ async function handleUpdateSchedule(e: React.FormEvent) {
 
   async function handleDeleteStudent() {
     if (!confirm(`Are you sure you want to delete ${student?.name}?`)) return;
-    const { error } = await supabase.from("students").delete().eq("id", studentId);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { error } = await supabase
+      .from("students")
+      .delete()
+      .eq("id", studentId)
+      .eq("user_id", user.id);
+
     if (!error) {
       router.push("/students");
     } else {
@@ -763,13 +789,7 @@ ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCust
   const isFreePackage = totalRegularClasses === 0 && totalFreeClasses > 0;
 
   const rawStudentStatus = (student?.payment_status || "Pending").trim().toLowerCase();
-  const rawPaymentStatus = (latestPayment?.status || "").trim().toLowerCase();
-  // 1. Add state for duration mode
-const [durationSelect, setDurationSelect] = useState<string>("40")
-const [customDuration, setCustomDuration] = useState<number>(40)
-
-// 2. Computed final duration value to submit to Supabase
-const finalDuration = durationSelect === "custom" ? Number(customDuration) : Number(durationSelect)
+  const rawPaymentStatus = (latestPayment?.payment_status || latestPayment?.status || "").trim().toLowerCase();
 
   const isPaid =
     isFreePackage ||
@@ -1048,7 +1068,6 @@ const finalDuration = durationSelect === "custom" ? Number(customDuration) : Num
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Left Column (5/12): Weekly Schedule & Notes */}
         <div className="lg:col-span-5 space-y-5">
-          {/* Weekly Schedule Section */}
           <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-gray-900">Weekly Schedule</h3>
@@ -1349,9 +1368,7 @@ const finalDuration = durationSelect === "custom" ? Number(customDuration) : Num
         </div>
       </div>
 
-      {/* ========================================================================= */}
-      {/* MODAL: RENEWAL INVOICE & PARENT NOTICE */}
-      {/* ========================================================================= */}
+      {/* RENEWAL INVOICE & PARENT NOTICE MODAL */}
       {isRenewalModalOpen && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto">
           <div className="card bg-white w-full max-w-2xl max-h-[92vh] overflow-y-auto p-6 rounded-3xl shadow-2xl space-y-4 text-xs animate-in fade-in zoom-in-95 duration-150">
@@ -1707,9 +1724,7 @@ const finalDuration = durationSelect === "custom" ? Number(customDuration) : Num
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* MODAL: LOG LESSON & HOMEWORK */}
-      {/* ========================================================================= */}
+      {/* LOG LESSON & HOMEWORK MODAL */}
       {isReportModalOpen && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto">
           <div className="card bg-white w-full max-w-xl max-h-[90vh] overflow-y-auto p-6 rounded-3xl shadow-xl space-y-4">
@@ -1956,9 +1971,7 @@ const finalDuration = durationSelect === "custom" ? Number(customDuration) : Num
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* MODAL: EDIT STUDENT */}
-      {/* ========================================================================= */}
+      {/* EDIT STUDENT MODAL */}
       {isEditModalOpen && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto">
           <div className="card bg-white w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 rounded-3xl shadow-xl space-y-4">
@@ -2210,9 +2223,7 @@ const finalDuration = durationSelect === "custom" ? Number(customDuration) : Num
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* MODAL: ADD WEEKLY SCHEDULE */}
-      {/* ========================================================================= */}
+      {/* ADD WEEKLY SCHEDULE MODAL */}
       {isScheduleModalOpen && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
           <div className="card bg-white w-full max-w-md p-6 rounded-3xl shadow-xl space-y-4 text-xs">
@@ -2319,9 +2330,7 @@ const finalDuration = durationSelect === "custom" ? Number(customDuration) : Num
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* MODAL: EDIT WEEKLY SCHEDULE */}
-      {/* ========================================================================= */}
+      {/* EDIT WEEKLY SCHEDULE MODAL */}
       {editingSchedule && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
           <div className="bg-white border border-pink-100 rounded-3xl p-6 w-full max-w-sm shadow-xl space-y-4 text-xs">
