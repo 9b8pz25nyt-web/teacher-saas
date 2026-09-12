@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
+import StudentEditModal from "@/components/StudentEditModal";
 
 const DEFAULT_ALIASES = ["Teacher Gabi", "Teacher Princess"];
 const DAYS_OF_WEEK = [
@@ -73,6 +74,7 @@ export default function StudentDetailsPage({
   const [copiedRenewalNotice, setCopiedRenewalNotice] = useState(false);
   const [expandedReportIds, setExpandedReportIds] = useState<string[]>([]);
   const [isParentRequestsOpen, setIsParentRequestsOpen] = useState(true);
+  const [makeupClasses, setMakeupClasses] = useState<any[]>([]);
 
   // Payment Instructions & QR Upload State
   const [paymentQrFile, setPaymentQrFile] = useState<File | null>(null);
@@ -330,6 +332,7 @@ export default function StudentDetailsPage({
         { data: studentBks },
         { data: paymentList },
         { data: lessonList },
+        { data: makeupList },
       ] = await Promise.all([
         supabase.from("schedules").select("*").eq("student_id", studentId).eq("user_id", user.id),
         supabase.from("books").select("*").eq("user_id", user.id).order("title", { ascending: true }),
@@ -352,12 +355,14 @@ export default function StudentDetailsPage({
           .select("*")
           .eq("student_id", studentId)
           .order("lesson_date", { ascending: false }),
+          supabase.from("makeup_classes").select("*").eq("student_id", studentId),
       ]);
 
       if (scheds) setSchedules(scheds);
       if (bks) setBooks(bks);
       if (repList) setReports(repList);
       if (lessonList) setLessons(lessonList);
+      if (makeupList) setMakeupClasses(makeupList);
       if (paymentList && paymentList.length > 0) {
         setLatestPayment(paymentList[0]);
       } else {
@@ -597,6 +602,11 @@ export default function StudentDetailsPage({
 
       const validBookId = reportBookId && reportBookId.trim() !== "" ? reportBookId : null;
 
+      const structuredDescription = `Vocab: ${vocabulary.trim() || "None"}
+Strengths: ${strengths.trim() || "None"}
+Improvements: ${improvements.trim() || "None"}
+Homework: ${homework.trim() || "None"}`;
+
       const payload: any = {
         user_id: user.id,
         lesson_title: lessonTitle.trim(),
@@ -639,6 +649,10 @@ export default function StudentDetailsPage({
 
         if (reportError) throw reportError;
 
+        const bookProgressArray = validBookId
+          ? [{ book_id: validBookId, start_page: startPageInput || '1', end_page: endPageInput || '0' }]
+          : [];
+
         await supabase.from("lessons").insert({
           user_id: user.id,
           student_id: studentId,
@@ -648,8 +662,8 @@ export default function StudentDetailsPage({
           description: `Vocab: ${vocabulary}\nStrengths: ${strengths}\nHomework: ${homework}`,
           homework_file_url: uploadedFileUrl || null,
           book_id: validBookId,
+          book_progress: bookProgressArray,
         });
-
         if (validBookId && selectedChapterIndex !== "" && isChapterComplete) {
           const currentCompletedChapters = selectedBookItem?.completed_chapters || [];
           const chapterIdxNum = Number(selectedChapterIndex);
@@ -785,7 +799,14 @@ ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCust
   const combinedTotalClasses =
     Number(student?.classes_included || 0) + Number(student?.free_classes || 0);
 
-  const dynamicCompletedCount = Math.max(reports.length, lessons.length, Number(student?.classes_completed || 0));
+  const validReports = reports.filter(
+    (r) => !r.lesson_title?.toLowerCase().includes("cancelled") && !r.title?.toLowerCase().includes("cancelled") && r.status !== "Cancelled"
+  );
+  const validLessons = lessons.filter(
+    (l) => !l.title?.toLowerCase().includes("cancelled") && l.status !== "Cancelled"
+  );
+
+  const dynamicCompletedCount = Math.max(validReports.length, validLessons.length);
   const dynamicRemainingCount = Math.max(combinedTotalClasses - dynamicCompletedCount, 0);
   const dynamicProgressPercent = Math.min(
     Math.round((dynamicCompletedCount / (combinedTotalClasses || 1)) * 100),
@@ -951,9 +972,9 @@ ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCust
               {dynamicProgressPercent}% Done
             </span>
           </div>
-          <div className="w-full bg-gray-100 h-2.5 rounded-full overflow-hidden">
+          <div className="w-full bg-pink-100 h-2.5 rounded-full overflow-hidden border border-pink-200">
             <div
-              className="bg-pink-600 h-full rounded-full transition-all duration-300"
+              className="bg-pink-600 h-full rounded-full transition-all duration-300 min-w-[2px]"
               style={{ width: `${dynamicProgressPercent}%` }}
             />
           </div>
@@ -998,63 +1019,77 @@ ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCust
               Edit Books
             </button>
           </div>
-          <div className="space-y-2 max-h-[160px] overflow-y-auto">
-            {studentBooks.length > 0 ? (
-              studentBooks.map((item, index) => {
-                const book = item.books;
-                const isPageBased = book?.book_type === "pages";
+          {studentBooks.map((item, index) => {
+  const book = item.books || item;
+  const bookId = book?.id || item.book_id;
+  const isPageBased = book?.book_type === "pages";
 
-                let maxPageReached = 0;
+  let maxPageReached = 0;
+  if (isPageBased && bookId) {
+    // 1. Check legacy class reports
+    const reportMax = reports
+      .filter((r) => r.book_id === bookId)
+      .reduce((max, r) => Math.max(max, r.end_page || 0), 0);
 
-                if (isPageBased) {
-                  const reportMax = reports
-                    .filter((r) => r.book_id === book?.id)
-                    .reduce((max, r) => Math.max(max, r.end_page || 0), 0);
+    // 2. Check regular lessons
+    let lessonMax = 0;
+    lessons.forEach((l) => {
+      if (Array.isArray(l.book_progress)) {
+        l.book_progress.forEach((bp: any) => {
+          if (bp.book_id === bookId) {
+            const ep = Number(bp.end_page) || 0;
+            if (ep > lessonMax) lessonMax = ep;
+          }
+        });
+      } else if (l.book_id === bookId) {
+        const ep = Number(l.end_page) || 0;
+        if (ep > lessonMax) lessonMax = ep;
+      }
+    });
 
-                  let lessonMax = 0;
-                  lessons.forEach((l) => {
-                    if (Array.isArray(l.book_progress)) {
-                      l.book_progress.forEach((bp: any) => {
-                        if (bp.book_id === book?.id) {
-                          const ep = Number(bp.end_page) || 0;
-                          if (ep > lessonMax) lessonMax = ep;
-                        }
-                      });
-                    } else if (l.book_id === book?.id) {
-                      const ep = Number(l.end_page) || 0;
-                      if (ep > lessonMax) lessonMax = ep;
-                    }
-                  });
+    // 3. Check makeup classes
+    let makeupMax = 0;
+    makeupClasses.forEach((mc) => {
+      if (Array.isArray(mc.book_progress)) {
+        mc.book_progress.forEach((bp: any) => {
+          if (bp.book_id === bookId) {
+            const ep = Number(bp.end_page) || 0;
+            if (ep > makeupMax) makeupMax = ep;
+          }
+        });
+      } else if (mc.book_id === bookId) {
+        const ep = Number(mc.end_page) || 0;
+        if (ep > makeupMax) makeupMax = ep;
+      }
+    });
 
-                  maxPageReached = Math.max(reportMax, lessonMax);
-                }
+    maxPageReached = Math.max(reportMax, lessonMax, makeupMax);
+  }
 
-                let bookProgress = 0;
-                if (isPageBased) {
-                  const totalPages = book?.total_pages || 1;
-                  bookProgress = Math.min(100, Math.round((maxPageReached / totalPages) * 100));
-                } else {
-                  const totalChapters = book?.chapters?.length || 1;
-                  const completedChapters = item?.completed_chapters || [];
-                  bookProgress = Math.min(100, Math.round((completedChapters.length / totalChapters) * 100));
-                }
+  const totalPages = Number(book?.total_pages) || 1;
+  const totalChapters = Array.isArray(book?.chapters) ? book.chapters.length : Number(book?.total_chapters) || 1;
+  const completedChapters = item?.completed_chapters || [];
 
-                return (
-                  <div key={book?.id || index} className="p-2.5 bg-pink-50/50 rounded-xl border border-pink-100 space-y-1">
-                    <div className="flex justify-between items-center text-xs font-bold text-pink-950">
-                      <span>📖 {book?.title || "Book"}</span>
-                      <span className="text-pink-600 text-[10px]">{bookProgress}%</span>
-                    </div>
-                    <div className="w-full bg-pink-100 rounded-full h-1.5 overflow-hidden">
-                      <div className="bg-pink-600 h-1.5 rounded-full transition-all duration-300" style={{ width: `${bookProgress}%` }} />
-                    </div>
-                  </div>
-                );
-              })
-            ) : (
-              <p className="text-xs text-gray-400 italic">No books assigned yet.</p>
-            )}
-          </div>
+  const bookProgress = isPageBased
+    ? Math.min(100, Math.round((maxPageReached / totalPages) * 100))
+    : Math.min(100, Math.round((completedChapters.length / totalChapters) * 100));
+
+  return (
+    <div key={bookId || index} className="p-2.5 bg-pink-50/50 rounded-xl border border-pink-100 space-y-1">
+      <div className="flex justify-between items-center text-xs font-bold text-pink-950">
+        <span>📖 {book?.title || book?.name || "Book"}</span>
+        <span className="text-pink-600 text-[10px]">{bookProgress}% Done</span>
+      </div>
+      <div className="w-full bg-pink-100 rounded-full h-1.5 overflow-hidden">
+        <div className="bg-pink-600 h-1.5 rounded-full transition-all duration-300" style={{ width: `${bookProgress}%` }} />
+      </div>
+      <div className="flex justify-between text-[10px] text-gray-500">
+        <span>{isPageBased ? `Page ${maxPageReached} / ${totalPages}` : `Chapters: ${completedChapters.length}/${totalChapters}`}</span>
+        <span className="capitalize text-pink-700 font-medium">{isPageBased ? "Page-based" : "Chapter-based"}</span>
+      </div>
+    </div>
+  );
+})}
         </div>
 
         <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs space-y-3">
@@ -1209,217 +1244,286 @@ ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCust
           </div>
         </div>
 
-      {/* Right Column (7/12): Logged Lessons & Reports */}
-<div className="lg:col-span-7">
-  <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs space-y-4">
-    <div className="flex items-center justify-between">
-      <div className="flex items-center gap-2">
-        <h3 className="text-sm font-bold text-gray-900">
-          Logged Lessons & Reports
-        </h3>
-        <span className="px-2 py-0.5 bg-pink-50 text-pink-600 font-bold text-xs rounded-full border border-pink-100">
-          {reports.length + lessons.length}
-        </span>
-      </div>
-      <button
-        onClick={() => {
-          const today = new Date().toISOString().split("T")[0];
-          setReportDate(today);
-          setEditingReportId(null);
-          setLessonTitle("");
-          setVocabulary("");
-          setStrengths("");
-          setImprovements("");
-          setHomework("");
-          setHomeworkFile(null);
-          setSelectedChapterIndex("");
-          setIsChapterComplete(false);
-          setIsReportModalOpen(true);
-        }}
-        className="text-xs font-bold text-pink-600 hover:text-pink-700 flex items-center gap-1 cursor-pointer"
-      >
-        <Plus size={14} />
-        <span>Add Report</span>
-      </button>
-    </div>
-
-    {reports.length === 0 && lessons.length === 0 ? (
-      <div className="p-8 text-center text-xs text-gray-400 space-y-2">
-        <p className="italic">No class reports logged yet.</p>
-        <button
-          type="button"
-          onClick={() => setIsReportModalOpen(true)}
-          className="text-pink-600 font-bold hover:underline"
-        >
-          Click here to log your first lesson
-        </button>
-      </div>
-    ) : (
-      <div className="space-y-3">
-        {/* Render Reports & Lessons with Expandable Accordion */}
-        {reports.map((rep) => {
-          const isExpanded = expandedReportIds.includes(rep.id);
-          const matchedBook = books.find((b) => b.id === rep.book_id);
-
-          return (
-            <div
-              key={rep.id}
-              className="bg-pink-50/30 rounded-2xl border border-pink-100 text-xs transition-all overflow-hidden"
-            >
-              {/* Accordion Header / Dropdown Button */}
-              <div
-                onClick={() => toggleExpandReport(rep.id)}
-                className="p-3.5 flex items-center justify-between cursor-pointer hover:bg-pink-100/40 select-none transition"
-              >
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    className="p-1 rounded-lg text-pink-600 bg-white border border-pink-200 shadow-2xs"
-                  >
-                    {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-                  </button>
-                  <h4 className="font-bold text-pink-950 text-xs">
-                    {rep.lesson_title || rep.title || "Class Report"}
-                  </h4>
-                </div>
-
-                <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                  <span className="text-[11px] font-mono text-gray-500">
-                    {rep.report_date?.substring(0, 10)}
-                  </span>
-                  <button
-                    onClick={() => handleOpenEditReport(rep)}
-                    className="text-gray-400 hover:text-pink-600 p-1 cursor-pointer"
-                  >
-                    <Edit2 size={13} />
-                  </button>
-                  <button
-                    onClick={() => handleDeleteReport(rep.id, rep.homework_file_url)}
-                    className="text-gray-400 hover:text-red-600 p-1 cursor-pointer"
-                  >
-                    <Trash2 size={13} />
-                  </button>
-                </div>
-              </div>
-
-              {/* Expandable Body */}
-              {isExpanded && (
-                <div className="px-4 pb-4 pt-1 border-t border-pink-100/60 space-y-2.5 bg-white/50">
-                  {matchedBook && (
-                    <div className="pt-1">
-                      <span className="text-[10px] font-bold text-pink-800 bg-pink-100/70 px-2.5 py-0.5 rounded-lg border border-pink-200">
-                        📖 {matchedBook.title}: p. {rep.start_page || 1} - {rep.end_page || "N/A"}
-                      </span>
-                    </div>
-                  )}
-
-                  {rep.vocabulary && (
-                    <div className="p-2.5 bg-white rounded-xl border border-pink-100">
-                      <p className="font-bold text-gray-900 text-[11px] mb-0.5">✨ Vocabulary & Structures:</p>
-                      <p className="text-gray-700 font-mono text-xs whitespace-pre-wrap">{rep.vocabulary}</p>
-                    </div>
-                  )}
-
-                  {(rep.strengths || rep.improvements) && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                      {rep.strengths && (
-                        <div className="p-2.5 bg-emerald-50/60 rounded-xl border border-emerald-100">
-                          <p className="font-bold text-emerald-900 text-[11px] mb-0.5">🏆 Strengths & Highlights:</p>
-                          <p className="text-emerald-950 text-xs whitespace-pre-wrap">{rep.strengths}</p>
-                        </div>
-                      )}
-                      {rep.improvements && (
-                        <div className="p-2.5 bg-amber-50/60 rounded-xl border border-amber-100">
-                          <p className="font-bold text-amber-900 text-[11px] mb-0.5">📈 Next Focus / Tips:</p>
-                          <p className="text-amber-950 text-xs whitespace-pre-wrap">{rep.improvements}</p>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {(rep.homework || rep.homework_file_url) && (
-                    <div className="p-3 bg-pink-100/50 rounded-xl border border-pink-200 space-y-1.5">
-                      <p className="font-bold text-pink-950 text-[11px]">📚 Assigned Homework:</p>
-                      {rep.homework && <p className="text-gray-800 text-xs whitespace-pre-wrap">{rep.homework}</p>}
-                      {rep.homework_file_url && (
-                        <a
-                          href={rep.homework_file_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-white text-pink-700 font-bold rounded-lg text-[10px] border border-pink-200 hover:bg-pink-50"
-                        >
-                          📄 View Attached Worksheet
-                        </a>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })}
-
-        {/* Render Independent Lessons Logs */}
-        {lessons.map((les) => {
-          const isExpanded = expandedReportIds.includes(les.id);
-
-          return (
-            <div
-              key={les.id}
-              className="bg-pink-50/30 rounded-2xl border border-pink-100 text-xs transition-all overflow-hidden"
-            >
-              <div
-                onClick={() => toggleExpandReport(les.id)}
-                className="p-3.5 flex items-center justify-between cursor-pointer hover:bg-pink-100/40 select-none transition"
-              >
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    className="p-1 rounded-lg text-pink-600 bg-white border border-pink-200 shadow-2xs"
-                  >
-                    {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-                  </button>
-                  <h4 className="font-bold text-pink-950 text-xs">{les.title || "Lesson Log"}</h4>
-                </div>
-
-                <span className="text-[11px] font-mono text-gray-500">
-                  {les.lesson_date?.substring(0, 10)}
+        {/* Right Column (7/12): Logged Lessons & Reports */}
+        <div className="lg:col-span-7">
+          <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-gray-900">
+                  Logged Lessons & Reports
+                </h3>
+                <span className="px-2 py-0.5 bg-pink-50 text-pink-600 font-bold text-xs rounded-full border border-pink-100">
+                  {validReports.length + validLessons.length}
                 </span>
               </div>
-
-              {isExpanded && (
-                <div className="px-4 pb-4 pt-1 border-t border-pink-100/60 space-y-2 bg-white/50">
-                  {Array.isArray(les.book_progress) && les.book_progress.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 pt-1">
-                      {les.book_progress.map((bp: any, idx: number) => {
-                        const matchedBook = books.find((b) => b.id === bp.book_id);
-                        return (
-                          <span
-                            key={idx}
-                            className="text-[10px] font-bold text-pink-800 bg-pink-100/70 px-2.5 py-0.5 rounded-lg border border-pink-200"
-                          >
-                            📖 {matchedBook?.title || "Book"}: p. {bp.start_page || 1} - {bp.end_page}
-                          </span>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {les.description && (
-                    <p className="text-xs text-gray-700 bg-white p-2.5 rounded-xl border border-pink-100 whitespace-pre-wrap">
-                      {les.description}
-                    </p>
-                  )}
-                </div>
-              )}
+              <button
+                onClick={() => {
+                  const today = new Date().toISOString().split("T")[0];
+                  setReportDate(today);
+                  setEditingReportId(null);
+                  setLessonTitle("");
+                  setVocabulary("");
+                  setStrengths("");
+                  setImprovements("");
+                  setHomework("");
+                  setHomeworkFile(null);
+                  setSelectedChapterIndex("");
+                  setIsChapterComplete(false);
+                  setIsReportModalOpen(true);
+                }}
+                className="text-xs font-bold text-pink-600 hover:text-pink-700 flex items-center gap-1 cursor-pointer"
+              >
+                <Plus size={14} />
+                <span>Add Report</span>
+              </button>
             </div>
-          );
-        })}
+
+            {validReports.length === 0 && validLessons.length === 0 ? (
+              <div className="p-8 text-center text-xs text-gray-400 space-y-2">
+                <p className="italic">No class reports logged yet.</p>
+                <button
+                  type="button"
+                  onClick={() => setIsReportModalOpen(true)}
+                  className="text-pink-600 font-bold hover:underline"
+                >
+                  Click here to log your first lesson
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {/* Render Filtered Reports */}
+                {validReports.map((rep) => {
+                  const isExpanded = expandedReportIds.includes(rep.id);
+                  const matchedBook = books.find((b) => b.id === rep.book_id);
+
+                  return (
+                    <div key={rep.id} className="bg-pink-50/30 rounded-2xl border border-pink-100 text-xs transition-all overflow-hidden">
+                      <div
+                        onClick={() => toggleExpandReport(rep.id)}
+                        className="p-3.5 flex items-center justify-between cursor-pointer hover:bg-pink-100/40 select-none transition"
+                      >
+                        <div className="flex items-center gap-2">
+                          <button type="button" className="p-1 rounded-lg text-pink-600 bg-white border border-pink-200 shadow-2xs">
+                            {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                          </button>
+                          <h4 className="font-bold text-pink-950 text-xs">{rep.lesson_title || rep.title || "Class Report"}</h4>
+                        </div>
+
+                        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                          <span className="text-[11px] font-mono text-gray-500">{rep.report_date?.substring(0, 10)}</span>
+                          <button onClick={() => handleOpenEditReport(rep)} className="text-gray-400 hover:text-pink-600 p-1 cursor-pointer">
+                            <Edit2 size={13} />
+                          </button>
+                          <button onClick={() => handleDeleteReport(rep.id, rep.homework_file_url)} className="text-gray-400 hover:text-red-600 p-1 cursor-pointer">
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </div>
+
+                      {isExpanded && (
+                        <div className="px-4 pb-4 pt-1 border-t border-pink-100/60 space-y-2.5 bg-white/50">
+                          {matchedBook && (
+                            <div className="pt-1">
+                              <span className="text-[10px] font-bold text-pink-800 bg-pink-100/70 px-2.5 py-0.5 rounded-lg border border-pink-200">
+                                📖 {matchedBook.title}: p. {rep.start_page || 1} - {rep.end_page || "N/A"}
+                              </span>
+                            </div>
+                          )}
+
+                          {rep.vocabulary && (
+                            <div className="p-2.5 bg-white rounded-xl border border-pink-100">
+                              <p className="font-bold text-gray-900 text-[11px] mb-0.5">✨ Vocabulary & Structures:</p>
+                              <p className="text-gray-700 font-mono text-xs whitespace-pre-wrap">{rep.vocabulary}</p>
+                            </div>
+                          )}
+
+                          {(rep.strengths || rep.improvements) && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                              {rep.strengths && (
+                                <div className="p-2.5 bg-emerald-50/60 rounded-xl border border-emerald-100">
+                                  <p className="font-bold text-emerald-900 text-[11px] mb-0.5">🏆 Strengths & Highlights:</p>
+                                  <p className="text-emerald-950 text-xs whitespace-pre-wrap">{rep.strengths}</p>
+                                </div>
+                              )}
+                              {rep.improvements && (
+                                <div className="p-2.5 bg-amber-50/60 rounded-xl border border-amber-100">
+                                  <p className="font-bold text-amber-900 text-[11px] mb-0.5">📈 Next Focus / Tips:</p>
+                                  <p className="text-amber-950 text-xs whitespace-pre-wrap">{rep.improvements}</p>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {(rep.homework || rep.homework_file_url) && (
+                            <div className="p-3 bg-pink-100/50 rounded-xl border border-pink-200 space-y-1.5">
+                              <p className="font-bold text-pink-950 text-[11px]">📚 Assigned Homework:</p>
+                              {rep.homework && <p className="text-gray-800 text-xs whitespace-pre-wrap">{rep.homework}</p>}
+                              {rep.homework_file_url && (
+                                <a
+                                  href={rep.homework_file_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-white text-pink-700 font-bold rounded-lg text-[10px] border border-pink-200 hover:bg-pink-50"
+                                >
+                                  📄 View Attached Worksheet
+                                </a>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+
+                {/* Render Filtered Lessons */}
+                {validLessons.map((les: any) => {
+                  const isExpanded = expandedReportIds.includes(les.id);
+                  const text = les.description || "";
+
+                  const vocabMatch = text.match(/Vocab[:\-]?\s*([\s\S]*?)(?=\n(?:Strengths|Improvements|Homework):|$)/i);
+                  const strengthsMatch = text.match(/Strengths[:\-]?\s*([\s\S]*?)(?=\n(?:Vocab|Improvements|Homework):|$)/i);
+                  const improvementsMatch = text.match(/(?:Improvements|Next Focus)[:\-]?\s*([\s\S]*?)(?=\n(?:Vocab|Strengths|Homework):|$)/i);
+                  const homeworkMatch = text.match(/Homework[:\-]?\s*([\s\S]*)/i);
+
+                  const displayVocab = les.vocab_notes || les.vocabulary || (vocabMatch ? vocabMatch[1].trim() : "");
+                  const displayStrengths = les.strengths_notes || les.strengths || (strengthsMatch ? strengthsMatch[1].trim() : "");
+                  const displayImprovements = les.improvement_notes || les.improvements || (improvementsMatch ? improvementsMatch[1].trim() : "");
+                  const displayHomework = les.homework_notes || les.homework || (homeworkMatch ? homeworkMatch[1].trim() : "");
+
+                  const fallbackMain = !displayStrengths && !displayImprovements && !displayVocab ? text : "";
+
+                  return (
+                    <div key={les.id} className="bg-pink-50/30 rounded-2xl border border-pink-100 text-xs transition-all overflow-hidden">
+                      <div
+                        onClick={() => toggleExpandReport(les.id)}
+                        className="p-3.5 flex items-center justify-between cursor-pointer hover:bg-pink-100/40 select-none transition"
+                      >
+                        <div className="flex items-center gap-2">
+                          <button type="button" className="p-1 rounded-lg text-pink-600 bg-white border border-pink-200 shadow-2xs">
+                            {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                          </button>
+                          <h4 className="font-bold text-pink-950 text-xs">{les.title || "Lesson Log"}</h4>
+                        </div>
+
+                        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                          <span className="text-[11px] font-mono text-gray-500">
+                            {les.lesson_date?.substring(0, 10)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {isExpanded && (
+                        <div className="px-4 pb-4 pt-1 border-t border-pink-100/60 space-y-2.5 bg-white/50">
+                          {Array.isArray(les.book_progress) && les.book_progress.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5 pt-1">
+                              {les.book_progress.map((bp: any, idx: number) => {
+                                const matchedBook = books.find((b) => b.id === bp.book_id);
+                                return (
+                                  <span key={idx} className="text-[10px] font-bold text-pink-800 bg-pink-100/70 px-2.5 py-0.5 rounded-lg border border-pink-200">
+                                    📖 {matchedBook?.title || "Book"}: p. {bp.start_page || 1} - {bp.end_page}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          {displayVocab && (
+                            <div className="p-2.5 bg-white rounded-xl border border-pink-100">
+                              <p className="font-bold text-gray-900 text-[11px] mb-0.5">✨ Vocabulary & Structures:</p>
+                              <p className="text-gray-700 font-mono text-xs whitespace-pre-wrap">{displayVocab}</p>
+                            </div>
+                          )}
+
+                          {(displayStrengths || displayImprovements) && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                              {displayStrengths && (
+                                <div className="p-2.5 bg-emerald-50/60 rounded-xl border border-emerald-100">
+                                  <p className="font-bold text-emerald-900 text-[11px] mb-0.5">🏆 Strengths & Highlights:</p>
+                                  <p className="text-emerald-950 text-xs whitespace-pre-wrap">{displayStrengths}</p>
+                                </div>
+                              )}
+                              {displayImprovements && (
+                                <div className="p-2.5 bg-amber-50/60 rounded-xl border border-amber-100">
+                                  <p className="font-bold text-amber-900 text-[11px] mb-0.5">📈 Next Focus / Tips:</p>
+                                  <p className="text-amber-950 text-xs whitespace-pre-wrap">{displayImprovements}</p>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {fallbackMain && (
+                            <div className="p-3 bg-white rounded-xl border border-pink-100">
+                              <p className="font-bold text-gray-900 text-[11px] mb-0.5">📝 Teacher Feedback & Notes:</p>
+                              <p className="text-gray-800 text-xs whitespace-pre-wrap leading-relaxed">{fallbackMain}</p>
+                            </div>
+                          )}
+
+                          {(displayHomework || les.homework_file_url) && (
+                            <div className="p-3 bg-pink-100/50 rounded-xl border border-pink-200 space-y-1.5">
+                              <p className="font-bold text-pink-950 text-[11px]">📚 Assigned Homework:</p>
+                              {displayHomework && <p className="text-gray-800 text-xs whitespace-pre-wrap">{displayHomework}</p>}
+                              {les.homework_file_url && (
+                                <a
+                                  href={les.homework_file_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-white text-pink-700 font-bold rounded-lg text-[10px] border border-pink-200 hover:bg-pink-50"
+                                >
+                                  📄 View Attached Worksheet
+                                </a>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
-    )}
-  </div>
-</div>
-      </div>
+{isEditModalOpen && (
+  <StudentEditModal
+    student={student}
+    onClose={() => setIsEditModalOpen(false)}
+    onSave={handleUpdateStudent}
+    teacherAliases={teacherAliases}
+    name={name}
+    setName={setName}
+    teacherAlias={teacherAlias}
+    setTeacherAlias={setTeacherAlias}
+    meetingLink={meetingLink}
+    setMeetingLink={setMeetingLink}
+    email={email}
+    setEmail={setEmail}
+    phone={phone}
+    setPhone={setPhone}
+    age={age}
+    setAge={setAge}
+    country={country}
+    setCountry={setCountry}
+    paymentCurrency={paymentCurrency}
+    setPaymentCurrency={setPaymentCurrency}
+    paymentAmount={paymentAmount}
+    setPaymentAmount={setPaymentAmount}
+    phpEquivalent={phpEquivalent}
+    classesIncluded={classesIncluded}
+    setClassesIncluded={setClassesIncluded}
+    freeClasses={freeClasses}
+    setFreeClasses={setFreeClasses}
+    classesCompleted={classesCompleted}
+    setClassesCompleted={setClassesCompleted}
+    classDuration={classDuration}
+    setClassDuration={setClassDuration}
+    paymentStatus={paymentStatus}
+    setPaymentStatus={setPaymentStatus}
+    notes={notes}
+    setNotes={setNotes}
+  />
+)}
     </div>
   );
 }

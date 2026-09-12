@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Plus, Trash2, BookOpen } from 'lucide-react'
+import { Plus, Trash2, BookOpen, Upload, FileText, X } from 'lucide-react'
 
 interface BookEntry {
   book_id: string
@@ -37,6 +37,7 @@ export default function LessonLogModal({
   const [improvements, setImprovements] = useState('')
   const [parentMessage, setParentMessage] = useState('')
   const [homework, setHomework] = useState('')
+  const [homeworkFile, setHomeworkFile] = useState<File | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   // Dynamic Multi-Book Tracker State
@@ -51,6 +52,7 @@ export default function LessonLogModal({
     setImprovements('')
     setParentMessage('')
     setHomework('')
+    setHomeworkFile(null)
     setSelectedBooks([
       { book_id: studentBooks[0]?.id || '', start_page: '', end_page: '' },
     ])
@@ -88,8 +90,35 @@ export default function LessonLogModal({
         return
       }
 
+      let uploadedFileUrl: string | null = null
+
+      if (homeworkFile) {
+        const fileExt = homeworkFile.name.split('.').pop()
+        const fileName = `${studentId}/${Date.now()}.${fileExt}`
+
+        const { error: uploadError } = await supabase.storage
+          .from('homework-files')
+          .upload(fileName, homeworkFile)
+
+        if (uploadError) throw uploadError
+
+        const { data: publicUrlData } = supabase.storage
+          .from('homework-files')
+          .getPublicUrl(fileName)
+
+        uploadedFileUrl = publicUrlData.publicUrl
+      }
+
       const targetDate = dateString || new Date().toISOString().split('T')[0]
       const validBooks = selectedBooks.filter((b) => b.book_id)
+
+      // Structured description for parser compatibility
+      const structuredDesc = `Vocab: ${vocab || "None"}
+Strengths: ${strengths || "None"}
+Improvements: ${improvements || "None"}
+Homework: ${homework || "None"}
+
+Message: ${parentMessage || ""}`
 
       if (eventType === 'makeup') {
         const { error: makeupErr } = await supabase
@@ -116,11 +145,12 @@ export default function LessonLogModal({
           lesson_date: targetDate,
           status: 'Completed',
           title: title || 'Regular Lesson',
-          description: parentMessage,
+          description: structuredDesc,
           vocab_notes: vocab,
           strengths_notes: strengths,
           improvement_notes: improvements,
           homework_notes: homework,
+          homework_file_url: uploadedFileUrl,
           book_progress: validBooks,
         }
 
@@ -138,6 +168,21 @@ export default function LessonLogModal({
 
           if (insertErr) throw insertErr
         }
+
+        // Also increment completed classes count on student record if new
+        if (!existingLesson) {
+          const { data: currentStudent } = await supabase
+            .from('students')
+            .select('classes_completed')
+            .eq('id', studentId)
+            .single()
+
+          const currentCompleted = currentStudent?.classes_completed || 0
+          await supabase
+            .from('students')
+            .update({ classes_completed: currentCompleted + 1 })
+            .eq('id', studentId)
+        }
       }
 
       onClose()
@@ -151,7 +196,6 @@ export default function LessonLogModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-      {/* Expanded to max-w-2xl for extra width */}
       <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full p-6 space-y-5 border border-pink-100 max-h-[92vh] overflow-y-auto">
         <div className="flex justify-between items-center border-b border-pink-100 pb-3">
           <div>
@@ -280,74 +324,104 @@ export default function LessonLogModal({
             </div>
           </div>
 
-          {/* Vocabulary / Target Patterns - Extra High */}
+          {/* Vocabulary / Target Patterns */}
           <div>
             <label className="block text-xs font-bold text-pink-950 mb-1">
               Vocabulary / Target Patterns
             </label>
             <textarea
-              rows={5}
+              rows={4}
               placeholder="e.g. cheetah, mammal, fast, faster than..."
               value={vocab}
               onChange={(e) => setVocab(e.target.value)}
-              className="w-full p-3.5 border border-pink-200 rounded-2xl text-xs text-pink-950 placeholder:text-pink-300 focus:outline-none focus:ring-2 focus:ring-pink-400 leading-relaxed min-h-[130px]"
+              className="w-full p-3.5 border border-pink-200 rounded-2xl text-xs text-pink-950 placeholder:text-pink-300 focus:outline-none focus:ring-2 focus:ring-pink-400 leading-relaxed min-h-[100px]"
             />
           </div>
 
-          {/* Strengths & Highlights - Large Full Width */}
+          {/* Strengths & Highlights */}
           <div>
             <label className="block text-xs font-bold text-pink-950 mb-1">
               Strengths & Highlights
             </label>
             <textarea
-              rows={5}
+              rows={4}
               placeholder="Great pronunciation today! You did a fantastic job sharing your opinions..."
               value={strengths}
               onChange={(e) => setStrengths(e.target.value)}
-              className="w-full p-3.5 border border-pink-200 rounded-2xl text-xs text-pink-950 placeholder:text-pink-300 focus:outline-none focus:ring-2 focus:ring-pink-400 leading-relaxed min-h-[140px]"
+              className="w-full p-3.5 border border-pink-200 rounded-2xl text-xs text-pink-950 placeholder:text-pink-300 focus:outline-none focus:ring-2 focus:ring-pink-400 leading-relaxed min-h-[100px]"
             />
           </div>
 
-          {/* Next Focus / Improvement - Large Full Width */}
+          {/* Next Focus / Improvement */}
           <div>
             <label className="block text-xs font-bold text-pink-950 mb-1">
               Next Focus / Improvement
             </label>
             <textarea
-              rows={5}
-              placeholder="Practice past tense verb endings. Remember that 'gardener' and 'instructor' are job titles..."
+              rows={4}
+              placeholder="Practice past tense verb endings..."
               value={improvements}
               onChange={(e) => setImprovements(e.target.value)}
-              className="w-full p-3.5 border border-pink-200 rounded-2xl text-xs text-pink-950 placeholder:text-pink-300 focus:outline-none focus:ring-2 focus:ring-pink-400 leading-relaxed min-h-[140px]"
+              className="w-full p-3.5 border border-pink-200 rounded-2xl text-xs text-pink-950 placeholder:text-pink-300 focus:outline-none focus:ring-2 focus:ring-pink-400 leading-relaxed min-h-[100px]"
             />
           </div>
 
-          {/* Message from Teacher (Note to Parents) - Extra High */}
+          {/* Message from Teacher */}
           <div>
             <label className="block text-xs font-bold text-pink-950 mb-1">
               Message from Teacher (Note to Parents)
             </label>
             <textarea
-              rows={6}
-              placeholder="Great job in our lesson today! You did a fantastic job sharing your opinions..."
+              rows={4}
+              placeholder="Great job in our lesson today..."
               value={parentMessage}
               onChange={(e) => setParentMessage(e.target.value)}
-              className="w-full p-3.5 border border-pink-200 rounded-2xl text-xs text-pink-950 placeholder:text-pink-300 focus:outline-none focus:ring-2 focus:ring-pink-400 leading-relaxed min-h-[160px]"
+              className="w-full p-3.5 border border-pink-200 rounded-2xl text-xs text-pink-950 placeholder:text-pink-300 focus:outline-none focus:ring-2 focus:ring-pink-400 leading-relaxed min-h-[100px]"
             />
           </div>
 
-          {/* Assigned Homework / Instructions - Extra High */}
-          <div>
-            <label className="block text-xs font-bold text-pink-950 mb-1">
+          {/* Assigned Homework / Instructions & File Upload */}
+          <div className="space-y-3 p-4 bg-pink-50/30 rounded-2xl border border-pink-200">
+            <label className="block text-xs font-bold text-pink-950">
               Assigned Homework / Instructions (Optional)
             </label>
             <textarea
-              rows={5}
-              placeholder="Instructions: Write one complete sentence for each of the vocabulary words below..."
+              rows={4}
+              placeholder="Instructions: Write one complete sentence for each vocabulary word..."
               value={homework}
               onChange={(e) => setHomework(e.target.value)}
-              className="w-full p-3.5 border border-pink-200 rounded-2xl text-xs text-pink-950 placeholder:text-pink-300 focus:outline-none focus:ring-2 focus:ring-pink-400 leading-relaxed min-h-[140px]"
+              className="w-full p-3.5 border border-pink-200 rounded-2xl text-xs text-pink-950 bg-white placeholder:text-pink-300 focus:outline-none focus:ring-2 focus:ring-pink-400 leading-relaxed min-h-[100px]"
             />
+
+            <div>
+              <label className="block text-[11px] font-bold text-pink-900/80 mb-1 flex items-center gap-1">
+                <Upload size={13} className="text-pink-600" />
+                <span>Attach Homework Worksheet / Document (PDF or Image)</span>
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="file"
+                  accept="image/*,application/pdf"
+                  onChange={(e) => setHomeworkFile(e.target.files?.[0] || null)}
+                  className="w-full text-xs text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-pink-100 file:text-pink-800 hover:file:bg-pink-200 cursor-pointer border border-pink-200 rounded-xl p-1.5 bg-white"
+                />
+                {homeworkFile && (
+                  <button
+                    type="button"
+                    onClick={() => setHomeworkFile(null)}
+                    className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition cursor-pointer"
+                    title="Remove File"
+                  >
+                    <X size={16} />
+                  </button>
+                )}
+              </div>
+              {homeworkFile && (
+                <p className="text-[10px] text-emerald-700 font-medium mt-1">
+                  Selected file: {homeworkFile.name}
+                </p>
+              )}
+            </div>
           </div>
 
           <div className="flex justify-end gap-2.5 pt-3 border-t border-pink-100">
