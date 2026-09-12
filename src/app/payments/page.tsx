@@ -111,11 +111,25 @@ export default function PaymentsPage() {
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const receiptPdfRef = useRef<HTMLDivElement>(null);
 
-  const fetchData = useCallback(async () => {
+const fetchData = useCallback(async () => {
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+
       const [{ data: paymentsData, error: pErr }, { data: studentsData, error: sErr }] = await Promise.all([
-        supabase.from("payments").select("*").order("payment_date", { ascending: false }),
-        supabase.from("students").select("*").order("name", { ascending: true }),
+        supabase
+          .from("payments")
+          .select("*")
+          .eq("user_id", user.id) // 👈 Scopes payments strictly to current account
+          .order("payment_date", { ascending: false }),
+        supabase
+          .from("students")
+          .select("*")
+          .eq("user_id", user.id) // 👈 Scopes dropdown students to current account
+          .order("name", { ascending: true }),
       ]);
 
       if (pErr) console.error("Error fetching payments:", pErr);
@@ -198,7 +212,7 @@ export default function PaymentsPage() {
     setTransferFeePhp(formatWithCommas(rawVal));
   }
 
-  async function handleSavePayment() {
+async function handleSavePayment() {
     if (!selectedStudentId) {
       alert("Please select a student.");
       return;
@@ -209,11 +223,15 @@ export default function PaymentsPage() {
       return;
     }
 
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
     const cleanFee = Number(String(transferFeePhp).replace(/[^0-9.]/g, "")) || 0;
 
     setSavingPayment(true);
     try {
       const payload = {
+        user_id: user.id, // 👈 Ensures newly saved payment belongs to active account
         student_id: selectedStudentId,
         amount: cleanAmount,
         currency: currency || "PHP",

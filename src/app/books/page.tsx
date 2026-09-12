@@ -64,55 +64,67 @@ export default function BooksPage() {
     }
   }
 
-  const fetchBooks = useCallback(async () => {
-    try {
-      const { data, error } = await supabase
-        .from("books")
-        .select("*")
-        .order("title", { ascending: true }); // 👈 Arranges books alphabetically (A-Z)
-
-      if (error) console.error("Error fetching books:", error.message);
-      else if (data) setBooks(data);
-    } catch (err) {
-      console.error("Fetch books error:", err);
-    } finally {
+const fetchBooks = useCallback(async () => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    // Stop if no logged-in user is found
+    if (!user) {
       setLoading(false);
+      return;
     }
-  }, []);
+
+    const { data, error } = await supabase
+      .from("books")
+      .select("*")
+      .eq("user_id", user.id) // 👈 Scope books query to the active user
+      .order("title", { ascending: true });
+
+    if (error) console.error("Error fetching books:", error.message);
+    else if (data) setBooks(data);
+  } catch (err) {
+    console.error("Fetch books error:", err);
+  } finally {
+    setLoading(false);
+  }
+}, []);
 
   useEffect(() => {
     fetchBooks();
   }, [fetchBooks]);
 
-  async function handleCreateBook(e: React.FormEvent) {
-    e.preventDefault();
-    if (!newBookTitle.trim()) return;
+async function handleCreateBook(e: React.FormEvent) {
+  e.preventDefault();
+  if (!newBookTitle.trim()) return;
 
-    const validChapters = newBookType === "chapters" ? chaptersInput.filter((c) => c.title.trim() !== "") : [];
-    const pagesCount = newBookType === "pages" ? Number(newTotalPages) || 0 : null;
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return;
 
-    const { error } = await supabase.from("books").insert([
-      {
-        title: newBookTitle.trim(),
-        book_type: newBookType,
-        total_pages: pagesCount,
-        file_url: newFileUrl.trim() || null,
-        chapters: validChapters,
-      },
-    ]);
+  const validChapters = newBookType === "chapters" ? chaptersInput.filter((c) => c.title.trim() !== "") : [];
+  const pagesCount = newBookType === "pages" ? Number(newTotalPages) || 0 : null;
 
-    if (error) {
-      alert("Error adding book: " + error.message);
-    } else {
-      setNewBookTitle("");
-      setNewBookType("chapters");
-      setNewTotalPages("");
-      setNewFileUrl("");
-      setChaptersInput([{ title: "", url: "" }]);
-      fetchBooks();
-    }
+  const { error } = await supabase.from("books").insert([
+    {
+      user_id: user.id, // 👈 Attaches book to logged-in user
+      title: newBookTitle.trim(),
+      book_type: newBookType,
+      total_pages: pagesCount,
+      file_url: newFileUrl.trim() || null,
+      chapters: validChapters,
+    },
+  ]);
+
+  if (error) {
+    alert("Error adding book: " + error.message);
+  } else {
+    setNewBookTitle("");
+    setNewBookType("chapters");
+    setNewTotalPages("");
+    setNewFileUrl("");
+    setChaptersInput([{ title: "", url: "" }]);
+    fetchBooks();
   }
-
+}
   async function handleDeleteBook(id: string) {
     if (!confirm("Are you sure you want to delete this book folder?")) return;
     const { error } = await supabase.from("books").delete().eq("id", id);
