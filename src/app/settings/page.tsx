@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/lib/supabase";
-import { Plus, Trash2, Check, Sparkles, Lock, Upload } from "lucide-react";
+import { Plus, Trash2, Check, Sparkles, Lock } from "lucide-react";
 
 export default function SettingsPage() {
   const [aliases, setAliases] = useState<string[]>([]);
@@ -10,6 +10,7 @@ export default function SettingsPage() {
   const [dashboardTitle, setDashboardTitle] = useState("ESL Teacher's Private Class Dashboard");
   const [logoUrl, setLogoUrl] = useState("");
   const [uploadingLogo, setUploadingLogo] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   
   // Password state
   const [newPassword, setNewPassword] = useState("");
@@ -34,10 +35,10 @@ export default function SettingsPage() {
           .eq("user_id", user.id)
           .maybeSingle();
 
-        if (profile?.teacher_aliases) {
+        if (profile?.teacher_aliases && profile.teacher_aliases.length > 0) {
           setAliases(profile.teacher_aliases);
         } else {
-          setAliases(["Teacher Gabi", "Teacher Princess"]);
+          setAliases(["Teacher Gabi"]);
         }
 
         if (profile?.dashboard_title) {
@@ -69,8 +70,9 @@ export default function SettingsPage() {
       const fileExt = file.name.split(".").pop();
       const fileName = `${user.id}/logo-${Date.now()}.${fileExt}`;
 
+      // Upload file to Supabase Storage bucket 'avatars'
       const { error: uploadError } = await supabase.storage
-        .from("avatars") // Make sure you have a bucket named 'avatars' in Supabase Storage
+        .from("avatars")
         .upload(fileName, file, { upsert: true });
 
       if (uploadError) throw uploadError;
@@ -79,19 +81,28 @@ export default function SettingsPage() {
         .from("avatars")
         .getPublicUrl(fileName);
 
-      const publicUrl = publicUrlData.publicUrl;
+      // Cache-busting query parameter to force image refresh
+      const publicUrl = `${publicUrlData.publicUrl}?t=${Date.now()}`;
       setLogoUrl(publicUrl);
 
       // Save logo URL directly to profiles table
-      await supabase
+      const { error: upsertError } = await supabase
         .from("profiles")
-        .upsert({ user_id: user.id, logo_url: publicUrl }, { onConflict: "user_id" });
+        .upsert(
+          { user_id: user.id, logo_url: publicUrl, dashboard_title: dashboardTitle, teacher_aliases: aliases },
+          { onConflict: "user_id" }
+        );
 
+      if (upsertError) throw upsertError;
+
+      // Broadcast update event to Sidebar component
+      window.dispatchEvent(new Event("profileUpdated"));
       alert("Logo uploaded and updated successfully!");
     } catch (err: any) {
       alert("Error uploading logo: " + err.message);
     } finally {
       setUploadingLogo(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   }
 
@@ -104,15 +115,22 @@ export default function SettingsPage() {
 
       const { error } = await supabase
         .from("profiles")
-        .upsert({ 
-          user_id: user.id, 
-          teacher_aliases: aliases,
-          dashboard_title: dashboardTitle,
-          logo_url: logoUrl
-        }, { onConflict: "user_id" });
+        .upsert(
+          { 
+            user_id: user.id, 
+            teacher_aliases: aliases,
+            dashboard_title: dashboardTitle.trim() || "ESL Teacher's Private Class Dashboard",
+            logo_url: logoUrl
+          }, 
+          { onConflict: "user_id" }
+        );
 
       if (error) throw error;
       setSuccess(true);
+      
+      // Broadcast update event to Sidebar component
+      window.dispatchEvent(new Event("profileUpdated"));
+
       setTimeout(() => setSuccess(false), 3000);
     } catch (err: any) {
       alert("Failed to save settings: " + err.message);
@@ -196,11 +214,12 @@ export default function SettingsPage() {
               </div>
             )}
             <input
+              ref={fileInputRef}
               type="file"
               accept="image/*"
               onChange={handleLogoUpload}
               disabled={uploadingLogo}
-              className="text-xs text-gray-500 cursor-pointer file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-pink-600 file:text-white hover:file:bg-pink-700"
+              className="text-xs text-gray-500 cursor-pointer file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-pink-600 file:text-white hover:file:bg-pink-700 disabled:opacity-50"
             />
           </div>
         </div>
@@ -213,7 +232,7 @@ export default function SettingsPage() {
             value={dashboardTitle}
             onChange={(e) => setDashboardTitle(e.target.value)}
             placeholder="e.g. Teacher Gabi's Hub"
-            className="w-full p-2.5 text-xs rounded-xl border border-pink-200 focus:outline-hidden focus:ring-2 focus:ring-pink-400"
+            className="w-full p-2.5 text-xs rounded-xl border border-pink-200 focus:outline-hidden focus:ring-2 focus:ring-pink-400 bg-white"
           />
         </div>
 
@@ -225,7 +244,7 @@ export default function SettingsPage() {
             <input
               type="text"
               placeholder="Add new alias (e.g. Teacher Alex)"
-              className="flex-1 p-2.5 text-xs rounded-xl border border-pink-200 focus:outline-hidden focus:ring-2 focus:ring-pink-400"
+              className="flex-1 p-2.5 text-xs rounded-xl border border-pink-200 focus:outline-hidden focus:ring-2 focus:ring-pink-400 bg-white"
               value={newAlias}
               onChange={(e) => setNewAlias(e.target.value)}
             />
@@ -261,7 +280,7 @@ export default function SettingsPage() {
               type="button"
               onClick={handleSave}
               disabled={saving}
-              className="bg-pink-600 hover:bg-pink-700 text-white text-xs font-semibold px-6 py-2.5 rounded-xl cursor-pointer shadow-xs transition"
+              className="bg-pink-600 hover:bg-pink-700 text-white text-xs font-semibold px-6 py-2.5 rounded-xl cursor-pointer shadow-xs transition disabled:opacity-50"
             >
               {saving ? "Saving..." : "Save Settings"}
             </button>
@@ -289,7 +308,7 @@ export default function SettingsPage() {
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               placeholder="Enter new password"
-              className="w-full p-2.5 text-xs rounded-xl border border-pink-200 focus:outline-hidden focus:ring-2 focus:ring-pink-400"
+              className="w-full p-2.5 text-xs rounded-xl border border-pink-200 focus:outline-hidden focus:ring-2 focus:ring-pink-400 bg-white"
               required
             />
           </div>
@@ -301,7 +320,7 @@ export default function SettingsPage() {
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               placeholder="Confirm new password"
-              className="w-full p-2.5 text-xs rounded-xl border border-pink-200 focus:outline-hidden focus:ring-2 focus:ring-pink-400"
+              className="w-full p-2.5 text-xs rounded-xl border border-pink-200 focus:outline-hidden focus:ring-2 focus:ring-pink-400 bg-white"
               required
             />
           </div>
@@ -316,7 +335,7 @@ export default function SettingsPage() {
               <button
                 type="submit"
                 disabled={updatingPassword}
-                className="bg-pink-600 hover:bg-pink-700 text-white text-xs font-semibold px-6 py-2.5 rounded-xl cursor-pointer shadow-xs transition"
+                className="bg-pink-600 hover:bg-pink-700 text-white text-xs font-semibold px-6 py-2.5 rounded-xl cursor-pointer shadow-xs transition disabled:opacity-50"
               >
                 {updatingPassword ? "Updating..." : "Update Password"}
               </button>
