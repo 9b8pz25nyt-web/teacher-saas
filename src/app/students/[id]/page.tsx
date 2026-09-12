@@ -59,11 +59,13 @@ export default function StudentDetailsPage({
   const router = useRouter();
   const searchParams = useSearchParams();
 
+  // State Declarations
   const [student, setStudent] = useState<any>(null);
   const [schedules, setSchedules] = useState<any[]>([]);
   const [books, setBooks] = useState<any[]>([]);
   const [studentBooks, setStudentBooks] = useState<any[]>([]);
   const [reports, setReports] = useState<any[]>([]);
+  const [lessons, setLessons] = useState<any[]>([]);
   const [latestPayment, setLatestPayment] = useState<any>(null);
   const [teacherAliases, setTeacherAliases] = useState<string[]>(DEFAULT_ALIASES);
   const [loading, setLoading] = useState(true);
@@ -256,7 +258,6 @@ export default function StudentDetailsPage({
       }
 
       setStudent(studentData);
-
       setName(studentData.name || "");
       setTeacherAlias(studentData.teacher_alias || "Teacher Gabi");
       setMeetingLink(studentData.meeting_link || "");
@@ -328,6 +329,7 @@ export default function StudentDetailsPage({
         { data: repList },
         { data: studentBks },
         { data: paymentList },
+        { data: lessonList },
       ] = await Promise.all([
         supabase.from("schedules").select("*").eq("student_id", studentId).eq("user_id", user.id),
         supabase.from("books").select("*").eq("user_id", user.id).order("title", { ascending: true }),
@@ -345,11 +347,17 @@ export default function StudentDetailsPage({
           .eq("user_id", user.id)
           .order("created_at", { ascending: false })
           .limit(1),
+        supabase
+          .from("lessons")
+          .select("*")
+          .eq("student_id", studentId)
+          .order("lesson_date", { ascending: false }),
       ]);
 
       if (scheds) setSchedules(scheds);
       if (bks) setBooks(bks);
       if (repList) setReports(repList);
+      if (lessonList) setLessons(lessonList);
       if (paymentList && paymentList.length > 0) {
         setLatestPayment(paymentList[0]);
       } else {
@@ -469,7 +477,7 @@ export default function StudentDetailsPage({
       if (!user) return;
 
       const insertPayload = scheduleDays.map((day) => ({
-        user_id: user.id, // 👈 Scoped to user_id for multi-tenant isolation
+        user_id: user.id,
         student_id: studentId,
         day_of_week: day,
         schedule_time: scheduleTime,
@@ -590,7 +598,7 @@ export default function StudentDetailsPage({
       const validBookId = reportBookId && reportBookId.trim() !== "" ? reportBookId : null;
 
       const payload: any = {
-        user_id: user.id, // 👈 Scoped to user_id
+        user_id: user.id,
         lesson_title: lessonTitle.trim(),
         title: lessonTitle.trim(),
         report_date: reportDate,
@@ -632,7 +640,7 @@ export default function StudentDetailsPage({
         if (reportError) throw reportError;
 
         await supabase.from("lessons").insert({
-          user_id: user.id, // 👈 Scoped to user_id
+          user_id: user.id,
           student_id: studentId,
           title: lessonTitle.trim(),
           lesson_date: reportDate,
@@ -777,18 +785,12 @@ ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCust
   const combinedTotalClasses =
     Number(student?.classes_included || 0) + Number(student?.free_classes || 0);
 
- // Inside StudentDetailsPage component:
-
-// Fallback to student.classes_completed if reports array is empty but stored count exists
-const dynamicCompletedCount = reports.length > 0 
-  ? reports.length 
-  : Number(student?.classes_completed || 0);
-
-const dynamicRemainingCount = Math.max(combinedTotalClasses - dynamicCompletedCount, 0);
-const dynamicProgressPercent = Math.min(
-  Math.round((dynamicCompletedCount / (combinedTotalClasses || 1)) * 100),
-  100
-);
+  const dynamicCompletedCount = Math.max(reports.length, lessons.length, Number(student?.classes_completed || 0));
+  const dynamicRemainingCount = Math.max(combinedTotalClasses - dynamicCompletedCount, 0);
+  const dynamicProgressPercent = Math.min(
+    Math.round((dynamicCompletedCount / (combinedTotalClasses || 1)) * 100),
+    100
+  );
 
   const totalRegularClasses = Number(student?.classes_included || 0);
   const totalFreeClasses = Number(student?.free_classes || 0);
@@ -1002,11 +1004,33 @@ const dynamicProgressPercent = Math.min(
                 const book = item.books;
                 const isPageBased = book?.book_type === "pages";
 
-                const bookReports = reports.filter((r) => r.book_id === book?.id);
+                let maxPageReached = 0;
+
+                if (isPageBased) {
+                  const reportMax = reports
+                    .filter((r) => r.book_id === book?.id)
+                    .reduce((max, r) => Math.max(max, r.end_page || 0), 0);
+
+                  let lessonMax = 0;
+                  lessons.forEach((l) => {
+                    if (Array.isArray(l.book_progress)) {
+                      l.book_progress.forEach((bp: any) => {
+                        if (bp.book_id === book?.id) {
+                          const ep = Number(bp.end_page) || 0;
+                          if (ep > lessonMax) lessonMax = ep;
+                        }
+                      });
+                    } else if (l.book_id === book?.id) {
+                      const ep = Number(l.end_page) || 0;
+                      if (ep > lessonMax) lessonMax = ep;
+                    }
+                  });
+
+                  maxPageReached = Math.max(reportMax, lessonMax);
+                }
 
                 let bookProgress = 0;
                 if (isPageBased) {
-                  const maxPageReached = bookReports.reduce((max, r) => Math.max(max, r.end_page || 0), 0);
                   const totalPages = book?.total_pages || 1;
                   bookProgress = Math.min(100, Math.round((maxPageReached / totalPages) * 100));
                 } else {
@@ -1070,9 +1094,9 @@ const dynamicProgressPercent = Math.min(
         </div>
       </div>
 
-      {/* 2-Column Main Workspace */}
+      {/* Workspace */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Left Column (5/12): Weekly Schedule & Notes */}
+        {/* Left Column (5/12) */}
         <div className="lg:col-span-5 space-y-5">
           <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs space-y-3">
             <div className="flex items-center justify-between">
@@ -1094,9 +1118,7 @@ const dynamicProgressPercent = Math.min(
             ) : (
               <div className="space-y-1.5">
                 {[...schedules]
-                  .sort((a, b) => {
-                    return DAY_ORDER.indexOf(a.day_of_week) - DAY_ORDER.indexOf(b.day_of_week);
-                  })
+                  .sort((a, b) => DAY_ORDER.indexOf(a.day_of_week) - DAY_ORDER.indexOf(b.day_of_week))
                   .map((s) => (
                     <div
                       key={s.id}
@@ -1196,7 +1218,7 @@ const dynamicProgressPercent = Math.min(
                   Logged Lessons & Reports
                 </h3>
                 <span className="px-2 py-0.5 bg-pink-50 text-pink-600 font-bold text-xs rounded-full border border-pink-100">
-                  {reports.length}
+                  {reports.length + lessons.length}
                 </span>
               </div>
               <button
@@ -1221,7 +1243,7 @@ const dynamicProgressPercent = Math.min(
               </button>
             </div>
 
-            {reports.length === 0 ? (
+            {reports.length === 0 && lessons.length === 0 ? (
               <div className="p-8 text-center text-xs text-gray-400 space-y-2">
                 <p className="italic">No class reports logged yet.</p>
                 <button
@@ -1234,1184 +1256,56 @@ const dynamicProgressPercent = Math.min(
               </div>
             ) : (
               <div className="space-y-3">
-                {reports.map((rep) => {
-                  const isExpanded = expandedReportIds.includes(rep.id);
-                  const matchedBook = books.find((b) => b.id === rep.book_id);
-
-                  return (
-                    <div
-                      key={rep.id}
-                      className="border border-pink-100 rounded-2xl overflow-hidden transition-all duration-200 bg-white"
-                    >
-                      <div
-                        onClick={() => toggleExpandReport(rep.id)}
-                        className="p-3.5 bg-pink-50/30 hover:bg-pink-50/60 flex items-center justify-between cursor-pointer select-none transition"
-                      >
-                        <div className="flex items-center gap-3">
-                          <button
-                            type="button"
-                            className="p-1 rounded-lg text-pink-600 bg-white border border-pink-100"
-                          >
-                            {isExpanded ? (
-                              <ChevronUp size={14} />
-                            ) : (
-                              <ChevronDown size={14} />
-                            )}
-                          </button>
-                          <div>
-                            <h4 className="font-bold text-gray-900 text-xs">
-                              {rep.lesson_title || rep.title || "Lesson"}
-                            </h4>
-                            {matchedBook && (
-                              <p className="text-[10px] text-pink-600 font-semibold mt-0.5">
-                                📖 {matchedBook.title}
-                                {rep.start_page && rep.end_page
-                                  ? ` (Pages ${rep.start_page}-${rep.end_page})`
-                                  : ""}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-3">
-                          <span className="text-[11px] font-medium text-gray-400 font-mono">
-                            {rep.report_date || rep.lesson_date}
-                          </span>
-                          <div className="flex items-center gap-1">
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleOpenEditReport(rep);
-                              }}
-                              className="p-1 text-gray-400 hover:text-pink-600 transition cursor-pointer"
-                              title="Edit Report"
-                            >
-                              <Edit size={13} />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteReport(rep.id, rep.homework_file_url);
-                              }}
-                              className="p-1 text-gray-400 hover:text-red-600 transition cursor-pointer"
-                              title="Delete Report"
-                            >
-                              <Trash2 size={13} />
-                            </button>
-                          </div>
-                        </div>
+                {/* Render Class Reports */}
+                {reports.map((rep) => (
+                  <div key={rep.id} className="p-4 bg-pink-50/30 rounded-2xl border border-pink-100 space-y-2">
+                    <div className="flex justify-between items-center">
+                      <h4 className="font-bold text-pink-950 text-xs">{rep.lesson_title || rep.title || "Class Report"}</h4>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-mono text-gray-500">{rep.report_date?.substring(0, 10)}</span>
+                        <button onClick={() => handleOpenEditReport(rep)} className="text-gray-400 hover:text-pink-600 p-1">
+                          <Edit2 size={13} />
+                        </button>
+                        <button onClick={() => handleDeleteReport(rep.id, rep.homework_file_url)} className="text-gray-400 hover:text-red-600 p-1">
+                          <Trash2 size={13} />
+                        </button>
                       </div>
-
-                      {isExpanded && (
-                        <div className="p-4 border-t border-pink-100 space-y-3 text-xs text-gray-700 bg-white">
-                          {rep.vocabulary && (
-                            <div>
-                              <span className="font-bold text-pink-900 block mb-0.5">
-                                Vocabulary & Target Patterns:
-                              </span>
-                              <p className="text-gray-600 bg-pink-50/30 p-2.5 rounded-xl border border-pink-100/50 whitespace-pre-wrap">
-                                {rep.vocabulary}
-                              </p>
-                            </div>
-                          )}
-
-                          {rep.strengths && (
-                            <div>
-                              <span className="font-bold text-emerald-800 block mb-0.5">
-                                Strengths & Highlights:
-                              </span>
-                              <p className="text-gray-600 bg-emerald-50/30 p-2.5 rounded-xl border border-emerald-100/50 whitespace-pre-wrap">
-                                {rep.strengths}
-                              </p>
-                            </div>
-                          )}
-
-                          {rep.improvements && (
-                            <div>
-                              <span className="font-bold text-amber-800 block mb-0.5">
-                                Next Focus / Improvement:
-                              </span>
-                              <p className="text-gray-600 bg-amber-50/30 p-2.5 rounded-xl border border-amber-100/50 whitespace-pre-wrap">
-                                {rep.improvements}
-                              </p>
-                            </div>
-                          )}
-
-                          {rep.homework && (
-                            <div>
-                              <span className="font-bold text-pink-900 block mb-0.5">
-                                Assigned Homework:
-                              </span>
-                              <p className="text-gray-600 bg-pink-50/30 p-2.5 rounded-xl border border-pink-100/50 whitespace-pre-wrap">
-                                {rep.homework}
-                              </p>
-                            </div>
-                          )}
-
-                          {rep.homework_file_url && (
-                            <div className="pt-1">
-                              <a
-                                href={rep.homework_file_url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-pink-50 text-pink-700 border border-pink-200 rounded-xl text-xs font-bold hover:bg-pink-100 transition"
-                              >
-                                <FileCheck size={14} />
-                                <span>View Attachment File</span>
-                              </a>
-                            </div>
-                          )}
-                        </div>
-                      )}
                     </div>
-                  );
-                })}
+                    {rep.vocabulary && <p className="text-xs text-gray-700"><span className="font-bold">Vocab:</span> {rep.vocabulary}</p>}
+                    {rep.strengths && <p className="text-xs text-gray-700"><span className="font-bold">Strengths:</span> {rep.strengths}</p>}
+                    {rep.homework && <p className="text-xs text-pink-700 font-medium"><span className="font-bold">Homework:</span> {rep.homework}</p>}
+                  </div>
+                ))}
+
+                {/* Render Lessons */}
+                {lessons.map((les) => (
+                  <div key={les.id} className="p-4 bg-pink-50/30 rounded-2xl border border-pink-100 space-y-2">
+                    <div className="flex justify-between items-center">
+                      <h4 className="font-bold text-pink-950 text-xs">{les.title || "Lesson Log"}</h4>
+                      <span className="text-[11px] font-mono text-gray-500">{les.lesson_date?.substring(0, 10)}</span>
+                    </div>
+
+                    {Array.isArray(les.book_progress) && les.book_progress.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        {les.book_progress.map((bp: any, idx: number) => {
+                          const matchedBook = books.find((b) => b.id === bp.book_id);
+                          return (
+                            <span key={idx} className="text-[10px] font-bold text-pink-800 bg-pink-100/70 px-2.5 py-0.5 rounded-lg border border-pink-200">
+                              📖 {matchedBook?.title || "Book"}: p. {bp.start_page || 1} - {bp.end_page}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {les.description && <p className="text-xs text-gray-600 italic pl-1 pt-1">"{les.description}"</p>}
+                  </div>
+                ))}
               </div>
             )}
           </div>
         </div>
       </div>
-
-      {/* RENEWAL INVOICE & PARENT NOTICE MODAL */}
-      {isRenewalModalOpen && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="card bg-white w-full max-w-2xl max-h-[92vh] overflow-y-auto p-6 rounded-3xl shadow-2xl space-y-4 text-xs animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between border-b border-pink-100 pb-3">
-              <div className="flex items-center gap-2">
-                <span className="p-2 bg-pink-50 text-pink-600 rounded-xl">
-                  <Receipt size={18} />
-                </span>
-                <div>
-                  <h2 className="text-lg font-bold text-pink-950">
-                    Package Renewal Notice & Invoice
-                  </h2>
-                  <p className="text-[11px] text-gray-500">
-                    Generate, copy, or download a formal renewal invoice PDF for {student?.name}&apos;s parents.
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsRenewalModalOpen(false)}
-                className="text-gray-400 hover:text-gray-600 p-1 rounded-lg transition cursor-pointer"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="space-y-3.5">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block mb-1 font-semibold text-gray-700">
-                    Regular Classes Included *
-                  </label>
-                  <input
-                    type="number"
-                    className="input w-full text-xs font-semibold"
-                    value={renewalClassesCount}
-                    onChange={(e) => setRenewalClassesCount(e.target.value)}
-                    placeholder="e.g. 20"
-                  />
-                </div>
-                <div>
-                  <label className="block mb-1 font-semibold text-gray-700">
-                    Free / Bonus Classes
-                  </label>
-                  <input
-                    type="number"
-                    className="input w-full text-xs"
-                    value={renewalFreeCount}
-                    onChange={(e) => setRenewalFreeCount(e.target.value)}
-                    placeholder="e.g. 0"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block mb-1 font-semibold text-gray-700">
-                    Tuition Rate ({student?.payment_currency || "VND"}) *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. 2,500,000"
-                    className="input w-full text-xs font-bold text-pink-900"
-                    value={
-                      renewalRate
-                        ? Number(String(renewalRate).replace(/[^0-9.]/g, "")).toLocaleString("en-US")
-                        : ""
-                    }
-                    onChange={(e) => {
-                      const raw = e.target.value.replace(/[^0-9]/g, "");
-                      setRenewalRate(raw);
-                    }}
-                  />
-                </div>
-                <div>
-                  <label className="block mb-1 font-semibold text-gray-700">
-                    Class Duration (mins)
-                  </label>
-                  <select
-                    className="input w-full text-xs bg-white cursor-pointer"
-                    value={renewalDuration}
-                    onChange={(e) => setRenewalDuration(e.target.value)}
-                  >
-                    <option value="25">25 minutes</option>
-                    <option value="40">40 minutes</option>
-                    <option value="50">50 minutes</option>
-                    <option value="60">60 minutes</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block mb-1 font-semibold text-gray-700">
-                  Target Renewal Start Date
-                </label>
-                <div className="relative">
-                  <DatePicker
-                    selected={renewalStartDate ? new Date(renewalStartDate) : null}
-                    onChange={(date: Date | null) => {
-                      if (date) {
-                        const y = date.getFullYear();
-                        const m = String(date.getMonth() + 1).padStart(2, "0");
-                        const d = String(date.getDate()).padStart(2, "0");
-                        setRenewalStartDate(`${y}-${m}-${d}`);
-                      } else {
-                        setRenewalStartDate("");
-                      }
-                    }}
-                    dateFormat="yyyy-MM-dd"
-                    placeholderText="Select start date"
-                    className="input w-full text-xs bg-white cursor-pointer pr-9"
-                    wrapperClassName="w-full"
-                  />
-                  <div className="absolute right-3 top-2.5 text-pink-600 pointer-events-none">
-                    <Calendar size={14} />
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <label className="block mb-1 font-semibold text-gray-700">
-                  Custom Parent Note / Bank Instructions (Optional)
-                </label>
-                <textarea
-                  rows={2}
-                  className="input w-full text-xs"
-                  value={renewalCustomNotes}
-                  onChange={(e) => setRenewalCustomNotes(e.target.value)}
-                  placeholder="e.g. Please send remittance via Wise / WeChat / Bank transfer and reply with receipt."
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="block text-[11px] font-semibold text-gray-700">
-                  Upload Payment QR Image (Optional)
-                </label>
-                <div className="p-2 bg-white rounded-xl border border-gray-200 flex items-center">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0] || null;
-                      setPaymentQrFile(file);
-                      if (file) {
-                        setPaymentQrPreviewUrl(URL.createObjectURL(file));
-                      }
-                    }}
-                    className="file:mr-3 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-[11px] file:font-bold file:bg-pink-600 file:text-white hover:file:bg-pink-700 text-xs text-gray-500 w-full cursor-pointer"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1.5 pt-1">
-                <span className="block text-[11px] font-bold uppercase text-gray-400">
-                  Document Preview & Printable Layout:
-                </span>
-
-                <div
-                  ref={invoicePdfRef}
-                  style={{
-                    backgroundColor: "#ffffff",
-                    color: "#1e293b",
-                    fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-                    padding: "32px",
-                    borderRadius: "16px",
-                    border: "1px solid #f1f5f9",
-                    boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
-                  }}
-                  className="space-y-6 text-xs"
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1.5px solid #f472b6", paddingBottom: "16px" }}>
-                    <div>
-                      <h1 style={{ fontSize: "22px", fontWeight: "800", color: "#831843", margin: 0, letterSpacing: "-0.5px" }}>
-                        {teacherBrandName}
-                      </h1>
-                      <p style={{ fontSize: "11px", color: "#64748b", margin: "4px 0 0 0", fontWeight: "500" }}>
-                        Private ESL & English Language Tutoring Services
-                      </p>
-                    </div>
-
-                    <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                      <div style={{ textAlign: "right" }}>
-                        <h2 style={{ fontSize: "16px", fontWeight: "800", color: "#db2777", margin: 0, letterSpacing: "0.5px" }}>
-                          RENEWAL INVOICE
-                        </h2>
-                        <p style={{ fontSize: "10px", color: "#94a3b8", margin: "4px 0 0 0" }}>
-                          Date: {new Date().toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })}
-                        </p>
-                      </div>
-
-                      {invoiceQrDataUrl && (
-                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", backgroundColor: "#fdf2f8", padding: "6px", borderRadius: "8px", border: "1px solid #fce7f3", flexShrink: 0 }}>
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={invoiceQrDataUrl}
-                            alt="Portal QR"
-                            style={{ width: "48px", height: "48px", borderRadius: "6px", backgroundColor: "#ffffff", display: "block", margin: "0 auto" }}
-                          />
-                          <span style={{ fontSize: "7px", color: "#db2777", display: "block", marginTop: "2px", fontWeight: "700", textTransform: "uppercase", textAlign: "center", width: "100%" }}>
-                            Student Portal
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
-                    <div style={{ backgroundColor: "#fdf2f8", padding: "14px 16px", borderRadius: "12px", border: "1px solid #fce7f3" }}>
-                      <p style={{ fontSize: "10px", fontWeight: "700", color: "#be185d", textTransform: "uppercase", letterSpacing: "0.5px", margin: 0 }}>
-                        STUDENT DETAILS
-                      </p>
-                      <p style={{ fontSize: "15px", fontWeight: "800", color: "#500724", margin: "4px 0 0 0" }}>
-                        {student?.name}
-                      </p>
-                      <p style={{ fontSize: "11px", color: "#64748b", margin: "2px 0 0 0" }}>
-                        Country: {student?.country || "International"}
-                      </p>
-                    </div>
-
-                    <div style={{ backgroundColor: "#f8fafc", padding: "14px 16px", borderRadius: "12px", border: "1px solid #e2e8f0", textAlign: "right" }}>
-                      <p style={{ fontSize: "10px", fontWeight: "700", color: "#475569", textTransform: "uppercase", letterSpacing: "0.5px", margin: 0 }}>
-                        SCHEDULE INFORMATION
-                      </p>
-                      <p style={{ fontSize: "13px", fontWeight: "700", color: "#0f172a", margin: "4px 0 0 0" }}>
-                        Starts: {renewalStartDate}
-                      </p>
-                      <p style={{ fontSize: "11px", color: "#64748b", margin: "2px 0 0 0" }}>
-                        Class Duration: {renewalDuration} mins / session
-                      </p>
-                    </div>
-                  </div>
-
-                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "11px" }}>
-                    <thead>
-                      <tr style={{ backgroundColor: "#fdf2f8", borderBottom: "1.5px solid #fbcfe8", color: "#831843", textAlign: "left" }}>
-                        <th style={{ padding: "10px 12px", fontWeight: "700" }}>Lesson Package Description</th>
-                        <th style={{ padding: "10px 12px", textAlign: "center", fontWeight: "700" }}>Classes</th>
-                        <th style={{ padding: "10px 12px", textAlign: "right", fontWeight: "700" }}>Tuition Amount</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
-                        <td style={{ padding: "14px 12px", verticalAlign: "top" }}>
-                          <p style={{ fontWeight: "700", color: "#0f172a", margin: 0, fontSize: "12px" }}>
-                            Private 1-on-1 English Course ({renewalDuration}m)
-                          </p>
-                          <p style={{ color: "#64748b", fontSize: "10.5px", margin: "4px 0 0 0", lineHeight: "1.4" }}>
-                            Tailored curriculum, personalized homework review, and parent progress tracking.
-                          </p>
-                          {Number(renewalFreeCount) > 0 && (
-                            <p style={{ color: "#059669", fontWeight: "700", fontSize: "10px", margin: "4px 0 0 0" }}>
-                              🎁 Includes {renewalFreeCount} Complimentary Bonus Classes
-                            </p>
-                          )}
-                        </td>
-                        <td style={{ padding: "14px 12px", textAlign: "center", fontWeight: "700", color: "#334155", verticalAlign: "top" }}>
-                          {renewalClassesCount} {Number(renewalFreeCount) > 0 ? `(+${renewalFreeCount})` : ""}
-                        </td>
-                        <td style={{ padding: "14px 12px", textAlign: "right", fontWeight: "800", color: "#be185d", fontSize: "12px", verticalAlign: "top" }}>
-                          {formattedRenewRate} {student?.payment_currency || "VND"}
-                        </td>
-                      </tr>
-                    </tbody>
-                    <tfoot>
-                      <tr>
-                        <td colSpan={2} style={{ padding: "14px 12px 6px 12px", textAlign: "right", fontWeight: "700", color: "#64748b", fontSize: "11px" }}>
-                          Total Package Amount:
-                        </td>
-                        <td style={{ padding: "14px 12px 6px 12px", textAlign: "right", fontWeight: "900", fontSize: "15px", color: "#db2777" }}>
-                          {formattedRenewRate} {student?.payment_currency || "VND"}
-                        </td>
-                      </tr>
-                    </tfoot>
-                  </table>
-
-                  {(renewalCustomNotes || paymentQrPreviewUrl) ? (
-                    <div style={{ backgroundColor: "#fdf2f8", border: "1px solid #fce7f3", padding: "12px 14px", borderRadius: "12px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "16px" }}>
-                      <div style={{ flex: 1 }}>
-                        <p style={{ fontSize: "10px", fontWeight: "700", color: "#831843", textTransform: "uppercase", margin: 0 }}>
-                          Payment Instructions:
-                        </p>
-                        <p style={{ fontSize: "11px", color: "#334155", margin: "4px 0 0 0", whiteSpace: "pre-wrap", lineHeight: "1.4" }}>
-                          {renewalCustomNotes || "Please send remittance via bank transfer or local payment method and reply with receipt."}
-                        </p>
-                      </div>
-
-                      {paymentQrPreviewUrl && (
-                        <div style={{ textAlign: "center", flexShrink: 0, backgroundColor: "#ffffff", padding: "6px", borderRadius: "8px", border: "1px solid #fce7f3" }}>
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={paymentQrPreviewUrl}
-                            alt="Payment QR"
-                            style={{ width: "65px", height: "65px", borderRadius: "6px", display: "block", margin: "0 auto" }}
-                          />
-                          <span style={{ fontSize: "8px", color: "#db2777", display: "block", marginTop: "3px", fontWeight: "700", textTransform: "uppercase" }}>
-                            Scan to Pay
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid #f1f5f9", paddingTop: "12px" }}>
-                      <p style={{ fontSize: "10.5px", color: "#64748b", margin: 0, lineHeight: "1.4" }}>
-                        Thank you for learning with us! Please confirm once payment is sent to secure your schedule slots.
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-pink-100">
-              <button
-                type="button"
-                onClick={() => setIsRenewalModalOpen(false)}
-                className="px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 font-semibold text-gray-600 transition cursor-pointer"
-              >
-                Close
-              </button>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleCopyRenewalMessage}
-                  className="px-4 py-2 bg-pink-50 hover:bg-pink-100 text-pink-700 border border-pink-200 rounded-xl font-bold transition flex items-center gap-1.5 cursor-pointer"
-                >
-                  {copiedRenewalNotice ? (
-                    <>
-                      <Check size={14} className="text-emerald-600" />
-                      <span>Copied Text!</span>
-                    </>
-                  ) : (
-                    <>
-                      <Copy size={14} />
-                      <span>Copy Message</span>
-                    </>
-                  )}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleDownloadInvoicePdf}
-                  disabled={isGeneratingPdf}
-                  className="btn-primary text-xs px-5 py-2 flex items-center gap-1.5 cursor-pointer shadow-xs"
-                >
-                  <Download size={14} />
-                  <span>{isGeneratingPdf ? "Generating PDF..." : "Download Invoice PDF"}</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* LOG LESSON & HOMEWORK MODAL */}
-      {isReportModalOpen && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="card bg-white w-full max-w-xl max-h-[90vh] overflow-y-auto p-6 rounded-3xl shadow-xl space-y-4">
-            <div className="flex items-center justify-between border-b border-pink-100 pb-3">
-              <div>
-                <h2 className="text-xl font-bold text-pink-950">
-                  {editingReportId ? "Edit Lesson Report" : "Log Lesson & Homework"}
-                </h2>
-                <p className="text-xs text-gray-500">
-                  Record daily lesson feedback and track curriculum progress.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsReportModalOpen(false)}
-                className="text-gray-400 hover:text-gray-600 p-1.5 cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleAddReport} className="space-y-3.5 text-xs">
-              <div className="grid grid-cols-1 gap-3">
-                <div>
-                  <label className="block mb-1 font-semibold text-pink-700">
-                    Select Book / Curriculum 📖
-                  </label>
-                  <select
-                    className="input w-full text-xs bg-white cursor-pointer"
-                    value={reportBookId}
-                    onChange={(e) => {
-                      setReportBookId(e.target.value);
-                      setSelectedChapterIndex("");
-                    }}
-                  >
-                    <option value="">-- Select Book --</option>
-                    {studentBooks.map((item: any) => (
-                      <option key={item.books?.id} value={item.books?.id}>
-                        {item.books?.title} {item.books?.level ? `(${item.books.level})` : ""}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {reportBookId && (() => {
-                  const currentBookItem = studentBooks.find((item: any) => item.books?.id === reportBookId);
-                  const book = currentBookItem?.books;
-                  const isPageBased = book?.book_type === "pages";
-
-                  return isPageBased ? (
-                    <div className="p-3 bg-pink-50/50 rounded-xl border border-pink-100 space-y-3">
-                      <label className="block font-semibold text-pink-900 text-xs">
-                        Page Range Covered 📄 (Total Book Pages: {book?.total_pages || "N/A"})
-                      </label>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="block text-[10px] text-gray-500 mb-0.5">Start Page</label>
-                          <input
-                            type="number"
-                            min="1"
-                            max={book?.total_pages || 999}
-                            className="input w-full text-xs bg-white"
-                            value={startPageInput}
-                            onChange={(e) => setStartPageInput(e.target.value)}
-                            placeholder="e.g. 1"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] text-gray-500 mb-0.5">End Page</label>
-                          <input
-                            type="number"
-                            min="1"
-                            max={book?.total_pages || 999}
-                            className="input w-full text-xs bg-white"
-                            value={endPageInput}
-                            onChange={(e) => setEndPageInput(e.target.value)}
-                            placeholder="e.g. 5"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="p-3 bg-pink-50/50 rounded-xl border border-pink-100 space-y-2">
-                      <label className="block mb-1 font-semibold text-pink-900 text-xs">
-                        Chapter / Lesson Focus 📑
-                      </label>
-                      <select
-                        className="input w-full text-xs bg-white cursor-pointer"
-                        value={selectedChapterIndex}
-                        onChange={(e) => setSelectedChapterIndex(e.target.value)}
-                      >
-                        <option value="">-- Select Chapter --</option>
-                        {(() => {
-                          const chapters = book?.chapters || [];
-                          const completedList = currentBookItem?.completed_chapters || [];
-
-                          return chapters
-                            .map((chap: any, idx: number) => ({ ...chap, index: idx }))
-                            .filter((chap: any) => !completedList.includes(chap.index))
-                            .map((chap: any) => (
-                              <option key={chap.index} value={chap.index}>
-                                Chapter {chap.index + 1}: {chap.title || `Lesson ${chap.index + 1}`}
-                              </option>
-                            ));
-                        })()}
-                      </select>
-
-                      <label className="flex items-center gap-2 cursor-pointer pt-1 text-xs text-pink-950 font-medium">
-                        <input
-                          type="checkbox"
-                          checked={isChapterComplete}
-                          onChange={(e) => setIsChapterComplete(e.target.checked)}
-                          className="rounded border-pink-300 text-pink-600 focus:ring-pink-500 w-4 h-4"
-                        />
-                        <span>Mark this chapter as fully completed 🎯</span>
-                      </label>
-                    </div>
-                  );
-                })()}
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block mb-1 font-semibold text-gray-700">
-                    Lesson Title *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Unit 3: Animals & Habitats"
-                    className="input w-full text-xs"
-                    value={lessonTitle}
-                    onChange={(e) => setLessonTitle(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="block mb-1 font-semibold text-gray-700">
-                    Date
-                  </label>
-                  <input
-                    type="date"
-                    className="input w-full text-xs"
-                    value={reportDate}
-                    onChange={(e) => setReportDate(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block mb-1 font-semibold text-gray-700">
-                  Vocabulary / Target Patterns
-                </label>
-                <textarea
-                  rows={2}
-                  placeholder="e.g. cheetah, mammal, fast, faster than"
-                  className="input w-full text-xs"
-                  value={vocabulary}
-                  onChange={(e) => setVocabulary(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.stopPropagation();
-                    }
-                  }}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block mb-1 font-semibold text-gray-700">
-                    Strengths & Highlights
-                  </label>
-                  <textarea
-                    rows={2}
-                    placeholder="Great pronunciation and enthusiasm today!"
-                    className="input w-full text-xs"
-                    value={strengths}
-                    onChange={(e) => setStrengths(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="block mb-1 font-semibold text-gray-700">
-                    Next Focus / Improvement
-                  </label>
-                  <textarea
-                    rows={2}
-                    placeholder="Practice past tense verb endings."
-                    className="input w-full text-xs"
-                    value={improvements}
-                    onChange={(e) => setImprovements(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block mb-1 font-semibold text-pink-700">
-                  Assigned Homework / Instructions (Optional) 📚
-                </label>
-                <textarea
-                  rows={2}
-                  placeholder="e.g. Complete Student Book Page 24 exercises 1-4."
-                  className="input w-full text-xs border-pink-200 bg-pink-50/20"
-                  value={homework}
-                  onChange={(e) => setHomework(e.target.value)}
-                />
-              </div>
-
-              <div className="p-3 bg-pink-50/40 rounded-2xl border border-pink-100 space-y-1.5">
-                <label className="block font-semibold text-pink-900 text-xs">
-                  Attach Homework Page / Worksheet (Optional) 📄
-                </label>
-                <input
-                  type="file"
-                  accept="image/*,application/pdf"
-                  onChange={(e) => setHomeworkFile(e.target.files?.[0] || null)}
-                  className="file:mr-3 file:py-1.5 file:px-3.5 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-pink-600 file:text-white hover:file:bg-pink-700 text-xs text-gray-500 w-full cursor-pointer"
-                />
-                {homeworkFile && (
-                  <p className="text-[11px] text-emerald-700 font-medium">
-                    ✓ Selected file: {homeworkFile.name}
-                  </p>
-                )}
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3 border-t border-pink-100">
-                <button
-                  type="button"
-                  onClick={() => setIsReportModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 font-semibold text-gray-600 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmittingReport}
-                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
-                >
-                  {isSubmittingReport
-                    ? "Uploading & Saving..."
-                    : "Save Lesson & Send to Portal"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* EDIT STUDENT MODAL */}
-      {isEditModalOpen && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="card bg-white w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 rounded-3xl shadow-xl space-y-4">
-            <h2 className="text-2xl font-bold text-pink-600">Edit Student</h2>
-
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                  <label className="block mb-1 text-xs font-semibold text-gray-700">
-                    Student Name *
-                  </label>
-                  <input
-                    className="input w-full text-xs"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="block mb-1 text-xs font-semibold text-gray-700">
-                    Teacher Alias
-                  </label>
-                  <select
-                    className="input w-full text-xs bg-white"
-                    value={teacherAlias}
-                    onChange={(e) => setTeacherAlias(e.target.value)}
-                  >
-                    {teacherAliases.map((alias) => (
-                      <option key={alias} value={alias}>{alias}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label className="block mb-1 text-xs font-semibold text-gray-700">
-                  Classroom Video Link (Zoom / Google Meet URL)
-                </label>
-                <input
-                  placeholder="https://meet.google.com/... or Zoom link"
-                  className="input w-full text-xs font-mono"
-                  value={meetingLink}
-                  onChange={(e) => setMeetingLink(e.target.value)}
-                />
-              </div>
-
-              <div>
-                <label className="block mb-1 text-xs font-semibold text-gray-700">
-                  Assigned Curriculum / Books (Select up to 2)
-                </label>
-                <div className="space-y-2">
-                  <select
-                    className="input w-full text-xs bg-white cursor-pointer"
-                    value=""
-                    onChange={(e) => {
-                      const bookId = e.target.value;
-                      if (!bookId) return;
-                      if (selectedBookIds.includes(bookId)) return;
-                      if (selectedBookIds.length >= 2) {
-                        alert("You can select a maximum of 2 books.");
-                        return;
-                      }
-                      setSelectedBookIds([...selectedBookIds, bookId]);
-                    }}
-                  >
-                    <option value="">+ Add a book...</option>
-                    {books && books.length > 0 ? (
-                      books
-                        .filter((b) => !selectedBookIds.includes(b.id))
-                        .map((b) => (
-                          <option key={b.id} value={b.id}>
-                            {b.title} {b.level ? `(${b.level})` : ""}
-                          </option>
-                        ))
-                    ) : (
-                      <option disabled value="">No books found in database</option>
-                    )}
-                  </select>
-
-                  <div className="flex flex-wrap gap-1.5 pt-1">
-                    {selectedBookIds.length === 0 ? (
-                      <span className="text-[11px] text-gray-400 italic">No books selected yet.</span>
-                    ) : (
-                      selectedBookIds.map((id) => {
-                        const book = books.find((b) => b.id === id);
-                        return (
-                          <span
-                            key={id}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-pink-50 text-pink-700 border border-pink-200 rounded-xl text-xs font-semibold"
-                          >
-                            <span>📖 {book?.title || "Book"}</span>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setSelectedBookIds(selectedBookIds.filter((bId) => bId !== id))
-                              }
-                              className="text-pink-400 hover:text-red-600 transition cursor-pointer"
-                            >
-                              ✕
-                            </button>
-                          </span>
-                        );
-                      })
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                  <label className="block mb-1 text-xs font-semibold text-gray-700">
-                    Contract / Package Start Date
-                  </label>
-                  <div className="relative">
-                    <DatePicker
-                      selected={startDate ? new Date(startDate) : null}
-                      onChange={(date: Date | null) => {
-                        if (date) {
-                          const y = date.getFullYear();
-                          const m = String(date.getMonth() + 1).padStart(2, "0");
-                          const d = String(date.getDate()).padStart(2, "0");
-                          setStartDate(`${y}-${m}-${d}`);
-                        } else {
-                          setStartDate("");
-                        }
-                      }}
-                      dateFormat="yyyy-MM-dd"
-                      placeholderText="Select start date"
-                      className="input w-full text-xs bg-white cursor-pointer pr-9"
-                      wrapperClassName="w-full"
-                    />
-                    <div className="absolute right-3 top-2.5 text-pink-600 pointer-events-none">
-                      <Calendar size={14} />
-                    </div>
-                  </div>
-                </div>
-                <div>
-                  <label className="block mb-1 text-xs font-semibold text-gray-700">
-                    Email
-                  </label>
-                  <input
-                    className="input w-full text-xs"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="parent@example.com"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                  <label className="block mb-1 text-xs font-semibold text-gray-700">
-                    Phone
-                  </label>
-                  <input
-                    className="input w-full text-xs"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="block mb-1 text-xs font-semibold text-gray-700">
-                    Country *
-                  </label>
-                  <select
-                    className="input w-full text-xs bg-white"
-                    value={country}
-                    onChange={(e) => {
-                      const selected = e.target.value;
-                      const selectedCountry = countries.find(
-                        (item) => item.name === selected
-                      );
-                      setCountry(selected);
-                      if (selectedCountry) {
-                        setPaymentCurrency(selectedCountry.currency);
-                        calculatePHP(paymentAmount, selectedCountry.currency);
-                      }
-                    }}
-                  >
-                    <option value="">Select Country</option>
-                    {countries.map((item) => (
-                      <option key={item.name} value={item.name}>
-                        {item.name} {item.flag}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block mb-1 text-xs font-semibold text-gray-700">
-                    Classes Included
-                  </label>
-                  <input
-                    type="number"
-                    className="input w-full text-xs"
-                    value={classesIncluded}
-                    onChange={(e) => setClassesIncluded(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="block mb-1 text-xs font-semibold text-gray-700">
-                    Free Classes
-                  </label>
-                  <input
-                    type="number"
-                    className="input w-full text-xs"
-                    value={freeClasses}
-                    onChange={(e) => setFreeClasses(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="block mb-1 text-xs font-semibold text-gray-700">
-                    Duration (mins)
-                  </label>
-                  <input
-                    type="number"
-                    className="input w-full text-xs"
-                    value={classDuration}
-                    onChange={(e) => setClassDuration(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              <textarea
-                placeholder="Student notes..."
-                rows={2}
-                className="input w-full text-xs"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-              />
-            </div>
-
-            <div className="flex justify-end gap-3 pt-4 border-t border-pink-100">
-              <button
-                type="button"
-                onClick={() => setIsEditModalOpen(false)}
-                className="px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-xs font-semibold text-gray-600 transition cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleUpdateStudent}
-                className="btn-primary cursor-pointer text-xs"
-              >
-                Save Changes
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ADD WEEKLY SCHEDULE MODAL */}
-      {isScheduleModalOpen && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className="card bg-white w-full max-w-md p-6 rounded-3xl shadow-xl space-y-4 text-xs">
-            <div className="flex items-center justify-between border-b border-pink-100 pb-3">
-              <div>
-                <h3 className="font-bold text-base text-pink-950">Add Weekly Schedule</h3>
-                <p className="text-gray-500">Set regular class slots for this student.</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsScheduleModalOpen(false)}
-                className="text-gray-400 hover:text-gray-600 cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleAddSchedule} className="space-y-3.5">
-              <div>
-                <label className="block mb-1.5 font-semibold text-gray-700">Select Days of the Week *</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {DAYS_OF_WEEK.map((day) => {
-                    const isSelected = scheduleDays.includes(day);
-                    return (
-                      <button
-                        key={day}
-                        type="button"
-                        onClick={() => {
-                          if (isSelected) {
-                            setScheduleDays(scheduleDays.filter((d) => d !== day));
-                          } else {
-                            setScheduleDays([...scheduleDays, day]);
-                          }
-                        }}
-                        className={`py-2 px-3 rounded-xl border text-xs font-semibold transition cursor-pointer ${
-                          isSelected
-                            ? "bg-pink-600 text-white border-pink-600 shadow-xs"
-                            : "bg-white text-gray-700 border-gray-200 hover:bg-pink-50"
-                        }`}
-                      >
-                        {day}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block mb-1 font-semibold text-gray-700">Class Time *</label>
-                  <input
-                    type="time"
-                    required
-                    className="input w-full text-xs"
-                    value={scheduleTime}
-                    onChange={(e) => setScheduleTime(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="block mb-1 font-semibold text-gray-700">Duration (mins)</label>
-                  <select
-                    className="input w-full text-xs bg-white"
-                    value={scheduleDuration}
-                    onChange={(e) => setScheduleDuration(e.target.value)}
-                  >
-                    <option value="25">25 minutes</option>
-                    <option value="40">40 minutes</option>
-                    <option value="50">50 minutes</option>
-                    <option value="60">60 minutes</option>
-                    <option value="90">90 minutes</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block mb-1 font-semibold text-gray-700">Topic / Focus</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Regular Class / Conversation"
-                  className="input w-full text-xs"
-                  value={scheduleTopic}
-                  onChange={(e) => setScheduleTopic(e.target.value)}
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3 border-t border-pink-100">
-                <button
-                  type="button"
-                  onClick={() => setIsScheduleModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 font-semibold text-gray-600 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSavingSchedule}
-                  className="btn-primary text-xs px-5 py-2 cursor-pointer"
-                >
-                  {isSavingSchedule ? "Saving..." : "Save Schedule"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* EDIT WEEKLY SCHEDULE MODAL */}
-      {editingSchedule && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className="bg-white border border-pink-100 rounded-3xl p-6 w-full max-w-sm shadow-xl space-y-4 text-xs">
-            <div className="flex items-center justify-between border-b border-pink-100 pb-3">
-              <h3 className="font-bold text-sm text-pink-950">Edit Class Schedule</h3>
-              <button
-                type="button"
-                onClick={() => setEditingSchedule(null)}
-                className="text-gray-400 hover:text-gray-600 p-1 cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleUpdateSchedule} className="space-y-3">
-              <div>
-                <label className="block mb-1 font-semibold text-gray-700">Day of Week *</label>
-                <select
-                  className="input w-full text-xs bg-white cursor-pointer"
-                  value={editDayOfWeek}
-                  onChange={(e) => setEditDayOfWeek(e.target.value)}
-                >
-                  {DAYS_OF_WEEK.map((day) => (
-                    <option key={day} value={day}>
-                      {day}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block mb-1 font-semibold text-gray-700">Start Time *</label>
-                  <input
-                    type="time"
-                    required
-                    className="input w-full text-xs font-bold text-pink-950"
-                    value={editStartTime}
-                    onChange={(e) => setEditStartTime(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="block mb-1 font-semibold text-gray-700">Duration (mins)</label>
-                  <input
-                    type="number"
-                    required
-                    min={15}
-                    max={180}
-                    className="input w-full text-xs font-bold"
-                    value={editDuration}
-                    onChange={(e) => setEditDuration(Number(e.target.value))}
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3 border-t border-pink-100">
-                <button
-                  type="button"
-                  onClick={() => setEditingSchedule(null)}
-                  className="px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 font-semibold text-gray-600 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isUpdatingSchedule}
-                  className="btn-primary text-xs px-5 py-2 cursor-pointer"
-                >
-                  {isUpdatingSchedule ? "Saving..." : "Update Schedule"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
