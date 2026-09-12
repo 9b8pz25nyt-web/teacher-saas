@@ -29,7 +29,7 @@ export default function CalendarPage() {
     dateString: string
   } | null>(null)
 
-  const fetchEvents = useCallback(async () => {
+const fetchEvents = useCallback(async () => {
     setLoading(true)
     try {
       const {
@@ -38,7 +38,7 @@ export default function CalendarPage() {
 
       if (!user) return
 
-      // 1. Fetch regular weekly schedules
+      // 1. Fetch regular weekly schedules (Filtered by user.id)
       const { data: schedules, error: scheduleError } = await supabase
         .from('schedules')
         .select(`
@@ -54,10 +54,11 @@ export default function CalendarPage() {
             name
           )
         `)
+        .eq('user_id', user.id) // 👈 1. Scope regular schedules to current user
 
       if (scheduleError) console.error('Schedule fetch error:', scheduleError.message)
 
-      // 2. Fetch one-off makeup classes
+      // 2. Fetch one-off makeup classes (Filtered by user.id)
       const { data: makeupClasses, error: makeupError } = await supabase
         .from('makeup_classes')
         .select(`
@@ -72,6 +73,7 @@ export default function CalendarPage() {
             name
           )
         `)
+        .eq('user_id', user.id) // 👈 2. Scope makeup classes to current user
 
       if (makeupError) console.error('Makeup fetch error:', makeupError.message)
 
