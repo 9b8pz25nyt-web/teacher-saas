@@ -1209,102 +1209,216 @@ ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCust
           </div>
         </div>
 
-        {/* Right Column (7/12): Logged Lessons & Reports */}
-        <div className="lg:col-span-7">
-          <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-bold text-gray-900">
-                  Logged Lessons & Reports
-                </h3>
-                <span className="px-2 py-0.5 bg-pink-50 text-pink-600 font-bold text-xs rounded-full border border-pink-100">
-                  {reports.length + lessons.length}
+      {/* Right Column (7/12): Logged Lessons & Reports */}
+<div className="lg:col-span-7">
+  <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs space-y-4">
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-2">
+        <h3 className="text-sm font-bold text-gray-900">
+          Logged Lessons & Reports
+        </h3>
+        <span className="px-2 py-0.5 bg-pink-50 text-pink-600 font-bold text-xs rounded-full border border-pink-100">
+          {reports.length + lessons.length}
+        </span>
+      </div>
+      <button
+        onClick={() => {
+          const today = new Date().toISOString().split("T")[0];
+          setReportDate(today);
+          setEditingReportId(null);
+          setLessonTitle("");
+          setVocabulary("");
+          setStrengths("");
+          setImprovements("");
+          setHomework("");
+          setHomeworkFile(null);
+          setSelectedChapterIndex("");
+          setIsChapterComplete(false);
+          setIsReportModalOpen(true);
+        }}
+        className="text-xs font-bold text-pink-600 hover:text-pink-700 flex items-center gap-1 cursor-pointer"
+      >
+        <Plus size={14} />
+        <span>Add Report</span>
+      </button>
+    </div>
+
+    {reports.length === 0 && lessons.length === 0 ? (
+      <div className="p-8 text-center text-xs text-gray-400 space-y-2">
+        <p className="italic">No class reports logged yet.</p>
+        <button
+          type="button"
+          onClick={() => setIsReportModalOpen(true)}
+          className="text-pink-600 font-bold hover:underline"
+        >
+          Click here to log your first lesson
+        </button>
+      </div>
+    ) : (
+      <div className="space-y-3">
+        {/* Render Reports & Lessons with Expandable Accordion */}
+        {reports.map((rep) => {
+          const isExpanded = expandedReportIds.includes(rep.id);
+          const matchedBook = books.find((b) => b.id === rep.book_id);
+
+          return (
+            <div
+              key={rep.id}
+              className="bg-pink-50/30 rounded-2xl border border-pink-100 text-xs transition-all overflow-hidden"
+            >
+              {/* Accordion Header / Dropdown Button */}
+              <div
+                onClick={() => toggleExpandReport(rep.id)}
+                className="p-3.5 flex items-center justify-between cursor-pointer hover:bg-pink-100/40 select-none transition"
+              >
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="p-1 rounded-lg text-pink-600 bg-white border border-pink-200 shadow-2xs"
+                  >
+                    {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                  </button>
+                  <h4 className="font-bold text-pink-950 text-xs">
+                    {rep.lesson_title || rep.title || "Class Report"}
+                  </h4>
+                </div>
+
+                <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                  <span className="text-[11px] font-mono text-gray-500">
+                    {rep.report_date?.substring(0, 10)}
+                  </span>
+                  <button
+                    onClick={() => handleOpenEditReport(rep)}
+                    className="text-gray-400 hover:text-pink-600 p-1 cursor-pointer"
+                  >
+                    <Edit2 size={13} />
+                  </button>
+                  <button
+                    onClick={() => handleDeleteReport(rep.id, rep.homework_file_url)}
+                    className="text-gray-400 hover:text-red-600 p-1 cursor-pointer"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Expandable Body */}
+              {isExpanded && (
+                <div className="px-4 pb-4 pt-1 border-t border-pink-100/60 space-y-2.5 bg-white/50">
+                  {matchedBook && (
+                    <div className="pt-1">
+                      <span className="text-[10px] font-bold text-pink-800 bg-pink-100/70 px-2.5 py-0.5 rounded-lg border border-pink-200">
+                        📖 {matchedBook.title}: p. {rep.start_page || 1} - {rep.end_page || "N/A"}
+                      </span>
+                    </div>
+                  )}
+
+                  {rep.vocabulary && (
+                    <div className="p-2.5 bg-white rounded-xl border border-pink-100">
+                      <p className="font-bold text-gray-900 text-[11px] mb-0.5">✨ Vocabulary & Structures:</p>
+                      <p className="text-gray-700 font-mono text-xs whitespace-pre-wrap">{rep.vocabulary}</p>
+                    </div>
+                  )}
+
+                  {(rep.strengths || rep.improvements) && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      {rep.strengths && (
+                        <div className="p-2.5 bg-emerald-50/60 rounded-xl border border-emerald-100">
+                          <p className="font-bold text-emerald-900 text-[11px] mb-0.5">🏆 Strengths & Highlights:</p>
+                          <p className="text-emerald-950 text-xs whitespace-pre-wrap">{rep.strengths}</p>
+                        </div>
+                      )}
+                      {rep.improvements && (
+                        <div className="p-2.5 bg-amber-50/60 rounded-xl border border-amber-100">
+                          <p className="font-bold text-amber-900 text-[11px] mb-0.5">📈 Next Focus / Tips:</p>
+                          <p className="text-amber-950 text-xs whitespace-pre-wrap">{rep.improvements}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {(rep.homework || rep.homework_file_url) && (
+                    <div className="p-3 bg-pink-100/50 rounded-xl border border-pink-200 space-y-1.5">
+                      <p className="font-bold text-pink-950 text-[11px]">📚 Assigned Homework:</p>
+                      {rep.homework && <p className="text-gray-800 text-xs whitespace-pre-wrap">{rep.homework}</p>}
+                      {rep.homework_file_url && (
+                        <a
+                          href={rep.homework_file_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-white text-pink-700 font-bold rounded-lg text-[10px] border border-pink-200 hover:bg-pink-50"
+                        >
+                          📄 View Attached Worksheet
+                        </a>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {/* Render Independent Lessons Logs */}
+        {lessons.map((les) => {
+          const isExpanded = expandedReportIds.includes(les.id);
+
+          return (
+            <div
+              key={les.id}
+              className="bg-pink-50/30 rounded-2xl border border-pink-100 text-xs transition-all overflow-hidden"
+            >
+              <div
+                onClick={() => toggleExpandReport(les.id)}
+                className="p-3.5 flex items-center justify-between cursor-pointer hover:bg-pink-100/40 select-none transition"
+              >
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="p-1 rounded-lg text-pink-600 bg-white border border-pink-200 shadow-2xs"
+                  >
+                    {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                  </button>
+                  <h4 className="font-bold text-pink-950 text-xs">{les.title || "Lesson Log"}</h4>
+                </div>
+
+                <span className="text-[11px] font-mono text-gray-500">
+                  {les.lesson_date?.substring(0, 10)}
                 </span>
               </div>
-              <button
-                onClick={() => {
-                  const today = new Date().toISOString().split("T")[0];
-                  setReportDate(today);
-                  setEditingReportId(null);
-                  setLessonTitle("");
-                  setVocabulary("");
-                  setStrengths("");
-                  setImprovements("");
-                  setHomework("");
-                  setHomeworkFile(null);
-                  setSelectedChapterIndex("");
-                  setIsChapterComplete(false);
-                  setIsReportModalOpen(true);
-                }}
-                className="text-xs font-bold text-pink-600 hover:text-pink-700 flex items-center gap-1 cursor-pointer"
-              >
-                <Plus size={14} />
-                <span>Add Report</span>
-              </button>
+
+              {isExpanded && (
+                <div className="px-4 pb-4 pt-1 border-t border-pink-100/60 space-y-2 bg-white/50">
+                  {Array.isArray(les.book_progress) && les.book_progress.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {les.book_progress.map((bp: any, idx: number) => {
+                        const matchedBook = books.find((b) => b.id === bp.book_id);
+                        return (
+                          <span
+                            key={idx}
+                            className="text-[10px] font-bold text-pink-800 bg-pink-100/70 px-2.5 py-0.5 rounded-lg border border-pink-200"
+                          >
+                            📖 {matchedBook?.title || "Book"}: p. {bp.start_page || 1} - {bp.end_page}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {les.description && (
+                    <p className="text-xs text-gray-700 bg-white p-2.5 rounded-xl border border-pink-100 whitespace-pre-wrap">
+                      {les.description}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
-
-            {reports.length === 0 && lessons.length === 0 ? (
-              <div className="p-8 text-center text-xs text-gray-400 space-y-2">
-                <p className="italic">No class reports logged yet.</p>
-                <button
-                  type="button"
-                  onClick={() => setIsReportModalOpen(true)}
-                  className="text-pink-600 font-bold hover:underline"
-                >
-                  Click here to log your first lesson
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {/* Render Class Reports */}
-                {reports.map((rep) => (
-                  <div key={rep.id} className="p-4 bg-pink-50/30 rounded-2xl border border-pink-100 space-y-2">
-                    <div className="flex justify-between items-center">
-                      <h4 className="font-bold text-pink-950 text-xs">{rep.lesson_title || rep.title || "Class Report"}</h4>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[11px] font-mono text-gray-500">{rep.report_date?.substring(0, 10)}</span>
-                        <button onClick={() => handleOpenEditReport(rep)} className="text-gray-400 hover:text-pink-600 p-1">
-                          <Edit2 size={13} />
-                        </button>
-                        <button onClick={() => handleDeleteReport(rep.id, rep.homework_file_url)} className="text-gray-400 hover:text-red-600 p-1">
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    </div>
-                    {rep.vocabulary && <p className="text-xs text-gray-700"><span className="font-bold">Vocab:</span> {rep.vocabulary}</p>}
-                    {rep.strengths && <p className="text-xs text-gray-700"><span className="font-bold">Strengths:</span> {rep.strengths}</p>}
-                    {rep.homework && <p className="text-xs text-pink-700 font-medium"><span className="font-bold">Homework:</span> {rep.homework}</p>}
-                  </div>
-                ))}
-
-                {/* Render Lessons */}
-                {lessons.map((les) => (
-                  <div key={les.id} className="p-4 bg-pink-50/30 rounded-2xl border border-pink-100 space-y-2">
-                    <div className="flex justify-between items-center">
-                      <h4 className="font-bold text-pink-950 text-xs">{les.title || "Lesson Log"}</h4>
-                      <span className="text-[11px] font-mono text-gray-500">{les.lesson_date?.substring(0, 10)}</span>
-                    </div>
-
-                    {Array.isArray(les.book_progress) && les.book_progress.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 pt-1">
-                        {les.book_progress.map((bp: any, idx: number) => {
-                          const matchedBook = books.find((b) => b.id === bp.book_id);
-                          return (
-                            <span key={idx} className="text-[10px] font-bold text-pink-800 bg-pink-100/70 px-2.5 py-0.5 rounded-lg border border-pink-200">
-                              📖 {matchedBook?.title || "Book"}: p. {bp.start_page || 1} - {bp.end_page}
-                            </span>
-                          );
-                        })}
-                      </div>
-                    )}
-
-                    {les.description && <p className="text-xs text-gray-600 italic pl-1 pt-1">"{les.description}"</p>}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+          );
+        })}
+      </div>
+    )}
+  </div>
+</div>
       </div>
     </div>
   );
