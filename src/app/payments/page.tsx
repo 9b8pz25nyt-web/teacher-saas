@@ -17,6 +17,7 @@ import {
   Clock,
   Trash2,
 } from "lucide-react";
+import PinkDatePicker from "@/components/PinkDatePicker";
 
 // Helper to format numbers with commas
 function formatWithCommas(val: string | number) {
@@ -58,6 +59,7 @@ export default function PaymentsPage() {
   const [editStatus, setEditStatus] = useState("Paid");
   const [editMethod, setEditMethod] = useState("Bank Transfer");
   const [editRef, setEditRef] = useState("");
+  const [editPaymentDate, setEditPaymentDate] = useState("");
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   function handleOpenEdit(p: any) {
@@ -69,6 +71,7 @@ export default function PaymentsPage() {
     setEditStatus(p.payment_status || "Paid");
     setEditMethod(p.payment_method || "Bank Transfer");
     setEditRef(p.reference_number || "");
+    setEditPaymentDate(p.payment_date || p.created_at?.split("T")[0] || new Date().toISOString().split("T")[0]);
   }
 
   async function handleSaveEdit() {
@@ -88,6 +91,7 @@ export default function PaymentsPage() {
           payment_status: editStatus,
           payment_method: editMethod,
           reference_number: editRef.trim() || null,
+          payment_date: editPaymentDate,
         })
         .eq("id", editingPayment.id);
 
@@ -139,6 +143,11 @@ export default function PaymentsPage() {
       const studentAmount = String(student.payment_amount || "");
       setCurrency(studentCurrency);
       setAmount(formatWithCommas(studentAmount));
+
+      if (!paymentDate) {
+        setPaymentDate(new Date().toISOString().split("T")[0]);
+      }
+
       if (student.php_equivalent) {
         setPhpEquivalent(Number(student.php_equivalent));
       } else {
@@ -167,9 +176,13 @@ export default function PaymentsPage() {
 
   async function handleMarkAsPaid(paymentId: string) {
     try {
+      const today = new Date().toISOString().split("T")[0];
       const { error } = await supabase
         .from("payments")
-        .update({ payment_status: "Paid" })
+        .update({
+          payment_status: "Paid",
+          payment_date: today,
+        })
         .eq("id", paymentId);
 
       if (error) throw error;
@@ -488,7 +501,8 @@ export default function PaymentsPage() {
                             </span>
                           )}
                         </td>
-<td className="p-4 text-right">
+
+                        <td className="p-4 text-right">
                           <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
                             <button
                               type="button"
@@ -558,7 +572,7 @@ export default function PaymentsPage() {
               <div>
                 <label className="block mb-1 font-semibold text-gray-700">Student</label>
                 <select
-                  className="input bg-white text-xs w-full"
+                  className="input bg-white text-xs w-full cursor-pointer"
                   value={selectedStudentId}
                   onChange={(e) => handleStudentSelect(e.target.value)}
                 >
@@ -573,9 +587,31 @@ export default function PaymentsPage() {
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
+                  <label className="block mb-1 font-semibold text-gray-700">Payment Date (Date Paid) *</label>
+            <PinkDatePicker
+  selectedDate={paymentDate}
+  onChange={(newDate) => setPaymentDate(newDate)}
+  required
+/>
+                </div>
+                <div>
+                  <label className="block mb-1 font-semibold text-gray-700">Status</label>
+                  <select
+                    className="input bg-white text-xs w-full cursor-pointer"
+                    value={paymentStatus}
+                    onChange={(e) => setPaymentStatus(e.target.value)}
+                  >
+                    <option value="Paid">Paid</option>
+                    <option value="Pending">Pending</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
                   <label className="block mb-1 font-semibold text-gray-700">Payment Currency</label>
                   <select
-                    className="input bg-white text-xs w-full"
+                    className="input bg-white text-xs w-full cursor-pointer"
                     value={currency}
                     onChange={(e) => {
                       setCurrency(e.target.value);
@@ -635,32 +671,9 @@ export default function PaymentsPage() {
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block mb-1 font-semibold text-gray-700">Payment Date</label>
-                  <input
-                    type="date"
-                    className="input text-xs w-full"
-                    value={paymentDate}
-                    onChange={(e) => setPaymentDate(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="block mb-1 font-semibold text-gray-700">Status</label>
-                  <select
-                    className="input bg-white text-xs w-full"
-                    value={paymentStatus}
-                    onChange={(e) => setPaymentStatus(e.target.value)}
-                  >
-                    <option value="Paid">Paid</option>
-                    <option value="Pending">Pending</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
                   <label className="block mb-1 font-semibold text-gray-700">Payment Method</label>
                   <select
-                    className="input bg-white text-xs w-full"
+                    className="input bg-white text-xs w-full cursor-pointer"
                     value={paymentMethod}
                     onChange={(e) => setPaymentMethod(e.target.value)}
                   >
@@ -700,7 +713,7 @@ export default function PaymentsPage() {
               <button
                 type="button"
                 onClick={() => setShowAddModal(false)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 transition"
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 transition cursor-pointer"
               >
                 Cancel
               </button>
@@ -708,7 +721,7 @@ export default function PaymentsPage() {
                 type="button"
                 onClick={handleSavePayment}
                 disabled={savingPayment}
-                className="btn-primary text-xs py-2 px-5"
+                className="btn-primary text-xs py-2 px-5 cursor-pointer"
               >
                 {savingPayment ? "Saving..." : "Save Payment"}
               </button>
@@ -723,12 +736,33 @@ export default function PaymentsPage() {
           <div className="bg-white border border-pink-200 rounded-3xl p-6 w-full max-w-lg shadow-2xl space-y-4 text-xs">
             <div className="flex items-center justify-between border-b border-pink-100 pb-3">
               <h3 className="font-bold text-base text-pink-950">Edit Payment Record</h3>
-              <button onClick={() => setEditingPayment(null)} className="text-gray-400 hover:text-gray-600">
+              <button onClick={() => setEditingPayment(null)} className="text-gray-400 hover:text-gray-600 cursor-pointer">
                 <X size={18} />
               </button>
             </div>
 
             <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block mb-1 font-semibold text-gray-700">Date Paid *</label>
+                <PinkDatePicker
+  selectedDate={editPaymentDate}
+  onChange={(newDate) => setEditPaymentDate(newDate)}
+/>
+                </div>
+                <div>
+                  <label className="block mb-1 font-semibold text-gray-700">Status</label>
+                  <select
+                    className="input bg-white text-xs w-full cursor-pointer"
+                    value={editStatus}
+                    onChange={(e) => setEditStatus(e.target.value)}
+                  >
+                    <option value="Paid">Paid</option>
+                    <option value="Pending">Pending</option>
+                  </select>
+                </div>
+              </div>
+
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="block mb-1 font-semibold text-gray-700">Amount</label>
@@ -746,20 +780,6 @@ export default function PaymentsPage() {
                   />
                 </div>
                 <div>
-                  <label className="block mb-1 font-semibold text-gray-700">Status</label>
-                  <select
-                    className="input bg-white text-xs w-full"
-                    value={editStatus}
-                    onChange={(e) => setEditStatus(e.target.value)}
-                  >
-                    <option value="Paid">Paid</option>
-                    <option value="Pending">Pending</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
                   <label className="block mb-1 font-semibold text-gray-700">Transfer Fee (PHP)</label>
                   <input
                     type="text"
@@ -767,6 +787,24 @@ export default function PaymentsPage() {
                     value={editFee}
                     onChange={(e) => setEditFee(formatWithCommas(e.target.value))}
                   />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block mb-1 font-semibold text-gray-700">Payment Method</label>
+                  <select
+                    className="input bg-white text-xs w-full cursor-pointer"
+                    value={editMethod}
+                    onChange={(e) => setEditMethod(e.target.value)}
+                  >
+                    <option value="Bank Transfer">Bank Transfer</option>
+                    <option value="Wise">Wise</option>
+                    <option value="PayPal">PayPal</option>
+                    <option value="Remitly">Remitly</option>
+                    <option value="GCash">GCash</option>
+                    <option value="Cash">Cash</option>
+                  </select>
                 </div>
                 <div>
                   <label className="block mb-1 font-semibold text-gray-700">Reference / Txn #</label>
@@ -784,7 +822,7 @@ export default function PaymentsPage() {
               <button
                 type="button"
                 onClick={() => setEditingPayment(null)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200"
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 cursor-pointer"
               >
                 Cancel
               </button>
@@ -792,7 +830,7 @@ export default function PaymentsPage() {
                 type="button"
                 onClick={handleSaveEdit}
                 disabled={isSavingEdit}
-                className="btn-primary text-xs py-2 px-5"
+                className="btn-primary text-xs py-2 px-5 cursor-pointer"
               >
                 {isSavingEdit ? "Saving..." : "Save Changes"}
               </button>
@@ -819,7 +857,7 @@ export default function PaymentsPage() {
               <button
                 type="button"
                 onClick={() => setSelectedPaymentForReceipt(null)}
-                className="text-gray-400 hover:text-gray-600 p-1 rounded-lg transition"
+                className="text-gray-400 hover:text-gray-600 p-1 rounded-lg transition cursor-pointer"
               >
                 <X size={18} />
               </button>

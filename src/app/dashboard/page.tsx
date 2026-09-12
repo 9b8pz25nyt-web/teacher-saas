@@ -51,24 +51,33 @@ export default function DashboardPage() {
 
   const availableYears = Array.from({ length: 7 }, (_, i) => 2024 + i);
 
-  const fetchDashboardData = useCallback(async () => {
+const fetchDashboardData = useCallback(async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
 
+      // Guard clause: stop if no logged-in user is found
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+
+      // 1. Fetch Payments for current user
       const { data: paymentsData } = await supabase
         .from("payments")
-        .select("*");
+        .select("*")
+        .eq("user_id", user.id);
 
       if (paymentsData) setPayments(paymentsData);
 
-      // 1. Fetch Students
+      // 2. Fetch Students for current user
       const { data: studentsData } = await supabase
         .from("students")
-        .select("*");
+        .select("*")
+        .eq("user_id", user.id);
 
       if (studentsData) setStudents(studentsData);
 
-      // 2. Fetch Makeup Classes
+      // 3. Fetch Makeup Classes for current user
       const { data: makeupData, error: makeupError } = await supabase
         .from("makeup_classes")
         .select(`
@@ -83,7 +92,8 @@ export default function DashboardPage() {
             id,
             name
           )
-        `);
+        `)
+        .eq("user_id", user.id);
 
       if (makeupError) {
         console.error("Makeup event error:", makeupError.message);
@@ -91,12 +101,13 @@ export default function DashboardPage() {
         setMakeupEvents(makeupData);
       }
 
-      // 3. Fetch Regular Schedules
+      // 4. Fetch Regular Schedules for current user
       const { data: schedulesData, error: schedulesError } = await supabase
         .from("schedules")
         .select(
           "*, students(id, name, book_id, classes_included, free_classes, contract_start_date, contract_end_date, php_equivalent)"
         )
+        .eq("user_id", user.id)
         .order("schedule_time", { ascending: true });
 
       if (schedulesError) {
@@ -105,10 +116,11 @@ export default function DashboardPage() {
         setSchedules(schedulesData);
       }
 
-      // 4. Fetch Recorded Lessons
+      // 5. Fetch Recorded Lessons for current user
       const { data: lessonsData, error: lessonsError } = await supabase
         .from("lessons")
-        .select("id, student_id, lesson_date, status, description");
+        .select("id, student_id, lesson_date, status, description")
+        .eq("user_id", user.id);
 
       if (lessonsError) {
         console.error("Lesson error:", lessonsError.message);
@@ -158,6 +170,33 @@ export default function DashboardPage() {
     (m) => m.makeup_date?.substring(0, 10) === todayDateStr
   );
   const totalTodaysCount = todaysRegularSchedules.length + todaysMakeupSchedules.length;
+
+// Combine regular and makeup classes and sort chronologically by start time
+  const todaysCombinedSchedules = [
+    ...todaysRegularSchedules.map((sched) => ({
+      id: `reg-${sched.id}`,
+      type: "regular" as const,
+      time: sched.schedule_time || "00:00",
+      duration: sched.duration || 40,
+      studentName: sched.students?.name || "Student",
+      studentId: sched.student_id,
+      originalStatus: sched.status || "Scheduled",
+    })),
+    ...todaysMakeupSchedules.map((makeup) => {
+      const timeStr = makeup.makeup_date?.includes("T")
+        ? makeup.makeup_date.split("T")[1].substring(0, 5)
+        : "18:00";
+      return {
+        id: `makeup-${makeup.id}`,
+        type: "makeup" as const,
+        time: timeStr,
+        duration: makeup.duration || 40,
+        studentName: `✨ ${makeup.students?.name || "Student"}`,
+        studentId: makeup.student_id,
+        originalStatus: makeup.status || "Scheduled",
+      };
+    }),
+  ].sort((a, b) => a.time.localeCompare(b.time));
 
   // Calendar Math
   const daysInMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate();
@@ -436,7 +475,7 @@ if (!isQuotaExempt) {
           </div>
         </div>
 
-        {/* 2. Classes For Today Card */}
+      {/* 2. Classes For Today Card */}
         <div className="bg-white p-6 rounded-3xl border border-pink-100 shadow-xs space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold text-pink-950">
@@ -451,51 +490,34 @@ if (!isQuotaExempt) {
             <p className="text-xs text-gray-400 italic">No classes scheduled for today. Enjoy your day off! ✨</p>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {/* Regular Schedules Today */}
-              {todaysRegularSchedules.map((sched) => {
+              {todaysCombinedSchedules.map((item) => {
                 const matchingLesson = recordedLessons.find(
-                  (l) => l.student_id === sched.student_id && l.lesson_date?.substring(0, 10) === todayDateStr
+                  (l) => l.student_id === item.studentId && l.lesson_date?.substring(0, 10) === todayDateStr
                 );
-                const status = matchingLesson ? matchingLesson.status : (sched.status || "Scheduled");
+                const status = matchingLesson ? matchingLesson.status : item.originalStatus;
 
                 return (
                   <div
-                    key={`today-reg-${sched.id}`}
-                    className="p-4 rounded-2xl border border-pink-100 bg-pink-50/30 flex flex-col justify-between gap-3 shadow-2xs"
+                    key={item.id}
+                    className={`p-4 rounded-2xl border flex flex-col justify-between gap-3 shadow-2xs ${
+                      item.type === "makeup"
+                        ? "border-pink-200 bg-pink-100/40"
+                        : "border-pink-100 bg-pink-50/30"
+                    }`}
                   >
                     <div className="flex justify-between items-start">
                       <div>
-                        <p className="text-xs font-bold text-pink-900">{sched.schedule_time} ({sched.duration || 40}m)</p>
-                        <p className="text-sm font-extrabold text-pink-950 mt-0.5">{sched.students?.name || "Student"}</p>
+                        <p className="text-xs font-bold text-pink-900">{item.time} ({item.duration}m)</p>
+                        <p className="text-sm font-extrabold text-pink-950 mt-0.5">{item.studentName}</p>
                       </div>
                       <span className={`text-[10px] font-bold px-2.5 py-1 rounded-xl ${
-                        status === "Completed" ? "bg-green-100 text-green-700" : "bg-pink-100 text-pink-700"
+                        status === "Completed" 
+                          ? "bg-green-100 text-green-700" 
+                          : item.type === "makeup"
+                          ? "bg-pink-200 text-pink-900"
+                          : "bg-pink-100 text-pink-700"
                       }`}>
-                        {status}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-
-              {/* Makeup Schedules Today */}
-              {todaysMakeupSchedules.map((makeup) => {
-                const makeupTime = makeup.makeup_date?.includes("T") 
-                  ? makeup.makeup_date.split("T")[1].substring(0, 5) 
-                  : "18:00";
-                
-                return (
-                  <div
-                    key={`today-makeup-${makeup.id}`}
-                    className="p-4 rounded-2xl border border-pink-200 bg-pink-100/40 flex flex-col justify-between gap-3 shadow-2xs"
-                  >
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <p className="text-xs font-bold text-pink-900">{makeupTime} ({makeup.duration || 40}m)</p>
-                        <p className="text-sm font-extrabold text-pink-950 mt-0.5">✨ {makeup.students?.name || "Student"}</p>
-                      </div>
-                      <span className="text-[10px] font-bold px-2.5 py-1 rounded-xl bg-pink-200 text-pink-900">
-                        {makeup.status || "Scheduled"} (Make-up)
+                        {status} {item.type === "makeup" && "(Make-up)"}
                       </span>
                     </div>
                   </div>

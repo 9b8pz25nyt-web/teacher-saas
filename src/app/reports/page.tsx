@@ -142,17 +142,23 @@ export default function ReportsPage() {
     return Math.abs(selTime - itemTime) / (1000 * 3600 * 24) <= 7;
   };
 
-  const studentBreakdown = students
+const studentBreakdown = students
     .map((s) => {
       const sId = String(s.id || "").trim().toLowerCase();
 
-      // Match payments by UUID student_id
+      // Filter payments: Match student_id, MUST be "Paid", and match timeframe date filter
       const studentPayments = payments.filter((p) => {
         const pStudentId = String(p.student_id || "").trim().toLowerCase();
-        return sId !== "" && pStudentId === sId;
+        const pDate = p.payment_date || p.created_at;
+        return (
+          sId !== "" &&
+          pStudentId === sId &&
+          p.payment_status === "Paid" && // 👈 Only count actual paid receipts
+          matchesFilter(pDate)
+        );
       });
 
-      // Sum Gross Revenue
+      // Sum realized gross cash for this timeframe
       const paymentsSum = studentPayments.reduce(
         (acc, curr) =>
           acc +
@@ -164,10 +170,9 @@ export default function ReportsPage() {
         0
       );
 
-      const fallbackStudentRate = Number(s.php_equivalent || s.payment_amount || 0);
-      const grossPackagePhp = paymentsSum > 0 ? paymentsSum : fallbackStudentRate;
+      const grossPackagePhp = paymentsSum;
 
-      // Extract transfer fee directly checking transfer_fee_php and transfer_fee columns from Supabase
+      // Sum transfer/bank processing fees
       const totalFeesForStudent = studentPayments.reduce(
         (acc, curr) =>
           acc +
@@ -181,7 +186,7 @@ export default function ReportsPage() {
 
       const studentLessons = lessons.filter((l) => {
         const lStudentId = String(l.student_id || "").trim().toLowerCase();
-        return sId !== "" && lStudentId === sId && l.status !== "Cancelled";
+        return sId !== "" && lStudentId === sId && l.status !== "Cancelled" && matchesFilter(l.lesson_date);
       });
 
       const completedClasses = Number(studentLessons.length || 0);

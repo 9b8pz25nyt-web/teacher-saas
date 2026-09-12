@@ -306,6 +306,20 @@ async function handleUpdateSchedule(e: React.FormEvent) {
       const durationVal = studentData.class_duration ? String(studentData.class_duration) : "40";
       setClassDuration(durationVal);
       setRenewalDuration(durationVal);
+      const standardOptions = ["25", "40", "50", "60", "90"];
+      if (standardOptions.includes(durationVal)) {
+        setDurationSelect(durationVal);
+        setCustomDuration(Number(durationVal));
+      } else {
+        setDurationSelect("custom");
+        setCustomDuration(Number(durationVal));
+      }
+      // 👆 END OF ADDED BLOCK 👆
+
+      setPaymentStatus(studentData.payment_status || "Active");
+      setStartDate(studentData.start_date || studentData.contract_start_date || "");
+      setEndDate(studentData.end_date || studentData.contract_end_date || "");
+      setNotes(studentData.notes || "");
 
       setPaymentStatus(studentData.payment_status || "Active");
       setStartDate(studentData.start_date || studentData.contract_start_date || "");
@@ -385,7 +399,7 @@ async function handleUpdateSchedule(e: React.FormEvent) {
     }
   }
 
-  async function handleUpdateStudent() {
+ async function handleUpdateStudent() {
     try {
       const { error } = await supabase
         .from("students")
@@ -406,7 +420,7 @@ async function handleUpdateSchedule(e: React.FormEvent) {
           classes_included: Number(classesIncluded) || 0,
           free_classes: Number(freeClasses) || 0,
           classes_completed: Number(classesCompleted) || 0,
-          class_duration: Number(classDuration) || 40,
+          class_duration: finalDuration, // 👈 Insert finalDuration here
           payment_status: paymentStatus,
           start_date: startDate || null,
           contract_start_date: startDate || null,
@@ -750,6 +764,12 @@ ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCust
 
   const rawStudentStatus = (student?.payment_status || "Pending").trim().toLowerCase();
   const rawPaymentStatus = (latestPayment?.status || "").trim().toLowerCase();
+  // 1. Add state for duration mode
+const [durationSelect, setDurationSelect] = useState<string>("40")
+const [customDuration, setCustomDuration] = useState<number>(40)
+
+// 2. Computed final duration value to submit to Supabase
+const finalDuration = durationSelect === "custom" ? Number(customDuration) : Number(durationSelect)
 
   const isPaid =
     isFreePackage ||

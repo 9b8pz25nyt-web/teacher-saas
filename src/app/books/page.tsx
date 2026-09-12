@@ -69,7 +69,7 @@ export default function BooksPage() {
       const { data, error } = await supabase
         .from("books")
         .select("*")
-        .order("created_at", { ascending: false });
+        .order("title", { ascending: true }); // 👈 Arranges books alphabetically (A-Z)
 
       if (error) console.error("Error fetching books:", error.message);
       else if (data) setBooks(data);

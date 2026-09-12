@@ -212,3 +212,43 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   background-color: #fce7f3 !important; /* pink-100 */
   border-radius: 0.5rem !important;
 }
+/* Custom Pink Theme for Date Picker Popup */
+input[type="date"] {
+  accent-color: #db2777; /* Tailwind pink-600 */
+}
+
+input[type="date"]:focus {
+  outline: none;
+  border-color: #ec4899;
+  box-shadow: 0 0 0 2px rgba(236, 72, 153, 0.2);
+}
+
+/* Custom WebKit Date Picker Calendar Customization */
+::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 2px;
+  filter: invert(34%) sepia(85%) saturate(1814%) hue-rotate(309deg) brightness(91%) contrast(92%);
+}
+
+::-webkit-calendar-picker-indicator:hover {
+  background-color: #fce7f3; /* Tailwind pink-100 */
+}
+
+/* Force color scheme accents for native inputs */
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+}
+
+input[type="date"] {
+  color-scheme: light;
+  accent-color: #db2777 !important; /* Tailwind pink-600 */
+}
+
+/* Custom Calendar Icon Color */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  filter: invert(30%) sepia(85%) saturate(1800%) hue-rotate(305deg) brightness(95%) contrast(95%);
+}
