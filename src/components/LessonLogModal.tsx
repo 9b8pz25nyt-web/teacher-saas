@@ -1,9 +1,14 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import DatePicker from "react-datepicker";
-import "react-datepicker/dist/react-datepicker.css";
+import { Plus, Trash2, BookOpen } from 'lucide-react'
+
+interface BookEntry {
+  book_id: string
+  start_page: string
+  end_page: string
+}
 
 interface LessonLogModalProps {
   isOpen: boolean
@@ -12,6 +17,8 @@ interface LessonLogModalProps {
   studentId: string
   studentName: string
   eventType?: 'regular' | 'makeup'
+  dateString?: string
+  studentBooks?: any[]
 }
 
 export default function LessonLogModal({
@@ -20,370 +27,339 @@ export default function LessonLogModal({
   eventId,
   studentId,
   studentName,
-  eventType = 'regular'
+  eventType = 'regular',
+  dateString,
+  studentBooks = [],
 }: LessonLogModalProps) {
-  const [studentBooks, setStudentBooks] = useState<any[]>([])
-  const [reportBookId, setReportBookId] = useState('')
-  const [selectedChapterIndex, setSelectedChapterIndex] = useState('')
-  const [isChapterComplete, setIsChapterComplete] = useState(false)
-  const [startPage, setStartPage] = useState('')
-  const [endPage, setEndPage] = useState('')
-  const [lessonTitle, setLessonTitle] = useState('')
-  const [lessonDate, setLessonDate] = useState(new Date().toISOString().split('T')[0])
-  const [vocabulary, setVocabulary] = useState('')
+  const [title, setTitle] = useState('')
+  const [vocab, setVocab] = useState('')
   const [strengths, setStrengths] = useState('')
   const [improvements, setImprovements] = useState('')
-  const [teacherMessage, setTeacherMessage] = useState('')
+  const [parentMessage, setParentMessage] = useState('')
   const [homework, setHomework] = useState('')
-  const [homeworkFile, setHomeworkFile] = useState<File | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  useEffect(() => {
-    async function fetchBooks() {
-      const [{ data: studentBks }, { data: allBks }] = await Promise.all([
-        supabase.from('student_books').select('*').eq('student_id', studentId),
-        supabase.from('books').select('*').order('title', { ascending: true })
-      ])
+  // Dynamic Multi-Book Tracker State
+  const [selectedBooks, setSelectedBooks] = useState<BookEntry[]>([
+    { book_id: '', start_page: '', end_page: '' },
+  ])
 
-      if (studentBks && studentBks.length > 0 && allBks) {
-        const matched = studentBks.map((item) => ({
-          book_id: item.book_id,
-          completed_chapters: item.completed_chapters || [],
-          books: allBks.find((b: any) => b.id === item.book_id)
-        }))
-        setStudentBooks(matched)
-      } else {
-        setStudentBooks([])
-      }
-    }
-    if (isOpen) {
-      fetchBooks()
-      setLessonDate(new Date().toISOString().split('T')[0])
-    }
-  }, [isOpen, studentId])
+  useEffect(() => {
+    setTitle('')
+    setVocab('')
+    setStrengths('')
+    setImprovements('')
+    setParentMessage('')
+    setHomework('')
+    setSelectedBooks([
+      { book_id: studentBooks[0]?.id || '', start_page: '', end_page: '' },
+    ])
+  }, [isOpen, studentBooks])
 
   if (!isOpen) return null
 
-  const selectedBookItem = studentBooks.find((item: any) => item.books?.id === reportBookId)
+  const handleAddBook = () => {
+    setSelectedBooks((prev) => [
+      ...prev,
+      { book_id: '', start_page: '', end_page: '' },
+    ])
+  }
 
-  const handleSave = async (e: React.FormEvent) => {
+  const handleRemoveBook = (index: number) => {
+    setSelectedBooks((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  const handleBookChange = (index: number, field: keyof BookEntry, value: string) => {
+    setSelectedBooks((prev) => {
+      const updated = [...prev]
+      updated[index][field] = value
+      return updated
+    })
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!lessonTitle.trim()) return alert('Please enter a lesson title')
-
     setIsSubmitting(true)
+
     try {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
-        alert("Session expired. Please log in again.")
+        alert('Session expired. Please log in again.')
         return
       }
 
-      // Fetch student teacher alias
-      const { data: currentStudent } = await supabase
-        .from('students')
-        .select('teacher_alias, classes_completed')
-        .eq('id', studentId)
-        .single()
+      const targetDate = dateString || new Date().toISOString().split('T')[0]
+      const validBooks = selectedBooks.filter((b) => b.book_id)
 
-      let uploadedFileUrl: string | null = null
-      if (homeworkFile) {
-        const fileExt = homeworkFile.name.split('.').pop()
-        const fileName = `${studentId}/${Date.now()}.${fileExt}`
+      if (eventType === 'makeup') {
+        const { error: makeupErr } = await supabase
+          .from('makeup_classes')
+          .update({
+            status: 'Completed',
+            topic: title || 'Make-up Lesson',
+            book_progress: validBooks,
+          })
+          .eq('id', eventId)
 
-        const { error: uploadError } = await supabase.storage
-          .from('homework-files')
-          .upload(fileName, homeworkFile)
+        if (makeupErr) throw makeupErr
+      } else {
+        const { data: existingLesson } = await supabase
+          .from('lessons')
+          .select('id')
+          .eq('student_id', studentId)
+          .eq('lesson_date', targetDate)
+          .maybeSingle()
 
-        if (uploadError) throw uploadError
+        const lessonPayload = {
+          student_id: studentId,
+          teacher_id: user.id,
+          lesson_date: targetDate,
+          status: 'Completed',
+          title: title || 'Regular Lesson',
+          description: parentMessage,
+          vocab_notes: vocab,
+          strengths_notes: strengths,
+          improvement_notes: improvements,
+          homework_notes: homework,
+          book_progress: validBooks,
+        }
 
-        const { data: publicUrlData } = supabase.storage
-          .from('homework-files')
-          .getPublicUrl(fileName)
+        if (existingLesson) {
+          const { error: updateErr } = await supabase
+            .from('lessons')
+            .update(lessonPayload)
+            .eq('id', existingLesson.id)
 
-        uploadedFileUrl = publicUrlData.publicUrl
-      }
+          if (updateErr) throw updateErr
+        } else {
+          const { error: insertErr } = await supabase
+            .from('lessons')
+            .insert(lessonPayload)
 
-      const validBookId = reportBookId && reportBookId.trim() !== "" ? reportBookId : null
-
-      const reportPayload: any = {
-        student_id: studentId,
-        teacher_id: user.id,
-        teacher_alias: currentStudent?.teacher_alias || "Teacher Gabi",
-        lesson_title: lessonTitle.trim(),
-        title: lessonTitle.trim(),
-        report_date: lessonDate,
-        lesson_date: lessonDate,
-        book_id: validBookId,
-        start_page: startPage ? Number(startPage) : null,
-        end_page: endPage ? Number(endPage) : null,
-        vocabulary: vocabulary.trim() || null,
-        strengths: strengths.trim() || null,
-        improvements: improvements.trim() || null,
-        teacher_message: teacherMessage.trim() || null,
-        homework: homework.trim() || null,
-        status: 'Completed',
-        homework_file_url: uploadedFileUrl,
-      }
-
-      // 1. Insert into class_reports
-      const { error: reportError } = await supabase.from('class_reports').insert(reportPayload)
-      if (reportError) {
-        throw new Error(`class_reports insert failed: ${reportError.message}`)
-      }
-
-      // 2. Insert into lessons for calendar synchronization
-      const { error: lessonError } = await supabase.from('lessons').insert({
-        student_id: studentId,
-        teacher_id: user.id,
-        title: lessonTitle.trim(),
-        lesson_date: lessonDate,
-        status: 'Completed',
-        description: `Vocab: ${vocabulary}\nStrengths: ${strengths}\nHomework: ${homework}`,
-        homework_file_url: uploadedFileUrl,
-        book_id: validBookId,
-        start_page: startPage ? Number(startPage) : null,
-        end_page: endPage ? Number(endPage) : null
-      })
-      if (lessonError) {
-        throw new Error(`lessons insert failed: ${lessonError.message}`)
-      }
-
-      // 3. Update chapter completion if marked
-      if (validBookId && selectedChapterIndex !== "" && isChapterComplete) {
-        const currentCompletedChapters = selectedBookItem?.completed_chapters || []
-        const chapterIdxNum = Number(selectedChapterIndex)
-        
-        if (!currentCompletedChapters.includes(chapterIdxNum)) {
-          const updatedChapters = [...currentCompletedChapters, chapterIdxNum]
-          await supabase
-            .from("student_books")
-            .update({ completed_chapters: updatedChapters })
-            .eq("student_id", studentId)
-            .eq("book_id", validBookId)
+          if (insertErr) throw insertErr
         }
       }
 
-      // 4. Update status on schedule or makeup event
-      if (eventType === 'regular' && eventId) {
-        await supabase.from('schedules').update({ status: 'Completed' }).eq('id', eventId)
-      } else if (eventType === 'makeup' && eventId) {
-        await supabase.from('makeup_classes').update({ status: 'Completed' }).eq('id', eventId)
-      }
-
-      // 5. Increment completed classes count
-      const currentCompleted = currentStudent?.classes_completed || 0
-      await supabase
-        .from('students')
-        .update({ classes_completed: currentCompleted + 1 })
-        .eq('id', studentId)
-
       onClose()
-      window.location.reload()
     } catch (err: any) {
-      console.error('Error saving lesson log:', err)
-      alert(err.message || 'Failed to save lesson log')
+      console.error('Error logging lesson:', err)
+      alert('Failed to log lesson: ' + (err.message || err))
     } finally {
       setIsSubmitting(false)
     }
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto">
-      <div className="card bg-white w-full max-w-xl max-h-[90vh] overflow-y-auto p-6 rounded-3xl shadow-xl space-y-4">
-        <div className="flex items-center justify-between border-b border-pink-100 pb-3">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 space-y-4 border border-gray-100 max-h-[90vh] overflow-y-auto">
+        <div className="flex justify-between items-center border-b border-pink-100 pb-3">
           <div>
-            <h2 className="text-xl font-bold text-pink-950">Log Lesson & Homework</h2>
+            <h2 className="text-lg font-bold text-gray-900">
+              Log Lesson & Homework
+            </h2>
             <p className="text-xs text-gray-500">
-              Record daily lesson feedback and track curriculum progress for {studentName}.
+              Record lesson feedback and curriculum progress for {studentName}.
             </p>
           </div>
           <button
-            type="button"
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 p-1.5 cursor-pointer"
+            className="text-gray-400 hover:text-gray-600 font-bold text-xl cursor-pointer"
           >
-            ✕
+            &times;
           </button>
         </div>
 
-        <form onSubmit={handleSave} className="space-y-3.5 text-xs">
-          {/* Select Book */}
-          <div>
-            <label className="block mb-1 font-semibold text-pink-700">Select Book / Curriculum 📖</label>
-            <select
-              className="input w-full text-xs bg-white cursor-pointer"
-              value={reportBookId}
-              onChange={(e) => {
-                setReportBookId(e.target.value)
-                setSelectedChapterIndex('')
-              }}
-            >
-              <option value="">-- Select Book --</option>
-              {studentBooks.map((item: any) => (
-                <option key={item.books?.id} value={item.books?.id}>
-                  {item.books?.title} {item.books?.level ? `(${item.books.level})` : ''}
-                </option>
-              ))}
-            </select>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Multi-Book Selector Section */}
+          <div className="space-y-3 p-3.5 bg-pink-50/40 rounded-2xl border border-pink-100">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-pink-950 flex items-center gap-1.5">
+                <BookOpen size={14} className="text-pink-600" />
+                <span>Assigned Books & Progress</span>
+              </label>
+              <button
+                type="button"
+                onClick={handleAddBook}
+                className="text-xs font-bold text-pink-600 hover:text-pink-700 flex items-center gap-1 cursor-pointer"
+              >
+                <Plus size={14} />
+                <span>Add Another Book</span>
+              </button>
+            </div>
+
+            {selectedBooks.map((entry, index) => (
+              <div
+                key={index}
+                className="p-3 bg-white rounded-xl border border-pink-100 space-y-2 relative shadow-2xs"
+              >
+                {selectedBooks.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveBook(index)}
+                    className="absolute top-2.5 right-2.5 text-gray-400 hover:text-rose-600 transition cursor-pointer"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                )}
+
+                <div>
+                  <label className="text-[10px] font-bold text-gray-500 uppercase">
+                    Select Book #{index + 1}
+                  </label>
+                <select
+  value={entry.book_id}
+  onChange={(e) => handleBookChange(index, 'book_id', e.target.value)}
+  className="w-full border border-gray-200 rounded-xl p-2 text-xs font-semibold mt-0.5 bg-white cursor-pointer"
+>
+  <option value="">-- Choose Book --</option>
+  {studentBooks.map((book: any) => (
+    <option key={book.id || book.book_id} value={book.id || book.book_id}>
+      {book.title || book.name || book.book_title || "Unnamed Book"}
+    </option>
+  ))}
+</select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] font-bold text-gray-500 uppercase">
+                      Start Page
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="e.g. 1"
+                      value={entry.start_page}
+                      onChange={(e) => handleBookChange(index, 'start_page', e.target.value)}
+                      className="w-full p-2 border border-gray-200 rounded-xl bg-white text-xs font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-bold text-gray-500 uppercase">
+                      End Page
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="e.g. 12"
+                      value={entry.end_page}
+                      onChange={(e) => handleBookChange(index, 'end_page', e.target.value)}
+                      className="w-full p-2 border border-gray-200 rounded-xl bg-white text-xs font-mono"
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
 
-        {/* Lesson Title & Date */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block mb-1 font-semibold text-gray-700">Lesson Title *</label>
+              <label className="block text-xs font-bold text-gray-700 mb-1">
+                Lesson Title *
+              </label>
               <input
                 type="text"
                 required
                 placeholder="e.g. Unit 3: Animals & Habitats"
-                className="input w-full text-xs"
-                value={lessonTitle}
-                onChange={(e) => setLessonTitle(e.target.value)}
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                className="w-full p-2.5 border border-gray-200 rounded-xl text-xs"
               />
             </div>
-            <div>
-              <label className="block mb-1 font-semibold text-gray-700">Date</label>
-              <div className="relative">
-                <DatePicker
-                  selected={lessonDate ? new Date(lessonDate) : new Date()}
-                  onChange={(date: Date | null) => {
-                    if (date) {
-                      const y = date.getFullYear();
-                      const m = String(date.getMonth() + 1).padStart(2, "0");
-                      const d = String(date.getDate()).padStart(2, "0");
-                      setLessonDate(`${y}-${m}-${d}`);
-                    }
-                  }}
-                  dateFormat="yyyy-MM-dd"
-                  className="w-full p-2.5 text-xs rounded-xl border border-pink-200 bg-white text-pink-950 focus:outline-hidden focus:ring-2 focus:ring-pink-400 cursor-pointer"
-                  wrapperClassName="w-full"
-                />
-              </div>
-            </div>
-          </div>
 
-          {/* Start & End Page Range */}
-          <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block mb-1 font-semibold text-gray-700">Start Page 📄</label>
+              <label className="block text-xs font-bold text-gray-700 mb-1">
+                Date
+              </label>
               <input
-                type="number"
-                min="1"
-                placeholder="e.g. 12"
-                className="input w-full text-xs"
-                value={startPage}
-                onChange={(e) => setStartPage(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="block mb-1 font-semibold text-gray-700">End Page 📄</label>
-              <input
-                type="number"
-                min="1"
-                placeholder="e.g. 16"
-                className="input w-full text-xs"
-                value={endPage}
-                onChange={(e) => setEndPage(e.target.value)}
+                type="text"
+                disabled
+                value={dateString || new Date().toISOString().split('T')[0]}
+                className="w-full p-2.5 border border-gray-100 rounded-xl bg-gray-50 text-xs font-mono text-gray-500"
               />
             </div>
           </div>
 
-          {/* Vocabulary / Target Patterns */}
           <div>
-            <label className="block mb-1 font-semibold text-gray-700">Vocabulary / Target Patterns</label>
+            <label className="block text-xs font-bold text-gray-700 mb-1">
+              Vocabulary / Target Patterns
+            </label>
             <textarea
               rows={2}
               placeholder="e.g. cheetah, mammal, fast, faster than"
-              className="input w-full text-xs"
-              value={vocabulary}
-              onChange={(e) => setVocabulary(e.target.value)}
+              value={vocab}
+              onChange={(e) => setVocab(e.target.value)}
+              className="w-full p-2.5 border border-gray-200 rounded-xl text-xs"
             />
           </div>
 
-          {/* Strengths & Highlights / Next Focus */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block mb-1 font-semibold text-gray-700">Strengths & Highlights</label>
+              <label className="block text-xs font-bold text-gray-700 mb-1">
+                Strengths & Highlights
+              </label>
               <textarea
                 rows={2}
-                placeholder="Great pronunciation and enthusiasm today!"
-                className="input w-full text-xs"
+                placeholder="Great pronunciation today!"
                 value={strengths}
                 onChange={(e) => setStrengths(e.target.value)}
+                className="w-full p-2.5 border border-gray-200 rounded-xl text-xs"
               />
             </div>
+
             <div>
-              <label className="block mb-1 font-semibold text-gray-700">Next Focus / Improvement</label>
+              <label className="block text-xs font-bold text-gray-700 mb-1">
+                Next Focus / Improvement
+              </label>
               <textarea
                 rows={2}
                 placeholder="Practice past tense verb endings."
-                className="input w-full text-xs"
                 value={improvements}
                 onChange={(e) => setImprovements(e.target.value)}
+                className="w-full p-2.5 border border-gray-200 rounded-xl text-xs"
               />
             </div>
           </div>
 
-          {/* Message from Teacher */}
           <div>
-            <label className="block mb-1 font-semibold text-pink-700">
-              💌 Message from Teacher (Overall Note to Parents)
+            <label className="block text-xs font-bold text-gray-700 mb-1">
+              Message from Teacher (Note to Parents)
             </label>
             <textarea
               rows={2}
-              placeholder="e.g. Great progress today! Please make sure to review the vocab list before next class."
-              className="input w-full text-xs border-pink-200 bg-pink-50/20"
-              value={teacherMessage}
-              onChange={(e) => setTeacherMessage(e.target.value)}
+              placeholder="Great progress today! Please review the vocab list before next class."
+              value={parentMessage}
+              onChange={(e) => setParentMessage(e.target.value)}
+              className="w-full p-2.5 border border-gray-200 rounded-xl text-xs"
             />
           </div>
 
-          {/* Assigned Homework */}
           <div>
-            <label className="block mb-1 font-semibold text-pink-700">
-              Assigned Homework / Instructions (Optional) 📚
+            <label className="block text-xs font-bold text-gray-700 mb-1">
+              Assigned Homework / Instructions
             </label>
             <textarea
               rows={2}
-              placeholder="e.g. Complete Student Book Page 24 exercises 1-4."
-              className="input w-full text-xs border-pink-200 bg-pink-50/20"
+              placeholder="e.g. Complete Student Book Page 24 exercises 1-4"
               value={homework}
               onChange={(e) => setHomework(e.target.value)}
+              className="w-full p-2.5 border border-gray-200 rounded-xl text-xs"
             />
           </div>
 
-          {/* Attach Homework File */}
-          <div className="p-3 bg-pink-50/40 rounded-2xl border border-pink-100 space-y-1.5">
-            <label className="block font-semibold text-pink-900 text-xs">
-              Attach Homework Page / Worksheet (Optional) 📄
-            </label>
-            <input
-              type="file"
-              accept="image/*,application/pdf"
-              onChange={(e) => setHomeworkFile(e.target.files?.[0] || null)}
-              className="file:mr-3 file:py-1.5 file:px-3.5 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-pink-600 file:text-white hover:file:bg-pink-700 text-xs text-gray-500 w-full cursor-pointer"
-            />
-            {homeworkFile && (
-              <p className="text-[11px] text-emerald-700 font-medium">
-                ✓ Selected file: {homeworkFile.name}
-              </p>
-            )}
-          </div>
-
-          {/* Action Buttons */}
-          <div className="flex justify-end gap-2 pt-3 border-t border-pink-100">
+          <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 font-semibold text-gray-600 cursor-pointer"
+              className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-xl transition cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
+              className="px-4 py-2 bg-pink-600 hover:bg-pink-700 text-white text-xs font-bold rounded-xl transition shadow-xs cursor-pointer disabled:opacity-50"
             >
-              {isSubmitting ? 'Uploading & Saving...' : 'Save Lesson & Send to Portal'}
+              {isSubmitting ? 'Saving...' : 'Save Lesson Log'}
             </button>
           </div>
         </form>

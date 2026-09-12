@@ -4,6 +4,13 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import DatePicker from 'react-datepicker'
 import 'react-datepicker/dist/react-datepicker.css'
+import { Plus, Trash2, BookOpen } from 'lucide-react'
+
+interface BookEntry {
+  book_id: string
+  start_page: string
+  end_page: string
+}
 
 interface AttendanceModalProps {
   isOpen: boolean
@@ -14,6 +21,7 @@ interface AttendanceModalProps {
   initialStatus: 'absent' | 'cancelled'
   eventType?: 'regular' | 'makeup'
   dateString?: string
+  studentBooks?: any[] // List of books assigned to this student
 }
 
 export default function AttendanceModal({
@@ -25,6 +33,7 @@ export default function AttendanceModal({
   initialStatus,
   eventType = 'regular',
   dateString,
+  studentBooks = [],
 }: AttendanceModalProps) {
   const [status, setStatus] = useState<'absent' | 'cancelled'>(initialStatus)
   const [makeupRequested, setMakeupRequested] = useState(false)
@@ -33,15 +42,43 @@ export default function AttendanceModal({
   const [makeupDuration, setMakeupDuration] = useState<number>(40)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
+  // Dynamic Multi-Book State
+  const [selectedBooks, setSelectedBooks] = useState<BookEntry[]>([
+    { book_id: '', start_page: '', end_page: '' },
+  ])
+
   useEffect(() => {
     setStatus(initialStatus)
     setMakeupRequested(false)
     setMakeupDate(null)
     setCustomTime('16:40')
     setMakeupDuration(40)
-  }, [initialStatus, isOpen])
+    setSelectedBooks([
+      { book_id: studentBooks[0]?.id || '', start_page: '', end_page: '' },
+    ])
+  }, [initialStatus, isOpen, studentBooks])
 
   if (!isOpen) return null
+
+  // Book List Array Manipulation Handlers
+  const handleAddBook = () => {
+    setSelectedBooks((prev) => [
+      ...prev,
+      { book_id: '', start_page: '', end_page: '' },
+    ])
+  }
+
+  const handleRemoveBook = (index: number) => {
+    setSelectedBooks((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  const handleBookChange = (index: number, field: keyof BookEntry, value: string) => {
+    setSelectedBooks((prev) => {
+      const updated = [...prev]
+      updated[index][field] = value
+      return updated
+    })
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -57,7 +94,6 @@ export default function AttendanceModal({
       const targetDate = dateString || new Date().toISOString().split("T")[0]
       const formattedStatus = status === 'cancelled' ? 'Cancelled' : 'Absent'
       
-      // Merge selected date with custom time (e.g. "16:40") into ISO format
       let makeupIsoString: string | null = null
       if (makeupDate && customTime) {
         const yyyy = makeupDate.getFullYear()
@@ -67,16 +103,21 @@ export default function AttendanceModal({
         makeupIsoString = combined.toISOString()
       }
 
+      // Filter valid book entries with selected IDs
+      const validBooks = selectedBooks.filter((b) => b.book_id)
+
       // 1. If modifying an existing make-up event directly
       if (eventType === 'makeup') {
         const { error: makeupError } = await supabase
           .from("makeup_classes")
-          .update({ status: formattedStatus })
+          .update({ 
+            status: formattedStatus,
+            book_progress: validBooks // Store multi-book entries JSON array
+          })
           .eq("id", eventId)
 
         if (makeupError) throw makeupError
 
-        // Allow creating a new make-up session when canceling an existing make-up class
         if (makeupRequested && makeupIsoString) {
           const { error: newMakeupErr } = await supabase
             .from('makeup_classes')
@@ -87,13 +128,14 @@ export default function AttendanceModal({
               makeup_date: makeupIsoString,
               duration: makeupDuration,
               topic: 'Make-up Class (Rescheduled)',
-              status: 'Scheduled'
+              status: 'Scheduled',
+              book_progress: validBooks
             })
 
           if (newMakeupErr) throw newMakeupErr
         }
       } else {
-        // 2. Mark the regular class status in the 'lessons' table (Grays it out on calendar)
+        // 2. Mark the regular class status in the 'lessons' table
         const { data: existingLesson } = await supabase
           .from("lessons")
           .select("id")
@@ -106,7 +148,8 @@ export default function AttendanceModal({
             .from("lessons")
             .update({
               status: formattedStatus,
-              description: `Class marked as ${formattedStatus}`
+              description: `Class marked as ${formattedStatus}`,
+              book_progress: validBooks
             })
             .eq("id", existingLesson.id)
 
@@ -120,7 +163,8 @@ export default function AttendanceModal({
               lesson_date: targetDate,
               status: formattedStatus,
               title: `${formattedStatus} Class`,
-              description: `Class marked as ${formattedStatus}`
+              description: `Class marked as ${formattedStatus}`,
+              book_progress: validBooks
             })
 
           if (insertLessonErr) throw insertLessonErr
@@ -143,7 +187,8 @@ export default function AttendanceModal({
               makeup_date: makeupIsoString,
               duration: makeupDuration,
               topic: `Make-up: ${scheduleData?.topic || 'Regular Class'}`,
-              status: 'Scheduled'
+              status: 'Scheduled',
+              book_progress: validBooks
             })
 
           if (insertMakeupErr) throw insertMakeupErr
@@ -161,8 +206,8 @@ export default function AttendanceModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4 border border-gray-100">
-        <div className="flex justify-between items-center">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4 border border-gray-100 max-h-[90vh] overflow-y-auto">
+        <div className="flex justify-between items-center border-b border-gray-100 pb-3">
           <h2 className="text-lg font-bold text-gray-900">
             Manage Attendance: {studentName}
           </h2>
@@ -189,8 +234,89 @@ export default function AttendanceModal({
             </select>
           </div>
 
+          {/* Multi-Book Progress Tracker Section */}
+          <div className="space-y-3 pt-1">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-gray-700 flex items-center gap-1.5">
+                <BookOpen size={14} className="text-pink-600" />
+                <span>Assigned Books & Pages</span>
+              </label>
+              <button
+                type="button"
+                onClick={handleAddBook}
+                className="text-xs font-bold text-pink-600 hover:text-pink-700 flex items-center gap-1 cursor-pointer"
+              >
+                <Plus size={14} />
+                <span>Add Book</span>
+              </button>
+            </div>
+
+            {selectedBooks.map((entry, index) => (
+              <div
+                key={index}
+                className="p-3 bg-pink-50/40 rounded-2xl border border-pink-100 space-y-2 relative"
+              >
+                {selectedBooks.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveBook(index)}
+                    className="absolute top-2.5 right-2.5 text-gray-400 hover:text-rose-600 transition cursor-pointer"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                )}
+
+                <div>
+                  <label className="text-[10px] font-bold text-gray-500 uppercase">
+                    Select Book #{index + 1}
+                  </label>
+                  <select
+                    value={entry.book_id}
+                    onChange={(e) => handleBookChange(index, "book_id", e.target.value)}
+                    className="w-full border border-pink-200 rounded-xl p-2 text-xs font-semibold mt-0.5 bg-white cursor-pointer"
+                  >
+                    <option value="">-- Choose Book --</option>
+                    {studentBooks.map((book: any) => (
+                      <option key={book.id} value={book.id}>
+                        {book.title || book.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] font-bold text-gray-500 uppercase">
+                      Start Page
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="e.g. 1"
+                      value={entry.start_page}
+                      onChange={(e) => handleBookChange(index, "start_page", e.target.value)}
+                      className="w-full p-2 border border-pink-200 rounded-xl bg-white text-xs font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-bold text-gray-500 uppercase">
+                      End Page
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="e.g. 12"
+                      value={entry.end_page}
+                      onChange={(e) => handleBookChange(index, "end_page", e.target.value)}
+                      className="w-full p-2 border border-pink-200 rounded-xl bg-white text-xs font-mono"
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
           {eventType === 'regular' && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 pt-1">
               <input
                 type="checkbox"
                 id="makeup"
@@ -207,7 +333,6 @@ export default function AttendanceModal({
           {makeupRequested && (
             <div className="space-y-3 p-3.5 bg-pink-50/50 rounded-2xl border border-pink-100">
               <div className="grid grid-cols-2 gap-2">
-                {/* Date Selection */}
                 <div>
                   <label className="block text-xs font-bold text-pink-900 mb-1">
                     Make-up Date 📅
@@ -222,7 +347,6 @@ export default function AttendanceModal({
                   />
                 </div>
 
-                {/* Editable Custom Time Input */}
                 <div>
                   <label className="block text-xs font-bold text-pink-900 mb-1">
                     Start Time ⏰
@@ -236,7 +360,6 @@ export default function AttendanceModal({
                 </div>
               </div>
 
-              {/* Class Duration Options */}
               <div>
                 <label className="block text-xs font-bold text-pink-900 mb-1">
                   Class Duration ⏱️
@@ -269,7 +392,7 @@ export default function AttendanceModal({
             </div>
           )}
 
-          <div className="flex justify-end gap-2 pt-2">
+          <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
             <button
               type="button"
               onClick={onClose}

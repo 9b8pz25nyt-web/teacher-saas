@@ -51,7 +51,7 @@ export default function DashboardPage() {
 
   const availableYears = Array.from({ length: 7 }, (_, i) => 2024 + i);
 
-const fetchDashboardData = useCallback(async () => {
+  const fetchDashboardData = useCallback(async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
 
@@ -69,13 +69,13 @@ const fetchDashboardData = useCallback(async () => {
 
       if (paymentsData) setPayments(paymentsData);
 
-      // 2. Fetch Students for current user
-      const { data: studentsData } = await supabase
-        .from("students")
-        .select("*")
-        .eq("user_id", user.id);
+      // 2. Fetch Students for current user (with nested books table join)
+const { data: studentsData } = await supabase
+  .from("students")
+  .select("*, student_books(*, books(*))") // 👈 Join nested books relation
+  .eq("user_id", user.id);
 
-      if (studentsData) setStudents(studentsData);
+if (studentsData) setStudents(studentsData);
 
       // 3. Fetch Makeup Classes for current user
       const { data: makeupData, error: makeupError } = await supabase
@@ -155,7 +155,7 @@ const fetchDashboardData = useCallback(async () => {
     }
   }
 
-// Today calculations (Regular + Makeup)
+  // Today calculations (Regular + Makeup)
   const todayObj = new Date();
   const todayWeekday = todayObj.toLocaleDateString("en-US", { weekday: "long" });
   const localYear = todayObj.getFullYear();
@@ -171,7 +171,7 @@ const fetchDashboardData = useCallback(async () => {
   );
   const totalTodaysCount = todaysRegularSchedules.length + todaysMakeupSchedules.length;
 
-// Combine regular and makeup classes and sort chronologically by start time
+  // Combine regular and makeup classes and sort chronologically by start time
   const todaysCombinedSchedules = [
     ...todaysRegularSchedules.map((sched) => ({
       id: `reg-${sched.id}`,
@@ -241,22 +241,22 @@ const fetchDashboardData = useCallback(async () => {
         );
 
         if (matchesSchedule) {
-       const lessonRecord = recordedLessons.find(
-  (l) => l.student_id === student.id && l.lesson_date?.substring(0, 10) === dateString
-);
+          const lessonRecord = recordedLessons.find(
+            (l) => l.student_id === student.id && l.lesson_date?.substring(0, 10) === dateString
+          );
 
-// Absences and Cancellations will NOT consume package quota
-const isQuotaExempt = 
-  lessonRecord?.status === "Cancelled" || 
-  lessonRecord?.status === "Absent" ||
-  lessonRecord?.status === "absent";
+          // Absences and Cancellations will NOT consume package quota
+          const isQuotaExempt = 
+            lessonRecord?.status === "Cancelled" || 
+            lessonRecord?.status === "Absent" ||
+            lessonRecord?.status === "absent";
 
-dates.push(dateString);
+          dates.push(dateString);
 
-// Only increment counted slots if the lesson was completed or not marked exempt
-if (!isQuotaExempt) {
-  countedSlots++;
-}
+          // Only increment counted slots if the lesson was completed or not marked exempt
+          if (!isQuotaExempt) {
+            countedSlots++;
+          }
         }
 
         curr.setDate(curr.getDate() + 1);
@@ -317,7 +317,8 @@ if (!isQuotaExempt) {
       count: filtered.length,
     };
   })();
-// Total Classes Count Calculation based on Recorded Lessons
+
+  // Total Classes Count Calculation based on Recorded Lessons
   const calculatedClasses = (() => {
     const targetMonthStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}`;
     const targetYearStr = `${selectedYear}`;
@@ -345,6 +346,7 @@ if (!isQuotaExempt) {
 
     return filtered.length;
   })();
+
   return (
     <div className="flex flex-col min-h-screen bg-gray-50/50">
       {/* Pass the students list directly to the banner */}
@@ -374,7 +376,7 @@ if (!isQuotaExempt) {
           </div>
         </div>
 
-       {/* 1. KPI Metrics Row */}
+        {/* 1. KPI Metrics Row */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
           {/* Card 1: Today's Schedule Overview */}
           <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs flex flex-col justify-between space-y-3">
@@ -475,7 +477,7 @@ if (!isQuotaExempt) {
           </div>
         </div>
 
-      {/* 2. Classes For Today Card */}
+        {/* 2. Classes For Today Card */}
         <div className="bg-white p-6 rounded-3xl border border-pink-100 shadow-xs space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold text-pink-950">
@@ -694,10 +696,10 @@ if (!isQuotaExempt) {
                       })
                       .map((sched) => {
                         const matchingLesson = recordedLessons.find(
-  (l) => l.student_id === sched.student_id && l.lesson_date?.substring(0, 10) === dateString
-);
-// Only use matching lesson status for this specific date; fallback strictly to "Scheduled"
-const currentEventStatus = matchingLesson ? matchingLesson.status : "Scheduled";
+                          (l) => l.student_id === sched.student_id && l.lesson_date?.substring(0, 10) === dateString
+                        );
+                        // Only use matching lesson status for this specific date; fallback strictly to "Scheduled"
+                        const currentEventStatus = matchingLesson ? matchingLesson.status : "Scheduled";
 
                         return (
                           <ClassEvent
@@ -713,25 +715,25 @@ const currentEventStatus = matchingLesson ? matchingLesson.status : "Scheduled";
                             topic={sched.topic || "Regular Class"}
                             onStatusUpdate={fetchDashboardData}
                             onOpenModal={(statusPreset = "absent") => {
-  if (statusPreset === "present") {
-    setSelectedLesson({
-      eventId: sched.id,
-      studentId: sched.student_id,
-      studentName: sched.students?.name || "Student",
-      type: "regular",
-      dateString // 👈 Ensure dateString is passed here
-    });
-  } else {
-    setSelectedAttendance({
-      eventId: sched.id,
-      studentId: sched.student_id,
-      studentName: sched.students?.name || "Student",
-      status: statusPreset,
-      eventType: "regular",
-      dateString
-    });
-  }
-}}
+                              if (statusPreset === "present") {
+                                setSelectedLesson({
+                                  eventId: sched.id,
+                                  studentId: sched.student_id,
+                                  studentName: sched.students?.name || "Student",
+                                  type: "regular",
+                                  dateString
+                                });
+                              } else {
+                                setSelectedAttendance({
+                                  eventId: sched.id,
+                                  studentId: sched.student_id,
+                                  studentName: sched.students?.name || "Student",
+                                  status: statusPreset,
+                                  eventType: "regular",
+                                  dateString
+                                });
+                              }
+                            }}
                           />
                         );
                       })}
@@ -757,23 +759,33 @@ const currentEventStatus = matchingLesson ? matchingLesson.status : "Scheduled";
           initialStatus={selectedAttendance.status}
           eventType={selectedAttendance.eventType}
           dateString={selectedAttendance.dateString}
+          studentBooks={
+            students.find((s) => s.id === selectedAttendance.studentId)?.student_books || []
+          }
         />
       )}
 
-      {/* Lesson Log Modal */}
-      {selectedLesson && (
-        <LessonLogModal
-          isOpen={true}
-          onClose={() => {
-            setSelectedLesson(null);
-            fetchDashboardData();
-          }}
-          eventId={selectedLesson.eventId}
-          studentId={selectedLesson.studentId}
-          studentName={selectedLesson.studentName}
-          eventType={selectedLesson.type}
-        />
-      )}
+   {/* Lesson Log Modal */}
+{selectedLesson && (
+  <LessonLogModal
+    isOpen={true}
+    onClose={() => {
+      setSelectedLesson(null);
+      fetchDashboardData();
+    }}
+    eventId={selectedLesson.eventId}
+    studentId={selectedLesson.studentId}
+    studentName={selectedLesson.studentName}
+    eventType={selectedLesson.type}
+    dateString={selectedLesson.dateString}
+    /* Extract the inner book object or fallback */
+    studentBooks={
+      students
+        .find((s) => s.id === selectedLesson.studentId)
+        ?.student_books?.map((sb: any) => sb.books || sb) || []
+    }
+  />
+)}
     </div>
   );
 }
