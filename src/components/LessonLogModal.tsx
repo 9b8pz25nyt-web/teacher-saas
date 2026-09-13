@@ -40,54 +40,65 @@ export default function LessonLogModal({
   const [homework, setHomework] = useState('')
   const [homeworkFile, setHomeworkFile] = useState<File | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [savedStudentBooks, setSavedStudentBooks] = useState<any[]>([])
 
   // Dynamic Multi-Book Tracker State
   const [selectedBooks, setSelectedBooks] = useState<BookEntry[]>([
     { book_id: '', start_page: '', end_page: '' },
   ])
 
-useEffect(() => {
+  useEffect(() => {
     async function loadExistingLesson() {
-      if (!isOpen) return;
+      if (!isOpen) return
 
-      if (eventId && eventId.length > 20) { // Assuming UUID length
+      // Fetch real completed chapters progress from student_books table
+      const { data: sbData } = await supabase
+        .from('student_books')
+        .select('*')
+        .eq('student_id', studentId)
+
+      if (sbData) {
+        setSavedStudentBooks(sbData)
+      }
+
+      if (eventId && eventId.length > 20) {
         // Try fetching from lessons table first
         const { data: lessonData } = await supabase
           .from('lessons')
           .select('*')
           .eq('id', eventId)
-          .maybeSingle();
+          .maybeSingle()
 
         if (lessonData) {
-          setTitle(lessonData.title || '');
-          setVocab(lessonData.vocab_notes || lessonData.vocabulary || '');
-          setStrengths(lessonData.strengths_notes || lessonData.strengths || '');
-          setImprovements(lessonData.improvement_notes || lessonData.improvements || '');
-          setHomework(lessonData.homework_notes || lessonData.homework || '');
+          setTitle(lessonData.title || '')
+          setVocab(lessonData.vocab_notes || lessonData.vocabulary || '')
+          setStrengths(lessonData.strengths_notes || lessonData.strengths || '')
+          setImprovements(lessonData.improvement_notes || lessonData.improvements || '')
+          setHomework(lessonData.homework_notes || lessonData.homework || '')
           if (Array.isArray(lessonData.book_progress) && lessonData.book_progress.length > 0) {
-            setSelectedBooks(lessonData.book_progress);
+            setSelectedBooks(lessonData.book_progress)
           } else if (lessonData.book_id) {
-            setSelectedBooks([{ book_id: lessonData.book_id, start_page: '', end_page: '' }]);
+            setSelectedBooks([{ book_id: lessonData.book_id, start_page: '', end_page: '' }])
           }
-          return;
+          return
         }
       }
 
       // Default empty state for new logs
-      setTitle('');
-      setVocab('');
-      setStrengths('');
-      setImprovements('');
-      setParentMessage('');
-      setHomework('');
-      setHomeworkFile(null);
+      setTitle('')
+      setVocab('')
+      setStrengths('')
+      setImprovements('')
+      setParentMessage('')
+      setHomework('')
+      setHomeworkFile(null)
       setSelectedBooks([
         { book_id: studentBooks[0]?.id || studentBooks[0]?.book_id || '', start_page: '', end_page: '' },
-      ]);
+      ])
     }
 
-    loadExistingLesson();
-  }, [isOpen, eventId, studentBooks]);
+    loadExistingLesson()
+  }, [isOpen, eventId, studentId, studentBooks])
 
   if (!isOpen) return null
 
@@ -181,7 +192,7 @@ Message: ${parentMessage || ""}`
           strengths_notes: strengths,
           improvement_notes: improvements,
           homework_notes: homework,
-          teacher_message: parentMessage, //
+          teacher_message: parentMessage,
           homework_file_url: uploadedFileUrl,
           book_progress: validBooks,
         }
@@ -225,10 +236,10 @@ Message: ${parentMessage || ""}`
             .select('completed_chapters')
             .eq('student_id', studentId)
             .eq('book_id', bookEntry.book_id)
-            .maybeSingle();
+            .maybeSingle()
 
-          const existingChapters = existingSb?.completed_chapters || [];
-          const mergedChapters = Array.from(new Set([...existingChapters, ...bookEntry.completed_chapters]));
+          const existingChapters = existingSb?.completed_chapters || []
+          const mergedChapters = Array.from(new Set([...existingChapters, ...bookEntry.completed_chapters]))
 
           await supabase
             .from('student_books')
@@ -236,7 +247,7 @@ Message: ${parentMessage || ""}`
               student_id: studentId,
               book_id: bookEntry.book_id,
               completed_chapters: mergedChapters,
-            }, { onConflict: 'student_id,book_id' });
+            }, { onConflict: 'student_id,book_id' })
         }
       }
 
@@ -324,7 +335,7 @@ Message: ${parentMessage || ""}`
                 {(() => {
                   const currentBook = studentBooks.find(
                     (b: any) => (b.id || b.book_id) === entry.book_id
-                  );
+                  )
                   
                   const isChapterBased =
                     currentBook?.book_type === "chapters" ||
@@ -332,9 +343,9 @@ Message: ${parentMessage || ""}`
                     Array.isArray(currentBook?.chapters) ||
                     currentBook?.is_chapter_based ||
                     currentBook?.title?.toLowerCase().includes("wonderskills") ||
-                    currentBook?.name?.toLowerCase().includes("wonderskills");
+                    currentBook?.name?.toLowerCase().includes("wonderskills")
 
-                  const chaptersList = currentBook?.chapters || [];
+                  const chaptersList = currentBook?.chapters || []
 
                   return isChapterBased && chaptersList.length > 0 ? (
                     <div className="space-y-2 pt-1">
@@ -343,30 +354,50 @@ Message: ${parentMessage || ""}`
                       </label>
                       <div className="max-h-40 overflow-y-auto space-y-1.5 p-2 bg-pink-50/50 rounded-xl border border-pink-100">
                         {chaptersList.map((chap: any, chapIdx: number) => {
-                          const isChecked = entry.completed_chapters?.includes(chapIdx) || false;
-                          const chapTitle = typeof chap === "string" ? chap : chap.title || `Lesson ${chapIdx + 1}`;
+                          // Look up historical completed chapters from savedStudentBooks database state
+                          const currentBookRecord = savedStudentBooks.find(
+                            (sb: any) => sb.book_id === entry.book_id || sb.id === entry.book_id
+                          )
+                          const historicalCompleted = Array.isArray(currentBookRecord?.completed_chapters)
+                            ? currentBookRecord.completed_chapters
+                            : []
+
+                          // Check if it was completed in a past lesson
+                          const isAlreadyCompleted = historicalCompleted.includes(chapIdx)
+
+                          // Check if it's selected in the current session
+                          const isChecked = isAlreadyCompleted || entry.completed_chapters?.includes(chapIdx) || false
+                          const chapTitle = typeof chap === "string" ? chap : chap.title || `Lesson ${chapIdx + 1}`
 
                           return (
                             <label
                               key={chapIdx}
-                              className="flex items-center gap-2.5 p-2 bg-white rounded-lg border border-pink-100 cursor-pointer hover:bg-pink-50/80 transition text-xs"
+                              className={`flex items-center gap-2.5 p-2 rounded-lg border text-xs transition ${
+                                isAlreadyCompleted
+                                  ? "bg-gray-100 border-gray-200 opacity-70 cursor-not-allowed"
+                                  : "bg-white border-pink-100 cursor-pointer hover:bg-pink-50/80"
+                              }`}
                             >
                               <input
                                 type="checkbox"
                                 checked={isChecked}
+                                disabled={isAlreadyCompleted}
                                 onChange={(e) => {
-                                  const currentSelected = entry.completed_chapters || [];
+                                  if (isAlreadyCompleted) return
+                                  const currentSelected = entry.completed_chapters || []
                                   const updated = e.target.checked
                                     ? [...currentSelected, chapIdx]
-                                    : currentSelected.filter((id) => id !== chapIdx);
-                                  
-                                  handleBookChange(index, 'completed_chapters', updated);
+                                    : currentSelected.filter((id) => id !== chapIdx)
+
+                                  handleBookChange(index, 'completed_chapters', updated)
                                 }}
                                 className="rounded text-pink-600 focus:ring-pink-500 w-4 h-4 cursor-pointer"
                               />
-                              <span className="font-medium text-pink-950">{chapTitle}</span>
+                              <span className={`font-medium ${isAlreadyCompleted ? "text-gray-500 line-through" : "text-pink-950"}`}>
+                                {chapTitle} {isAlreadyCompleted && "(Completed)"}
+                              </span>
                             </label>
-                          );
+                          )
                         })}
                       </div>
                     </div>
@@ -393,7 +424,7 @@ Message: ${parentMessage || ""}`
                         />
                       </div>
                     </div>
-                  );
+                  )
                 })()}
               </div>
             ))}
