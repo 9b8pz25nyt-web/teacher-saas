@@ -10,6 +10,18 @@ import { cleanupOldHomeworkFiles } from "@/lib/storageCleanup";
 import AttendanceModal from "@/components/AttendanceModal";
 import LessonLogModal from "@/components/LessonLogModal";
 
+// Helper to fix timezone offset and get the correct local time
+function extractTimeFromTimestamp(timestampStr: string) {
+  if (!timestampStr) return "18:00";
+  if (timestampStr.includes("T")) {
+    const dateObj = new Date(timestampStr);
+    const hours = String(dateObj.getHours()).padStart(2, "0");
+    const minutes = String(dateObj.getMinutes()).padStart(2, "0");
+    return `${hours}:${minutes}`;
+  }
+  return timestampStr.substring(0, 5);
+}
+
 export default function DashboardPage() {
   const [schedules, setSchedules] = useState<any[]>([]);
   const [makeupEvents, setMakeupEvents] = useState<any[]>([]);
@@ -55,29 +67,20 @@ export default function DashboardPage() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
 
-      // Guard clause: stop if no logged-in user is found
-      if (!user) {
-        setLoading(false);
-        return;
-      }
-
-      // 1. Fetch Payments for current user
       const { data: paymentsData } = await supabase
         .from("payments")
-        .select("*")
-        .eq("user_id", user.id);
+        .select("*");
 
       if (paymentsData) setPayments(paymentsData);
 
-      // 2. Fetch Students for current user (with nested books table join)
-const { data: studentsData } = await supabase
-  .from("students")
-  .select("*, student_books(*, books(*))") // 👈 Join nested books relation
-  .eq("user_id", user.id);
+     // 1. Fetch Students (with nested books relation)
+      const { data: studentsData } = await supabase
+        .from("students")
+        .select("*, student_books(*, books(*))");
 
-if (studentsData) setStudents(studentsData);
+      if (studentsData) setStudents(studentsData);
 
-      // 3. Fetch Makeup Classes for current user
+      // 2. Fetch Makeup Classes
       const { data: makeupData, error: makeupError } = await supabase
         .from("makeup_classes")
         .select(`
@@ -92,8 +95,7 @@ if (studentsData) setStudents(studentsData);
             id,
             name
           )
-        `)
-        .eq("user_id", user.id);
+        `);
 
       if (makeupError) {
         console.error("Makeup event error:", makeupError.message);
@@ -101,13 +103,12 @@ if (studentsData) setStudents(studentsData);
         setMakeupEvents(makeupData);
       }
 
-      // 4. Fetch Regular Schedules for current user
+      // 3. Fetch Regular Schedules
       const { data: schedulesData, error: schedulesError } = await supabase
         .from("schedules")
         .select(
           "*, students(id, name, book_id, classes_included, free_classes, contract_start_date, contract_end_date, php_equivalent)"
         )
-        .eq("user_id", user.id)
         .order("schedule_time", { ascending: true });
 
       if (schedulesError) {
@@ -116,11 +117,10 @@ if (studentsData) setStudents(studentsData);
         setSchedules(schedulesData);
       }
 
-      // 5. Fetch Recorded Lessons for current user
+      // 4. Fetch Recorded Lessons
       const { data: lessonsData, error: lessonsError } = await supabase
         .from("lessons")
-        .select("id, student_id, lesson_date, status, description")
-        .eq("user_id", user.id);
+        .select("id, student_id, lesson_date, status, description");
 
       if (lessonsError) {
         console.error("Lesson error:", lessonsError.message);
@@ -155,7 +155,7 @@ if (studentsData) setStudents(studentsData);
     }
   }
 
-  // Today calculations (Regular + Makeup)
+// Today calculations (Regular + Makeup)
   const todayObj = new Date();
   const todayWeekday = todayObj.toLocaleDateString("en-US", { weekday: "long" });
   const localYear = todayObj.getFullYear();
@@ -171,7 +171,7 @@ if (studentsData) setStudents(studentsData);
   );
   const totalTodaysCount = todaysRegularSchedules.length + todaysMakeupSchedules.length;
 
-  // Combine regular and makeup classes and sort chronologically by start time
+// Combine regular and makeup classes and sort chronologically by start time
   const todaysCombinedSchedules = [
     ...todaysRegularSchedules.map((sched) => ({
       id: `reg-${sched.id}`,
@@ -183,9 +183,7 @@ if (studentsData) setStudents(studentsData);
       originalStatus: sched.status || "Scheduled",
     })),
     ...todaysMakeupSchedules.map((makeup) => {
-      const timeStr = makeup.makeup_date?.includes("T")
-        ? makeup.makeup_date.split("T")[1].substring(0, 5)
-        : "18:00";
+      const timeStr = extractTimeFromTimestamp(makeup.makeup_date);
       return {
         id: `makeup-${makeup.id}`,
         type: "makeup" as const,
@@ -241,22 +239,22 @@ if (studentsData) setStudents(studentsData);
         );
 
         if (matchesSchedule) {
-          const lessonRecord = recordedLessons.find(
-            (l) => l.student_id === student.id && l.lesson_date?.substring(0, 10) === dateString
-          );
+       const lessonRecord = recordedLessons.find(
+  (l) => l.student_id === student.id && l.lesson_date?.substring(0, 10) === dateString
+);
 
-          // Absences and Cancellations will NOT consume package quota
-          const isQuotaExempt = 
-            lessonRecord?.status === "Cancelled" || 
-            lessonRecord?.status === "Absent" ||
-            lessonRecord?.status === "absent";
+// Absences and Cancellations will NOT consume package quota
+const isQuotaExempt = 
+  lessonRecord?.status === "Cancelled" || 
+  lessonRecord?.status === "Absent" ||
+  lessonRecord?.status === "absent";
 
-          dates.push(dateString);
+dates.push(dateString);
 
-          // Only increment counted slots if the lesson was completed or not marked exempt
-          if (!isQuotaExempt) {
-            countedSlots++;
-          }
+// Only increment counted slots if the lesson was completed or not marked exempt
+if (!isQuotaExempt) {
+  countedSlots++;
+}
         }
 
         curr.setDate(curr.getDate() + 1);
@@ -317,8 +315,7 @@ if (studentsData) setStudents(studentsData);
       count: filtered.length,
     };
   })();
-
-  // Total Classes Count Calculation based on Recorded Lessons
+// Total Classes Count Calculation based on Recorded Lessons
   const calculatedClasses = (() => {
     const targetMonthStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}`;
     const targetYearStr = `${selectedYear}`;
@@ -346,7 +343,6 @@ if (studentsData) setStudents(studentsData);
 
     return filtered.length;
   })();
-
   return (
     <div className="flex flex-col min-h-screen bg-gray-50/50">
       {/* Pass the students list directly to the banner */}
@@ -376,7 +372,7 @@ if (studentsData) setStudents(studentsData);
           </div>
         </div>
 
-        {/* 1. KPI Metrics Row */}
+       {/* 1. KPI Metrics Row */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
           {/* Card 1: Today's Schedule Overview */}
           <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs flex flex-col justify-between space-y-3">
@@ -477,7 +473,7 @@ if (studentsData) setStudents(studentsData);
           </div>
         </div>
 
-        {/* 2. Classes For Today Card */}
+      {/* 2. Classes For Today Card */}
         <div className="bg-white p-6 rounded-3xl border border-pink-100 shadow-xs space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold text-pink-950">
@@ -623,22 +619,19 @@ if (studentsData) setStudents(studentsData);
                   </p>
 
                   <div className="space-y-1.5 relative">
-                    {/* MAKEUP CLASSES */}
+             {/* MAKEUP CLASSES */}
                     {makeupEvents
                       .filter((event) => {
                         const makeupDate = event.makeup_date ? event.makeup_date.substring(0, 10) : "";
                         return makeupDate === dateString;
                       })
                       .map((event) => {
-                        const makeupTime = event.makeup_date?.includes("T")
-                          ? event.makeup_date.split("T")[1].substring(0, 5)
-                          : "18:00";
+                        const makeupTime = extractTimeFromTimestamp(event.makeup_date);
 
                         const matchingLesson = recordedLessons.find(
                           (l) => l.student_id === event.student_id && l.lesson_date?.substring(0, 10) === dateString
                         );
                         const makeupStatus = event.status || (matchingLesson ? matchingLesson.status : "Scheduled");
-
                         return (
                           <ClassEvent
                             key={`makeup-${event.id}`}
@@ -696,10 +689,10 @@ if (studentsData) setStudents(studentsData);
                       })
                       .map((sched) => {
                         const matchingLesson = recordedLessons.find(
-                          (l) => l.student_id === sched.student_id && l.lesson_date?.substring(0, 10) === dateString
-                        );
-                        // Only use matching lesson status for this specific date; fallback strictly to "Scheduled"
-                        const currentEventStatus = matchingLesson ? matchingLesson.status : "Scheduled";
+  (l) => l.student_id === sched.student_id && l.lesson_date?.substring(0, 10) === dateString
+);
+// Only use matching lesson status for this specific date; fallback strictly to "Scheduled"
+const currentEventStatus = matchingLesson ? matchingLesson.status : "Scheduled";
 
                         return (
                           <ClassEvent
@@ -715,25 +708,25 @@ if (studentsData) setStudents(studentsData);
                             topic={sched.topic || "Regular Class"}
                             onStatusUpdate={fetchDashboardData}
                             onOpenModal={(statusPreset = "absent") => {
-                              if (statusPreset === "present") {
-                                setSelectedLesson({
-                                  eventId: sched.id,
-                                  studentId: sched.student_id,
-                                  studentName: sched.students?.name || "Student",
-                                  type: "regular",
-                                  dateString
-                                });
-                              } else {
-                                setSelectedAttendance({
-                                  eventId: sched.id,
-                                  studentId: sched.student_id,
-                                  studentName: sched.students?.name || "Student",
-                                  status: statusPreset,
-                                  eventType: "regular",
-                                  dateString
-                                });
-                              }
-                            }}
+  if (statusPreset === "present") {
+    setSelectedLesson({
+      eventId: sched.id,
+      studentId: sched.student_id,
+      studentName: sched.students?.name || "Student",
+      type: "regular",
+      dateString // 👈 Ensure dateString is passed here
+    });
+  } else {
+    setSelectedAttendance({
+      eventId: sched.id,
+      studentId: sched.student_id,
+      studentName: sched.students?.name || "Student",
+      status: statusPreset,
+      eventType: "regular",
+      dateString
+    });
+  }
+}}
                           />
                         );
                       })}
@@ -759,33 +752,30 @@ if (studentsData) setStudents(studentsData);
           initialStatus={selectedAttendance.status}
           eventType={selectedAttendance.eventType}
           dateString={selectedAttendance.dateString}
-          studentBooks={
-            students.find((s) => s.id === selectedAttendance.studentId)?.student_books || []
-          }
         />
       )}
 
-   {/* Lesson Log Modal */}
-{selectedLesson && (
-  <LessonLogModal
-    isOpen={true}
-    onClose={() => {
-      setSelectedLesson(null);
-      fetchDashboardData();
-    }}
-    eventId={selectedLesson.eventId}
-    studentId={selectedLesson.studentId}
-    studentName={selectedLesson.studentName}
-    eventType={selectedLesson.type}
-    dateString={selectedLesson.dateString}
-    /* Extract the inner book object or fallback */
-    studentBooks={
-      students
-        .find((s) => s.id === selectedLesson.studentId)
-        ?.student_books?.map((sb: any) => sb.books || sb) || []
-    }
-  />
-)}
+      {/* Lesson Log Modal */}
+      {selectedLesson && (
+        <LessonLogModal
+          isOpen={true}
+          onClose={() => {
+            setSelectedLesson(null);
+            fetchDashboardData();
+          }}
+          eventId={selectedLesson.eventId}
+          studentId={selectedLesson.studentId}
+          studentName={selectedLesson.studentName}
+          eventType={selectedLesson.type}
+          dateString={selectedLesson.dateString}
+          // 👇 Add this line to pass the books array properly
+          studentBooks={
+            students
+              .find((s) => s.id === selectedLesson.studentId)
+              ?.student_books?.map((sb: any) => sb.books || sb) || []
+          }
+        />
+      )}
     </div>
   );
 }

@@ -1,692 +1,319 @@
 "use client";
 
+import { useState } from "react";
 import { X } from "lucide-react";
-import DatePicker from "react-datepicker";
-import "react-datepicker/dist/react-datepicker.css";
 import { countries } from "@/constants/countries";
 import { currencies } from "@/constants/currencies";
 
 export default function StudentEditModal({
+  student,
   onClose,
   onSave,
-
+  books,
+  selectedBookIds,
+  setSelectedBookIds,
   teacherAliases,
-
   name,
   setName,
-
   teacherAlias,
   setTeacherAlias,
-
   meetingLink,
   setMeetingLink,
-
   email,
   setEmail,
-
   phone,
   setPhone,
-
   age,
   setAge,
-
   country,
   setCountry,
-
   paymentCurrency,
   setPaymentCurrency,
-
   paymentAmount,
   setPaymentAmount,
-
   phpEquivalent,
-
   classesIncluded,
   setClassesIncluded,
-
   freeClasses,
   setFreeClasses,
-
   classesCompleted,
   setClassesCompleted,
-
-  contractStartDate,
-  setContractStartDate,
-
-  contractEndDate,
-  setContractEndDate,
-
   classDuration,
   setClassDuration,
-
-  customDuration,
-  setCustomDuration,
-
   paymentStatus,
   setPaymentStatus,
-
   notes,
   setNotes,
-
-  calculatePHP,
-  calculateEndDate,
-
 }: any) {
+  return (
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-white w-full max-w-2xl p-6 rounded-3xl shadow-xl space-y-5 my-8 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between border-b border-pink-100 pb-4">
+          <h2 className="text-xl font-bold text-pink-600">Edit Student Profile</h2>
+          <button onClick={onClose} className="p-2 rounded-full hover:bg-pink-50 cursor-pointer text-gray-500">
+            <X size={18} />
+          </button>
+        </div>
 
+        <div className="space-y-4 text-xs">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block mb-1 font-semibold text-gray-700">Student Name *</label>
+              <input
+                type="text"
+                className="input w-full border border-gray-200 rounded-xl p-2.5 bg-white text-gray-800"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block mb-1 font-semibold text-gray-700">Assigned Teacher Alias</label>
+              <select
+                className="input w-full border border-gray-200 rounded-xl p-2.5 bg-white text-gray-800"
+                value={teacherAlias}
+                onChange={(e) => setTeacherAlias(e.target.value)}
+              >
+                {teacherAliases.map((alias: string) => (
+                  <option key={alias} value={alias}>
+                    {alias}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
 
-return (
-<div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div>
+            <label className="block mb-1 font-semibold text-gray-700">Classroom Video Link (Zoom / Meet URL)</label>
+            <input
+              type="text"
+              className="input w-full border border-gray-200 rounded-xl p-2.5 bg-white text-gray-800"
+              placeholder="https://zoom.us/..."
+              value={meetingLink}
+              onChange={(e) => setMeetingLink(e.target.value)}
+            />
+          </div>
 
-  <div className="card bg-white w-full max-w-xl max-h-[90vh] overflow-y-auto p-6 rounded-3xl shadow-xl space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block mb-1 font-semibold text-gray-700">Email</label>
+              <input
+                type="email"
+                className="input w-full border border-gray-200 rounded-xl p-2.5 bg-white text-gray-800"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block mb-1 font-semibold text-gray-700">Phone</label>
+              <input
+                type="text"
+                className="input w-full border border-gray-200 rounded-xl p-2.5 bg-white text-gray-800"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+              />
+            </div>
+          </div>
 
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block mb-1 font-semibold text-gray-700">Age</label>
+              <input
+                type="number"
+                className="input w-full border border-gray-200 rounded-xl p-2.5 bg-white text-gray-800"
+                value={age}
+                onChange={(e) => setAge(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block mb-1 font-semibold text-gray-700">Country</label>
+              <select
+                className="input w-full border border-gray-200 rounded-xl p-2.5 bg-white text-gray-800"
+                value={country}
+                onChange={(e) => setCountry(e.target.value)}
+              >
+                <option value="">Select country...</option>
+                {countries.map((c) => (
+                  <option key={c.name} value={c.name}>
+                    {c.flag} {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
 
-    <div className="flex items-center justify-between">
+          {/* Assigned Curriculum / Books */}
+          <div>
+            <label className="block mb-1 font-semibold text-gray-700">
+              Assigned Curriculum / Books (Select up to 2)
+            </label>
+            <div className="space-y-2">
+              <select
+                className="input w-full border border-gray-200 rounded-xl p-2.5 bg-white text-gray-800 cursor-pointer"
+                value=""
+                onChange={(e) => {
+                  const bookId = e.target.value;
+                  if (!bookId) return;
+                  if (selectedBookIds.includes(bookId)) return;
+                  if (selectedBookIds.length >= 2) {
+                    alert("You can select a maximum of 2 books.");
+                    return;
+                  }
+                  setSelectedBookIds([...selectedBookIds, bookId]);
+                }}
+              >
+                <option value="">+ Add a book...</option>
+                {books && books.length > 0 ? (
+                  books
+                    .filter((b: any) => !selectedBookIds.includes(b.id))
+                    .map((b: any) => (
+                      <option key={b.id} value={b.id}>
+                        {b.title} {b.level ? `(${b.level})` : ""}
+                      </option>
+                    ))
+                ) : (
+                  <option disabled value="">
+                    No books found in database
+                  </option>
+                )}
+              </select>
 
-      <h2 className="text-2xl font-bold text-pink-600">
-        Edit Student
-      </h2>
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {selectedBookIds.length === 0 ? (
+                  <span className="text-[11px] text-gray-400 italic">
+                    No books selected yet.
+                  </span>
+                ) : (
+                  selectedBookIds.map((id: string) => {
+                    const book = books.find((b: any) => b.id === id);
+                    return (
+                      <span
+                        key={id}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-pink-50 text-pink-700 border border-pink-200 rounded-xl text-xs font-semibold"
+                      >
+                        <span>📖 {book?.title || "Book"}</span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setSelectedBookIds(
+                              selectedBookIds.filter((bId: string) => bId !== id)
+                            )
+                          }
+                          className="text-pink-400 hover:text-red-600 transition cursor-pointer"
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </div>
 
-      <button
-        onClick={onClose}
-        className="p-2 rounded-full hover:bg-pink-50"
-      >
-        <X size={18}/>
-      </button>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block mb-1 font-semibold text-gray-700">Payment Currency</label>
+              <select
+                className="input w-full border border-gray-200 rounded-xl p-2.5 bg-white text-gray-800"
+                value={paymentCurrency}
+                onChange={(e) => setPaymentCurrency(e.target.value)}
+              >
+                {Object.keys(currencies).map((cur) => (
+                  <option key={cur} value={cur}>
+                    {cur} ({currencies[cur].symbol})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block mb-1 font-semibold text-gray-700">Payment Amount</label>
+              <input
+                type="text"
+                className="input w-full border border-gray-200 rounded-xl p-2.5 bg-white text-gray-800"
+                value={paymentAmount}
+                onChange={(e) => setPaymentAmount(e.target.value)}
+              />
+            </div>
+          </div>
 
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div>
+              <label className="block mb-1 font-semibold text-gray-700">Classes Included</label>
+              <input
+                type="number"
+                className="input w-full border border-gray-200 rounded-xl p-2.5 bg-white text-gray-800"
+                value={classesIncluded}
+                onChange={(e) => setClassesIncluded(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block mb-1 font-semibold text-gray-700">Free Classes</label>
+              <input
+                type="number"
+                className="input w-full border border-gray-200 rounded-xl p-2.5 bg-white text-gray-800"
+                value={freeClasses}
+                onChange={(e) => setFreeClasses(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block mb-1 font-semibold text-gray-700">Classes Completed</label>
+              <input
+                type="number"
+                className="input w-full border border-gray-200 rounded-xl p-2.5 bg-white text-gray-800"
+                value={classesCompleted}
+                onChange={(e) => setClassesCompleted(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block mb-1 font-semibold text-gray-700">Duration (mins)</label>
+              <input
+                type="number"
+                className="input w-full border border-gray-200 rounded-xl p-2.5 bg-white text-gray-800"
+                value={classDuration}
+                onChange={(e) => setClassDuration(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block mb-1 font-semibold text-gray-700">Payment Status</label>
+            <select
+              className="input w-full border border-gray-200 rounded-xl p-2.5 bg-white text-gray-800"
+              value={paymentStatus}
+              onChange={(e) => setPaymentStatus(e.target.value)}
+            >
+              <option value="Active">Active</option>
+              <option value="Paid">Paid</option>
+              <option value="Pending">Pending</option>
+              <option value="Overdue">Overdue</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block mb-1 font-semibold text-gray-700">Teacher Notes</label>
+            <textarea
+              className="input w-full border border-gray-200 rounded-xl p-2.5 bg-white text-gray-800 h-20"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 pt-3 border-t border-pink-100">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded-xl bg-gray-100 text-gray-700 font-bold hover:bg-gray-200 cursor-pointer"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onSave}
+            className="px-5 py-2 rounded-xl bg-pink-600 text-white font-bold hover:bg-pink-700 cursor-pointer"
+          >
+            Save Changes
+          </button>
+        </div>
+      </div>
     </div>
-
-
-    <div className="space-y-4">
-
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-
-
-        <div>
-          <label className="block mb-1 text-xs font-semibold text-gray-700">
-            Student Name *
-          </label>
-
-          <input
-            className="input w-full text-xs"
-            value={name}
-            onChange={(e)=>setName(e.target.value)}
-          />
-
-        </div>
-
-
-        <div>
-          <label className="block mb-1 text-xs font-semibold text-gray-700">
-            Assigned Teacher Alias *
-          </label>
-
-          <select
-            className="input w-full text-xs bg-white"
-            value={teacherAlias}
-            onChange={(e)=>setTeacherAlias(e.target.value)}
-          >
-
-            {teacherAliases.map((alias:string)=>(
-              <option key={alias} value={alias}>
-                {alias}
-              </option>
-            ))}
-
-          </select>
-
-        </div>
-
-
-      </div>
-
-
-
-      <div>
-        <label className="block mb-1 text-xs font-semibold text-gray-700">
-          Classroom Video Link (Zoom / Meet URL)
-        </label>
-
-        <input
-          className="input w-full text-xs font-mono"
-          value={meetingLink}
-          onChange={(e)=>setMeetingLink(e.target.value)}
-        />
-
-      </div>
-
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-
-        <div>
-          <label className="block mb-1 text-xs font-semibold text-gray-700">
-            Email
-          </label>
-
-          <input
-            className="input w-full text-xs"
-            value={email}
-            onChange={(e)=>setEmail(e.target.value)}
-          />
-
-        </div>
-
-
-        <div>
-          <label className="block mb-1 text-xs font-semibold text-gray-700">
-            Phone
-          </label>
-
-          <input
-            className="input w-full text-xs"
-            value={phone}
-            onChange={(e)=>setPhone(e.target.value)}
-          />
-
-        </div>
-
-      </div>
-
-
-
-      <div className="grid grid-cols-2 gap-3">
-
-        <div>
-          <label className="block mb-1 text-xs font-semibold text-gray-700">
-            Age
-          </label>
-
-          <input
-            type="number"
-            className="input w-full text-xs"
-            value={age}
-            onChange={(e)=>setAge(e.target.value)}
-          />
-
-        </div>
-
-
-        <div>
-          <label className="block mb-1 text-xs font-semibold text-gray-700">
-            Country *
-          </label>
-
-          <select
-            className="input w-full text-xs bg-white"
-            value={country}
-            onChange={(e)=>{
-              const selected=e.target.value;
-              setCountry(selected);
-
-              const selectedCountry =
-                countries.find((item)=>item.name===selected);
-
-              if(selectedCountry){
-                setPaymentCurrency(selectedCountry.currency);
-              }
-            }}
-          >
-
-            <option value="">
-              Select Country
-            </option>
-
-            {countries.map((item)=>(
-              <option key={item.name} value={item.name}>
-                {item.name} {item.flag}
-              </option>
-            ))}
-
-          </select>
-
-        </div>
-
-      </div>
-            <div className="grid grid-cols-2 gap-3">
-
-        <div>
-          <label className="block mb-1 text-xs font-semibold text-gray-700">
-            Currency
-          </label>
-
-          <select
-            className="input w-full text-xs bg-white"
-            value={paymentCurrency}
-            onChange={(e)=>{
-              const currency = e.target.value;
-              setPaymentCurrency(currency);
-              calculatePHP(paymentAmount, currency);
-            }}
-          >
-
-            {Object.keys(currencies).map((code)=>(
-              <option key={code} value={code}>
-                {currencies[code].symbol} {code}
-              </option>
-            ))}
-
-          </select>
-
-        </div>
-
-
-        <div>
-
-          <label className="block mb-1 text-xs font-semibold text-gray-700">
-            Payment Amount *
-          </label>
-
-
-          <input
-            className="input w-full text-xs"
-            value={paymentAmount}
-            onChange={(e)=>{
-              const raw=e.target.value.replace(/,/g,"");
-
-              if(raw===""){
-                setPaymentAmount("");
-              }
-              else if(!isNaN(Number(raw))){
-                setPaymentAmount(
-                  Number(raw).toLocaleString()
-                );
-
-                calculatePHP(
-                  Number(raw).toLocaleString(),
-                  paymentCurrency
-                );
-              }
-
-            }}
-          />
-
-        </div>
-
-      </div>
-
-
-
-      {phpEquivalent && (
-
-        <div className="p-2.5 bg-pink-50 rounded-xl text-xs font-semibold text-pink-700 flex justify-between">
-
-          <span>
-            Estimated PHP Gross:
-          </span>
-
-          <span>
-            ₱{phpEquivalent}
-          </span>
-
-        </div>
-
-      )}
-
-
-
-
-      <div className="grid grid-cols-2 gap-3">
-
-
-        <div>
-
-          <label className="block mb-1 text-xs font-semibold text-gray-700">
-            Classes Included
-          </label>
-
-
-          <input
-            type="number"
-            className="input w-full text-xs"
-            value={classesIncluded}
-            onChange={(e)=>{
-              setClassesIncluded(e.target.value);
-
-              calculateEndDate(
-                contractStartDate,
-                e.target.value,
-                freeClasses
-              );
-            }}
-          />
-
-        </div>
-
-
-
-        <div>
-
-          <label className="block mb-1 text-xs font-semibold text-gray-700">
-            Free Classes
-          </label>
-
-
-          <input
-            type="number"
-            className="input w-full text-xs"
-            value={freeClasses}
-            onChange={(e)=>{
-              setFreeClasses(e.target.value);
-
-              calculateEndDate(
-                contractStartDate,
-                classesIncluded,
-                e.target.value
-              );
-            }}
-          />
-
-        </div>
-
-
-      </div>
-
-
-
-
-      <div>
-
-        <label className="block mb-1 text-xs font-semibold text-gray-700">
-          Classes Completed
-        </label>
-
-
-        <input
-          type="number"
-          className="input w-full text-xs"
-          value={classesCompleted}
-          onChange={(e)=>setClassesCompleted(e.target.value)}
-        />
-
-
-      </div>
-
-
-
-
-
-      <div className="grid grid-cols-2 gap-3">
-
-
-        <div>
-
-          <label className="block mb-1 text-xs font-semibold text-gray-700">
-            Contract Start Date
-          </label>
-
-
-          <DatePicker
-
-            selected={
-              contractStartDate
-              ? new Date(contractStartDate)
-              : null
-            }
-
-            onChange={(date:Date|null)=>{
-
-              if(date){
-
-                const formatted =
-                  `${date.getFullYear()}-${String(
-                    date.getMonth()+1
-                  ).padStart(2,"0")}-${String(
-                    date.getDate()
-                  ).padStart(2,"0")}`;
-
-                setContractStartDate(formatted);
-
-                calculateEndDate(
-                  formatted,
-                  classesIncluded,
-                  freeClasses
-                );
-
-              }
-
-            }}
-
-            dateFormat="yyyy-MM-dd"
-
-            className="input w-full text-xs bg-white cursor-pointer"
-
-            wrapperClassName="w-full"
-
-          />
-
-        </div>
-
-
-
-        <div>
-
-          <label className="block mb-1 text-xs font-semibold text-gray-700">
-            Contract End Date
-          </label>
-
-
-          <input
-
-            type="date"
-
-            className="input w-full text-xs bg-gray-50"
-
-            value={contractEndDate}
-
-            onChange={(e)=>setContractEndDate(e.target.value)}
-
-          />
-
-        </div>
-
-
-      </div>
-
-
-
-
-
-      <div className="grid grid-cols-2 gap-3">
-
-
-        <div>
-
-          <label className="block mb-1 text-xs font-semibold text-gray-700">
-            Class Duration
-          </label>
-
-
-          <select
-
-            className="input w-full text-xs bg-white"
-
-            value={
-              classDuration === ""
-              ? "custom"
-              : classDuration
-            }
-
-            onChange={(e)=>{
-
-              if(e.target.value==="custom"){
-
-                setClassDuration("");
-
-              }else{
-
-                setClassDuration(e.target.value);
-                setCustomDuration("");
-
-              }
-
-            }}
-
-          >
-
-            <option value="25">
-              25 minutes
-            </option>
-
-            <option value="40">
-              40 minutes
-            </option>
-
-            <option value="50">
-              50 minutes
-            </option>
-
-            <option value="60">
-              60 minutes
-            </option>
-
-            <option value="90">
-              90 minutes
-            </option>
-
-            <option value="custom">
-              + Custom
-            </option>
-
-
-          </select>
-
-        </div>
-
-
-
-
-
-        <div>
-
-          <label className="block mb-1 text-xs font-semibold text-gray-700">
-            Payment Status
-          </label>
-
-
-          <select
-
-            className="input w-full text-xs bg-white"
-
-            value={paymentStatus}
-
-            onChange={(e)=>setPaymentStatus(e.target.value)}
-
-          >
-
-            <option value="Active">
-              Active
-            </option>
-
-            <option value="Pending">
-              Pending
-            </option>
-
-            <option value="Expired">
-              Expired
-            </option>
-
-            <option value="Completed">
-              Completed
-            </option>
-
-
-          </select>
-
-
-        </div>
-
-
-      </div>
-
-
-
-
-
-      {classDuration === "" && (
-
-        <input
-
-          type="number"
-
-          placeholder="Enter custom duration (minutes)"
-
-          className="input w-full text-xs"
-
-          value={customDuration}
-
-          onChange={(e)=>setCustomDuration(e.target.value)}
-
-        />
-
-      )}
-
-
-
-
-
-
-      <textarea
-
-        placeholder="Notes..."
-
-        rows={2}
-
-        className="input w-full text-xs"
-
-        value={notes}
-
-        onChange={(e)=>setNotes(e.target.value)}
-
-      />
-
-
-    </div>
-
-
-
-
-
-    <div className="flex justify-end gap-3 pt-4 border-t border-pink-100">
-
-
-      <button
-
-        onClick={onClose}
-
-        className="px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-xs font-semibold text-gray-600 transition cursor-pointer"
-
-      >
-
-        Cancel
-
-      </button>
-
-
-
-
-      <button
-
-        onClick={onSave}
-
-        className="btn-primary cursor-pointer text-xs"
-
-      >
-
-        Save Changes
-
-      </button>
-
-
-
-    </div>
-
-
-
-  </div>
-
-
-</div>
-
-);
-
+  );
 }

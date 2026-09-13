@@ -8,6 +8,7 @@ interface BookEntry {
   book_id: string
   start_page: string
   end_page: string
+  completed_chapters?: number[]
 }
 
 interface LessonLogModalProps {
@@ -45,18 +46,48 @@ export default function LessonLogModal({
     { book_id: '', start_page: '', end_page: '' },
   ])
 
-  useEffect(() => {
-    setTitle('')
-    setVocab('')
-    setStrengths('')
-    setImprovements('')
-    setParentMessage('')
-    setHomework('')
-    setHomeworkFile(null)
-    setSelectedBooks([
-      { book_id: studentBooks[0]?.id || '', start_page: '', end_page: '' },
-    ])
-  }, [isOpen, studentBooks])
+useEffect(() => {
+    async function loadExistingLesson() {
+      if (!isOpen) return;
+
+      if (eventId && eventId.length > 20) { // Assuming UUID length
+        // Try fetching from lessons table first
+        const { data: lessonData } = await supabase
+          .from('lessons')
+          .select('*')
+          .eq('id', eventId)
+          .maybeSingle();
+
+        if (lessonData) {
+          setTitle(lessonData.title || '');
+          setVocab(lessonData.vocab_notes || lessonData.vocabulary || '');
+          setStrengths(lessonData.strengths_notes || lessonData.strengths || '');
+          setImprovements(lessonData.improvement_notes || lessonData.improvements || '');
+          setHomework(lessonData.homework_notes || lessonData.homework || '');
+          if (Array.isArray(lessonData.book_progress) && lessonData.book_progress.length > 0) {
+            setSelectedBooks(lessonData.book_progress);
+          } else if (lessonData.book_id) {
+            setSelectedBooks([{ book_id: lessonData.book_id, start_page: '', end_page: '' }]);
+          }
+          return;
+        }
+      }
+
+      // Default empty state for new logs
+      setTitle('');
+      setVocab('');
+      setStrengths('');
+      setImprovements('');
+      setParentMessage('');
+      setHomework('');
+      setHomeworkFile(null);
+      setSelectedBooks([
+        { book_id: studentBooks[0]?.id || studentBooks[0]?.book_id || '', start_page: '', end_page: '' },
+      ]);
+    }
+
+    loadExistingLesson();
+  }, [isOpen, eventId, studentBooks]);
 
   if (!isOpen) return null
 
@@ -71,10 +102,10 @@ export default function LessonLogModal({
     setSelectedBooks((prev) => prev.filter((_, i) => i !== index))
   }
 
-  const handleBookChange = (index: number, field: keyof BookEntry, value: string) => {
+  const handleBookChange = (index: number, field: keyof BookEntry, value: any) => {
     setSelectedBooks((prev) => {
       const updated = [...prev]
-      updated[index][field] = value
+      updated[index] = { ...updated[index], [field]: value }
       return updated
     })
   }
@@ -150,6 +181,7 @@ Message: ${parentMessage || ""}`
           strengths_notes: strengths,
           improvement_notes: improvements,
           homework_notes: homework,
+          teacher_message: parentMessage, //
           homework_file_url: uploadedFileUrl,
           book_progress: validBooks,
         }
@@ -182,6 +214,29 @@ Message: ${parentMessage || ""}`
             .from('students')
             .update({ classes_completed: currentCompleted + 1 })
             .eq('id', studentId)
+        }
+      }
+
+      // Save checked chapters progress to student_books table
+      for (const bookEntry of validBooks) {
+        if (bookEntry.completed_chapters && bookEntry.completed_chapters.length > 0) {
+          const { data: existingSb } = await supabase
+            .from('student_books')
+            .select('completed_chapters')
+            .eq('student_id', studentId)
+            .eq('book_id', bookEntry.book_id)
+            .maybeSingle();
+
+          const existingChapters = existingSb?.completed_chapters || [];
+          const mergedChapters = Array.from(new Set([...existingChapters, ...bookEntry.completed_chapters]));
+
+          await supabase
+            .from('student_books')
+            .upsert({
+              student_id: studentId,
+              book_id: bookEntry.book_id,
+              completed_chapters: mergedChapters,
+            }, { onConflict: 'student_id,book_id' });
         }
       }
 
@@ -265,33 +320,81 @@ Message: ${parentMessage || ""}`
                   </select>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[10px] font-bold text-pink-900/70 uppercase">
-                      Start Page
-                    </label>
-                    <input
-                      type="number"
-                      placeholder="e.g. 1"
-                      value={entry.start_page}
-                      onChange={(e) => handleBookChange(index, 'start_page', e.target.value)}
-                      className="w-full p-2.5 border border-pink-200 rounded-xl bg-white text-xs font-mono text-pink-950 focus:outline-none focus:ring-2 focus:ring-pink-400"
-                    />
-                  </div>
+                {/* Dynamic Chapter Checkboxes vs Page Inputs */}
+                {(() => {
+                  const currentBook = studentBooks.find(
+                    (b: any) => (b.id || b.book_id) === entry.book_id
+                  );
+                  
+                  const isChapterBased =
+                    currentBook?.book_type === "chapters" ||
+                    currentBook?.book_type === "chapter" ||
+                    Array.isArray(currentBook?.chapters) ||
+                    currentBook?.is_chapter_based ||
+                    currentBook?.title?.toLowerCase().includes("wonderskills") ||
+                    currentBook?.name?.toLowerCase().includes("wonderskills");
 
-                  <div>
-                    <label className="text-[10px] font-bold text-pink-900/70 uppercase">
-                      End Page
-                    </label>
-                    <input
-                      type="number"
-                      placeholder="e.g. 12"
-                      value={entry.end_page}
-                      onChange={(e) => handleBookChange(index, 'end_page', e.target.value)}
-                      className="w-full p-2.5 border border-pink-200 rounded-xl bg-white text-xs font-mono text-pink-950 focus:outline-none focus:ring-2 focus:ring-pink-400"
-                    />
-                  </div>
-                </div>
+                  const chaptersList = currentBook?.chapters || [];
+
+                  return isChapterBased && chaptersList.length > 0 ? (
+                    <div className="space-y-2 pt-1">
+                      <label className="text-[10px] font-bold text-pink-900/70 uppercase block">
+                        Select Completed Chapters / Lessons
+                      </label>
+                      <div className="max-h-40 overflow-y-auto space-y-1.5 p-2 bg-pink-50/50 rounded-xl border border-pink-100">
+                        {chaptersList.map((chap: any, chapIdx: number) => {
+                          const isChecked = entry.completed_chapters?.includes(chapIdx) || false;
+                          const chapTitle = typeof chap === "string" ? chap : chap.title || `Lesson ${chapIdx + 1}`;
+
+                          return (
+                            <label
+                              key={chapIdx}
+                              className="flex items-center gap-2.5 p-2 bg-white rounded-lg border border-pink-100 cursor-pointer hover:bg-pink-50/80 transition text-xs"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={(e) => {
+                                  const currentSelected = entry.completed_chapters || [];
+                                  const updated = e.target.checked
+                                    ? [...currentSelected, chapIdx]
+                                    : currentSelected.filter((id) => id !== chapIdx);
+                                  
+                                  handleBookChange(index, 'completed_chapters', updated);
+                                }}
+                                className="rounded text-pink-600 focus:ring-pink-500 w-4 h-4 cursor-pointer"
+                              />
+                              <span className="font-medium text-pink-950">{chapTitle}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[10px] font-bold text-pink-900/70 uppercase">Start Page</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. 1"
+                          value={entry.start_page}
+                          onChange={(e) => handleBookChange(index, 'start_page', e.target.value)}
+                          className="w-full p-2.5 border border-pink-200 rounded-xl bg-white text-xs font-mono text-pink-950"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-pink-900/70 uppercase">End Page</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. 12"
+                          value={entry.end_page}
+                          onChange={(e) => handleBookChange(index, 'end_page', e.target.value)}
+                          className="w-full p-2.5 border border-pink-200 rounded-xl bg-white text-xs font-mono text-pink-950"
+                        />
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             ))}
           </div>

@@ -602,7 +602,7 @@ export default function StudentPortalPage({
   const vocabMatch = text.match(/Vocab[:\-]?\s*([\s\S]*?)(?=\n(?:Strengths|Improvements|Homework):|$)/i);
   const strengthsMatch = text.match(/Strengths[:\-]?\s*([\s\S]*?)(?=\n(?:Vocab|Improvements|Homework):|$)/i);
   const improvementsMatch = text.match(/(?:Improvements|Next Focus)[:\-]?\s*([\s\S]*?)(?=\n(?:Vocab|Strengths|Homework):|$)/i);
-  const homeworkMatch = text.match(/Homework[:\-]?\s*([\s\S]*)/i);
+ const homeworkMatch = text.match(/Homework[:\-]?\s*([\s\S]*?)(?=\n(?:Message|Teacher Message|Vocab|Strengths|Improvements|Next Focus):|$)/i);
 
   const displayVocab = les.vocab_notes || les.vocabulary || (vocabMatch ? vocabMatch[1].trim() : "");
   const displayStrengths = les.strengths_notes || les.strengths || (strengthsMatch ? strengthsMatch[1].trim() : "");
@@ -689,42 +689,54 @@ export default function StudentPortalPage({
               )}
             </div>
           )}
-
-          <div className="p-4 bg-pink-100/60 rounded-2xl border-2 border-pink-300 text-pink-950 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="font-bold flex items-center gap-1.5 text-xs text-pink-950">
-                <FileCheck size={15} className="text-pink-600" />
-                <span>Assigned Homework / Review:</span>
+{les.teacher_message && (
+            <div className="p-3.5 bg-pink-50/70 rounded-xl border-2 border-pink-200 space-y-1">
+              <span className="font-bold text-pink-950 text-[11px] flex items-center gap-1">
+                💌 Message from Teacher:
               </span>
-
-              <span
-                className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider ${
-                  les.homework_status === "Submitted"
-                    ? "bg-emerald-100 text-emerald-900 border border-emerald-300"
-                    : "bg-pink-200 text-pink-800 border border-pink-300"
-                }`}
-              >
-                {les.homework_status === "Submitted" ? "✓ Submitted" : "Pending"}
-              </span>
+              <p className="text-gray-900 text-[11px] whitespace-pre-wrap leading-relaxed">{les.teacher_message}</p>
             </div>
+          )}
 
-            <p className="leading-relaxed text-[11px] font-medium text-gray-900 bg-white p-2.5 rounded-xl border-2 border-pink-200 whitespace-pre-wrap">
-              {displayHomework || "No specific homework assigned for this session."}
-            </p>
+          {(((les.homework_notes || les.homework) && (les.homework_notes || les.homework).toLowerCase() !== "none") || les.homework_file_url) && (
+            <div className="p-4 bg-pink-100/60 rounded-2xl border-2 border-pink-300 text-pink-950 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="font-bold flex items-center gap-1.5 text-xs text-pink-950">
+                  <FileCheck size={15} className="text-pink-600" />
+                  <span>Assigned Homework / Review:</span>
+                </span>
 
-            {les.homework_file_url && (
-              <div>
-                <a
-                  href={les.homework_file_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border-2 border-pink-300 text-pink-800 font-bold rounded-lg text-[10px] hover:bg-pink-50 transition shadow-2xs"
+                <span
+                  className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider ${
+                    les.homework_status === "Submitted"
+                      ? "bg-emerald-100 text-emerald-900 border border-emerald-300"
+                      : "bg-pink-200 text-pink-800 border border-pink-300"
+                  }`}
                 >
-                  <span>📄 View Teacher Worksheet / Page</span>
-                </a>
+                  {les.homework_status === "Submitted" ? "✓ Submitted" : "Pending"}
+                </span>
               </div>
-            )}
-          </div>
+
+              {displayHomework && displayHomework.toLowerCase() !== "none" && (
+                <p className="leading-relaxed text-[11px] font-medium text-gray-900 bg-white p-2.5 rounded-xl border-2 border-pink-200 whitespace-pre-wrap">
+                  {displayHomework}
+                </p>
+              )}
+
+              {les.homework_file_url && (
+                <div>
+                  <a
+                    href={les.homework_file_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border-2 border-pink-300 text-pink-800 font-bold rounded-lg text-[10px] hover:bg-pink-50 transition shadow-2xs"
+                  >
+                    <span>📄 View Teacher Worksheet / Page</span>
+                  </a>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -4,13 +4,6 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import DatePicker from 'react-datepicker'
 import 'react-datepicker/dist/react-datepicker.css'
-import { Plus, Trash2, BookOpen } from 'lucide-react'
-
-interface BookEntry {
-  book_id: string
-  start_page: string
-  end_page: string
-}
 
 interface AttendanceModalProps {
   isOpen: boolean
@@ -21,7 +14,6 @@ interface AttendanceModalProps {
   initialStatus: 'absent' | 'cancelled'
   eventType?: 'regular' | 'makeup'
   dateString?: string
-  studentBooks?: any[] // List of books assigned to this student
 }
 
 export default function AttendanceModal({
@@ -33,7 +25,6 @@ export default function AttendanceModal({
   initialStatus,
   eventType = 'regular',
   dateString,
-  studentBooks = [],
 }: AttendanceModalProps) {
   const [status, setStatus] = useState<'absent' | 'cancelled'>(initialStatus)
   const [makeupRequested, setMakeupRequested] = useState(false)
@@ -42,43 +33,15 @@ export default function AttendanceModal({
   const [makeupDuration, setMakeupDuration] = useState<number>(40)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  // Dynamic Multi-Book State
-  const [selectedBooks, setSelectedBooks] = useState<BookEntry[]>([
-    { book_id: '', start_page: '', end_page: '' },
-  ])
-
   useEffect(() => {
     setStatus(initialStatus)
     setMakeupRequested(false)
     setMakeupDate(null)
     setCustomTime('16:40')
     setMakeupDuration(40)
-    setSelectedBooks([
-      { book_id: studentBooks[0]?.id || '', start_page: '', end_page: '' },
-    ])
-  }, [initialStatus, isOpen, studentBooks])
+  }, [initialStatus, isOpen])
 
   if (!isOpen) return null
-
-  // Book List Array Manipulation Handlers
-  const handleAddBook = () => {
-    setSelectedBooks((prev) => [
-      ...prev,
-      { book_id: '', start_page: '', end_page: '' },
-    ])
-  }
-
-  const handleRemoveBook = (index: number) => {
-    setSelectedBooks((prev) => prev.filter((_, i) => i !== index))
-  }
-
-  const handleBookChange = (index: number, field: keyof BookEntry, value: string) => {
-    setSelectedBooks((prev) => {
-      const updated = [...prev]
-      updated[index][field] = value
-      return updated
-    })
-  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -103,17 +66,10 @@ export default function AttendanceModal({
         makeupIsoString = combined.toISOString()
       }
 
-      // Filter valid book entries with selected IDs
-      const validBooks = selectedBooks.filter((b) => b.book_id)
-
-      // 1. If modifying an existing make-up event directly
       if (eventType === 'makeup') {
         const { error: makeupError } = await supabase
           .from("makeup_classes")
-          .update({ 
-            status: formattedStatus,
-            book_progress: validBooks // Store multi-book entries JSON array
-          })
+          .update({ status: formattedStatus })
           .eq("id", eventId)
 
         if (makeupError) throw makeupError
@@ -129,13 +85,11 @@ export default function AttendanceModal({
               duration: makeupDuration,
               topic: 'Make-up Class (Rescheduled)',
               status: 'Scheduled',
-              book_progress: validBooks
             })
 
           if (newMakeupErr) throw newMakeupErr
         }
       } else {
-        // 2. Mark the regular class status in the 'lessons' table
         const { data: existingLesson } = await supabase
           .from("lessons")
           .select("id")
@@ -149,7 +103,6 @@ export default function AttendanceModal({
             .update({
               status: formattedStatus,
               description: `Class marked as ${formattedStatus}`,
-              book_progress: validBooks
             })
             .eq("id", existingLesson.id)
 
@@ -164,13 +117,11 @@ export default function AttendanceModal({
               status: formattedStatus,
               title: `${formattedStatus} Class`,
               description: `Class marked as ${formattedStatus}`,
-              book_progress: validBooks
             })
 
           if (insertLessonErr) throw insertLessonErr
         }
 
-        // 3. Create the new Make-up Class entry if requested
         if (makeupRequested && makeupIsoString) {
           const { data: scheduleData } = await supabase
             .from('schedules')
@@ -188,7 +139,6 @@ export default function AttendanceModal({
               duration: makeupDuration,
               topic: `Make-up: ${scheduleData?.topic || 'Regular Class'}`,
               status: 'Scheduled',
-              book_progress: validBooks
             })
 
           if (insertMakeupErr) throw insertMakeupErr
@@ -232,87 +182,6 @@ export default function AttendanceModal({
               <option value="absent">Absent</option>
               <option value="cancelled">Cancelled</option>
             </select>
-          </div>
-
-          {/* Multi-Book Progress Tracker Section */}
-          <div className="space-y-3 pt-1">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-bold text-gray-700 flex items-center gap-1.5">
-                <BookOpen size={14} className="text-pink-600" />
-                <span>Assigned Books & Pages</span>
-              </label>
-              <button
-                type="button"
-                onClick={handleAddBook}
-                className="text-xs font-bold text-pink-600 hover:text-pink-700 flex items-center gap-1 cursor-pointer"
-              >
-                <Plus size={14} />
-                <span>Add Book</span>
-              </button>
-            </div>
-
-            {selectedBooks.map((entry, index) => (
-              <div
-                key={index}
-                className="p-3 bg-pink-50/40 rounded-2xl border border-pink-100 space-y-2 relative"
-              >
-                {selectedBooks.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveBook(index)}
-                    className="absolute top-2.5 right-2.5 text-gray-400 hover:text-rose-600 transition cursor-pointer"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                )}
-
-                <div>
-                  <label className="text-[10px] font-bold text-gray-500 uppercase">
-                    Select Book #{index + 1}
-                  </label>
-                  <select
-                    value={entry.book_id}
-                    onChange={(e) => handleBookChange(index, "book_id", e.target.value)}
-                    className="w-full border border-pink-200 rounded-xl p-2 text-xs font-semibold mt-0.5 bg-white cursor-pointer"
-                  >
-                    <option value="">-- Choose Book --</option>
-                    {studentBooks.map((book: any) => (
-                      <option key={book.id} value={book.id}>
-                        {book.title || book.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-[10px] font-bold text-gray-500 uppercase">
-                      Start Page
-                    </label>
-                    <input
-                      type="number"
-                      placeholder="e.g. 1"
-                      value={entry.start_page}
-                      onChange={(e) => handleBookChange(index, "start_page", e.target.value)}
-                      className="w-full p-2 border border-pink-200 rounded-xl bg-white text-xs font-mono"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[10px] font-bold text-gray-500 uppercase">
-                      End Page
-                    </label>
-                    <input
-                      type="number"
-                      placeholder="e.g. 12"
-                      value={entry.end_page}
-                      onChange={(e) => handleBookChange(index, "end_page", e.target.value)}
-                      className="w-full p-2 border border-pink-200 rounded-xl bg-white text-xs font-mono"
-                    />
-                  </div>
-                </div>
-              </div>
-            ))}
           </div>
 
           {eventType === 'regular' && (

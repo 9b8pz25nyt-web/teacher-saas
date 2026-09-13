@@ -29,6 +29,7 @@ import {
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import StudentEditModal from "@/components/StudentEditModal";
+import LessonLogModal from "@/components/LessonLogModal";
 
 const DEFAULT_ALIASES = ["Teacher Gabi", "Teacher Princess"];
 const DAYS_OF_WEEK = [
@@ -67,6 +68,7 @@ export default function StudentDetailsPage({
   const [studentBooks, setStudentBooks] = useState<any[]>([]);
   const [reports, setReports] = useState<any[]>([]);
   const [lessons, setLessons] = useState<any[]>([]);
+  const [makeupClasses, setMakeupClasses] = useState<any[]>([]);
   const [latestPayment, setLatestPayment] = useState<any>(null);
   const [teacherAliases, setTeacherAliases] = useState<string[]>(DEFAULT_ALIASES);
   const [loading, setLoading] = useState(true);
@@ -74,7 +76,14 @@ export default function StudentDetailsPage({
   const [copiedRenewalNotice, setCopiedRenewalNotice] = useState(false);
   const [expandedReportIds, setExpandedReportIds] = useState<string[]>([]);
   const [isParentRequestsOpen, setIsParentRequestsOpen] = useState(true);
-  const [makeupClasses, setMakeupClasses] = useState<any[]>([]);
+  // 👇 Insert the selectedLesson state here:
+  const [selectedLesson, setSelectedLesson] = useState<{
+    eventId: string;
+    studentId: string;
+    studentName: string;
+    type: "regular" | "makeup";
+    dateString?: string;
+  } | null>(null);
 
   // Payment Instructions & QR Upload State
   const [paymentQrFile, setPaymentQrFile] = useState<File | null>(null);
@@ -100,8 +109,9 @@ export default function StudentDetailsPage({
     );
   }
 
-  // Edit Student Modal State
+  // Edit Student Modal State & Fields
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isBookModalOpen, setIsBookModalOpen] = useState(false);
   const [name, setName] = useState("");
   const [teacherAlias, setTeacherAlias] = useState("Teacher Gabi");
   const [meetingLink, setMeetingLink] = useState("");
@@ -355,7 +365,7 @@ export default function StudentDetailsPage({
           .select("*")
           .eq("student_id", studentId)
           .order("lesson_date", { ascending: false }),
-          supabase.from("makeup_classes").select("*").eq("student_id", studentId),
+        supabase.from("makeup_classes").select("*").eq("student_id", studentId).eq("user_id", user.id),
       ]);
 
       if (scheds) setSchedules(scheds);
@@ -527,11 +537,7 @@ export default function StudentDetailsPage({
   }
 
   async function handleDeleteReport(reportId: string, homeworkFileUrl?: string | null) {
-    if (
-      !confirm(
-        "Are you sure you want to delete this lesson report? This will decrease the completed class count by 1."
-      )
-    ) {
+    if (!confirm("Are you sure you want to delete this lesson report? This will decrease the completed class count by 1.")) {
       return;
     }
 
@@ -539,12 +545,16 @@ export default function StudentDetailsPage({
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
+      const { data: reportRow } = await supabase
+        .from("class_reports")
+        .select("report_date, lesson_title")
+        .eq("id", reportId)
+        .single();
+
       if (homeworkFileUrl) {
         const parts = homeworkFileUrl.split("/homework-files/");
         if (parts[1]) {
-          await supabase.storage
-            .from("homework-files")
-            .remove([decodeURIComponent(parts[1])]);
+          await supabase.storage.from("homework-files").remove([decodeURIComponent(parts[1])]);
         }
       }
 
@@ -556,12 +566,18 @@ export default function StudentDetailsPage({
 
       if (error) throw error;
 
+      if (reportRow) {
+        await supabase
+          .from("lessons")
+          .delete()
+          .eq("student_id", studentId)
+          .eq("user_id", user.id)
+          .eq("lesson_date", reportRow.report_date)
+          .eq("title", reportRow.lesson_title);
+      }
+
       const newCompletedCount = Math.max((student?.classes_completed || 1) - 1, 0);
-      await supabase
-        .from("students")
-        .update({ classes_completed: newCompletedCount })
-        .eq("id", studentId)
-        .eq("user_id", user.id);
+      await supabase.from("students").update({ classes_completed: newCompletedCount }).eq("id", studentId).eq("user_id", user.id);
 
       fetchStudentData();
     } catch (err: any) {
@@ -602,13 +618,8 @@ export default function StudentDetailsPage({
 
       const validBookId = reportBookId && reportBookId.trim() !== "" ? reportBookId : null;
 
-      const structuredDescription = `Vocab: ${vocabulary.trim() || "None"}
-Strengths: ${strengths.trim() || "None"}
-Improvements: ${improvements.trim() || "None"}
-Homework: ${homework.trim() || "None"}`;
-
       const payload: any = {
-        user_id: user.id,
+        teacher_id: user.id,
         lesson_title: lessonTitle.trim(),
         title: lessonTitle.trim(),
         report_date: reportDate,
@@ -637,7 +648,7 @@ Homework: ${homework.trim() || "None"}`;
           .from("class_reports")
           .update(payload)
           .eq("id", editingReportId)
-          .eq("user_id", user.id);
+          .eq("teacher_id", user.id);
 
         if (updateError) throw updateError;
       } else {
@@ -664,6 +675,7 @@ Homework: ${homework.trim() || "None"}`;
           book_id: validBookId,
           book_progress: bookProgressArray,
         });
+
         if (validBookId && selectedChapterIndex !== "" && isChapterComplete) {
           const currentCompletedChapters = selectedBookItem?.completed_chapters || [];
           const chapterIdxNum = Number(selectedChapterIndex);
@@ -684,7 +696,7 @@ Homework: ${homework.trim() || "None"}`;
           .from("students")
           .update({ classes_completed: currentCompleted + 1 })
           .eq("id", studentId)
-          .eq("user_id", user.id);
+          .eq("teacher_id", user.id);
       }
 
       setEditingReportId(null);
@@ -798,15 +810,22 @@ ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCust
 
   const combinedTotalClasses =
     Number(student?.classes_included || 0) + Number(student?.free_classes || 0);
-
   const validReports = reports.filter(
     (r) => !r.lesson_title?.toLowerCase().includes("cancelled") && !r.title?.toLowerCase().includes("cancelled") && r.status !== "Cancelled"
   );
   const validLessons = lessons.filter(
     (l) => !l.title?.toLowerCase().includes("cancelled") && l.status !== "Cancelled"
   );
+ const completedMakeups = makeupClasses.filter(
+  (m) => {
+    const s = (m.status || "").trim().toLowerCase();
+    return s === "completed" || s === "attended";
+  }
+);
 
-  const dynamicCompletedCount = Math.max(validReports.length, validLessons.length);
+  const baseLessonsCount = Math.max(validReports.length, validLessons.length);
+  const dynamicCompletedCount = baseLessonsCount + completedMakeups.length;
+
   const dynamicRemainingCount = Math.max(combinedTotalClasses - dynamicCompletedCount, 0);
   const dynamicProgressPercent = Math.min(
     Math.round((dynamicCompletedCount / (combinedTotalClasses || 1)) * 100),
@@ -830,7 +849,6 @@ ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCust
     rawPaymentStatus === "completed";
 
   const displayStatus = isPaid ? "PAID" : "PENDING";
-
   if (loading) {
     return (
       <div className="p-12 text-center text-pink-600 font-medium">
@@ -841,7 +859,6 @@ ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCust
 
   const countryObj = countries.find((c) => c.name === student?.country);
   const currencyObj = currencies[student?.payment_currency];
-  const teacherBrandName = student?.teacher_alias || teacherAlias || "Teacher Gabi";
   const cleanRenewAmount = Number(String(renewalRate).replace(/[^0-9.]/g, "")) || 0;
   const formattedRenewRate = cleanRenewAmount.toLocaleString("en-US");
 
@@ -1013,83 +1030,86 @@ ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCust
               <span>Assigned Books & Progress</span>
             </div>
             <button
-              onClick={() => setIsEditModalOpen(true)}
+              onClick={() => setIsBookModalOpen(true)}
               className="text-xs font-medium text-pink-600 hover:text-pink-700 bg-pink-50 hover:bg-pink-100 px-2.5 py-1 rounded-md transition-colors cursor-pointer"
             >
               Edit Books
             </button>
           </div>
-          {studentBooks.map((item, index) => {
-  const book = item.books || item;
-  const bookId = book?.id || item.book_id;
-  const isPageBased = book?.book_type === "pages";
+          <div className="space-y-2 max-h-[160px] overflow-y-auto">
+            {studentBooks.length > 0 ? (
+              studentBooks.map((item, index) => {
+                const book = item.books || item;
+                const bookId = book?.id || item.book_id;
+                const isPageBased = book?.book_type === "pages";
 
-  let maxPageReached = 0;
-  if (isPageBased && bookId) {
-    // 1. Check legacy class reports
-    const reportMax = reports
-      .filter((r) => r.book_id === bookId)
-      .reduce((max, r) => Math.max(max, r.end_page || 0), 0);
+                let maxPageReached = 0;
+                if (isPageBased && bookId) {
+                  const reportMax = reports
+                    .filter((r) => r.book_id === bookId)
+                    .reduce((max, r) => Math.max(max, r.end_page || 0), 0);
 
-    // 2. Check regular lessons
-    let lessonMax = 0;
-    lessons.forEach((l) => {
-      if (Array.isArray(l.book_progress)) {
-        l.book_progress.forEach((bp: any) => {
-          if (bp.book_id === bookId) {
-            const ep = Number(bp.end_page) || 0;
-            if (ep > lessonMax) lessonMax = ep;
-          }
-        });
-      } else if (l.book_id === bookId) {
-        const ep = Number(l.end_page) || 0;
-        if (ep > lessonMax) lessonMax = ep;
-      }
-    });
+                  let lessonMax = 0;
+                  lessons.forEach((l) => {
+                    if (Array.isArray(l.book_progress)) {
+                      l.book_progress.forEach((bp: any) => {
+                        if (bp.book_id === bookId) {
+                          const ep = Number(bp.end_page) || 0;
+                          if (ep > lessonMax) lessonMax = ep;
+                        }
+                      });
+                    } else if (l.book_id === bookId) {
+                      const ep = Number(l.end_page) || 0;
+                      if (ep > lessonMax) lessonMax = ep;
+                    }
+                  });
 
-    // 3. Check makeup classes
-    let makeupMax = 0;
-    makeupClasses.forEach((mc) => {
-      if (Array.isArray(mc.book_progress)) {
-        mc.book_progress.forEach((bp: any) => {
-          if (bp.book_id === bookId) {
-            const ep = Number(bp.end_page) || 0;
-            if (ep > makeupMax) makeupMax = ep;
-          }
-        });
-      } else if (mc.book_id === bookId) {
-        const ep = Number(mc.end_page) || 0;
-        if (ep > makeupMax) makeupMax = ep;
-      }
-    });
+                  let makeupMax = 0;
+                  makeupClasses.forEach((mc) => {
+                    if (Array.isArray(mc.book_progress)) {
+                      mc.book_progress.forEach((bp: any) => {
+                        if (bp.book_id === bookId) {
+                          const ep = Number(bp.end_page) || 0;
+                          if (ep > makeupMax) makeupMax = ep;
+                        }
+                      });
+                    } else if (mc.book_id === bookId) {
+                      const ep = Number(mc.end_page) || 0;
+                      if (ep > makeupMax) makeupMax = ep;
+                    }
+                  });
 
-    maxPageReached = Math.max(reportMax, lessonMax, makeupMax);
-  }
+                  maxPageReached = Math.max(reportMax, lessonMax, makeupMax);
+                }
 
-  const totalPages = Number(book?.total_pages) || 1;
-  const totalChapters = Array.isArray(book?.chapters) ? book.chapters.length : Number(book?.total_chapters) || 1;
-  const completedChapters = item?.completed_chapters || [];
+                const totalPages = Number(book?.total_pages) || 1;
+                const totalChapters = Array.isArray(book?.chapters) ? book.chapters.length : Number(book?.total_chapters) || 1;
+                const completedChapters = item?.completed_chapters || [];
 
-  const bookProgress = isPageBased
-    ? Math.min(100, Math.round((maxPageReached / totalPages) * 100))
-    : Math.min(100, Math.round((completedChapters.length / totalChapters) * 100));
+                const bookProgress = isPageBased
+                  ? Math.min(100, Math.round((maxPageReached / totalPages) * 100))
+                  : Math.min(100, Math.round((completedChapters.length / totalChapters) * 100));
 
-  return (
-    <div key={bookId || index} className="p-2.5 bg-pink-50/50 rounded-xl border border-pink-100 space-y-1">
-      <div className="flex justify-between items-center text-xs font-bold text-pink-950">
-        <span>📖 {book?.title || book?.name || "Book"}</span>
-        <span className="text-pink-600 text-[10px]">{bookProgress}% Done</span>
-      </div>
-      <div className="w-full bg-pink-100 rounded-full h-1.5 overflow-hidden">
-        <div className="bg-pink-600 h-1.5 rounded-full transition-all duration-300" style={{ width: `${bookProgress}%` }} />
-      </div>
-      <div className="flex justify-between text-[10px] text-gray-500">
-        <span>{isPageBased ? `Page ${maxPageReached} / ${totalPages}` : `Chapters: ${completedChapters.length}/${totalChapters}`}</span>
-        <span className="capitalize text-pink-700 font-medium">{isPageBased ? "Page-based" : "Chapter-based"}</span>
-      </div>
-    </div>
-  );
-})}
+                return (
+                  <div key={bookId || index} className="p-2.5 bg-pink-50/50 rounded-xl border border-pink-100 space-y-1">
+                    <div className="flex justify-between items-center text-xs font-bold text-pink-950">
+                      <span>📖 {book?.title || book?.name || "Book"}</span>
+                      <span className="text-pink-600 text-[10px]">{bookProgress}% Done</span>
+                    </div>
+                    <div className="w-full bg-pink-100 rounded-full h-1.5 overflow-hidden">
+                      <div className="bg-pink-600 h-1.5 rounded-full transition-all duration-300" style={{ width: `${bookProgress}%` }} />
+                    </div>
+                    <div className="flex justify-between text-[10px] text-gray-500">
+                      <span>{isPageBased ? `Page ${maxPageReached} / ${totalPages}` : `Chapters: ${completedChapters.length}/${totalChapters}`}</span>
+                      <span className="capitalize text-pink-700 font-medium">{isPageBased ? "Page-based" : "Chapter-based"}</span>
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <p className="text-xs text-gray-400 italic">No books assigned yet.</p>
+            )}
+          </div>
         </div>
 
         <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs space-y-3">
@@ -1291,7 +1311,6 @@ ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCust
               </div>
             ) : (
               <div className="space-y-3">
-                {/* Render Filtered Reports */}
                 {validReports.map((rep) => {
                   const isExpanded = expandedReportIds.includes(rep.id);
                   const matchedBook = books.find((b) => b.id === rep.book_id);
@@ -1376,7 +1395,6 @@ ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCust
                   );
                 })}
 
-                {/* Render Filtered Lessons */}
                 {validLessons.map((les: any) => {
                   const isExpanded = expandedReportIds.includes(les.id);
                   const text = les.description || "";
@@ -1384,7 +1402,7 @@ ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCust
                   const vocabMatch = text.match(/Vocab[:\-]?\s*([\s\S]*?)(?=\n(?:Strengths|Improvements|Homework):|$)/i);
                   const strengthsMatch = text.match(/Strengths[:\-]?\s*([\s\S]*?)(?=\n(?:Vocab|Improvements|Homework):|$)/i);
                   const improvementsMatch = text.match(/(?:Improvements|Next Focus)[:\-]?\s*([\s\S]*?)(?=\n(?:Vocab|Strengths|Homework):|$)/i);
-                  const homeworkMatch = text.match(/Homework[:\-]?\s*([\s\S]*)/i);
+                  const homeworkMatch = text.match(/Homework[:\-]?\s*([\s\S]*?)(?=\n(?:Message|Vocab|Strengths|Improvements):|$)/i);
 
                   const displayVocab = les.vocab_notes || les.vocabulary || (vocabMatch ? vocabMatch[1].trim() : "");
                   const displayStrengths = les.strengths_notes || les.strengths || (strengthsMatch ? strengthsMatch[1].trim() : "");
@@ -1410,6 +1428,20 @@ ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCust
                           <span className="text-[11px] font-mono text-gray-500">
                             {les.lesson_date?.substring(0, 10)}
                           </span>
+                          <button
+    onClick={() => {
+      setSelectedLesson({
+        eventId: les.id,
+        studentId: student.id,
+        studentName: student.name,
+        type: "regular",
+        dateString: les.lesson_date,
+      });
+    }}
+    className="px-2.5 py-1 bg-pink-50 hover:bg-pink-100 text-pink-700 text-[10px] font-bold rounded-lg border border-pink-200 transition cursor-pointer flex items-center gap-1"
+  >
+    ✏️ Edit
+  </button>
                         </div>
                       </div>
 
@@ -1459,6 +1491,13 @@ ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCust
                             </div>
                           )}
 
+                          {les.teacher_message && (
+                          <div className="p-3 bg-pink-50/70 rounded-xl border border-pink-200 space-y-1">
+                            <p className="font-bold text-pink-950 text-[11px]">💌 Message from Teacher:</p>
+                            <p className="text-gray-800 text-xs whitespace-pre-wrap">{les.teacher_message}</p>
+                          </div>
+                        )}
+
                           {(displayHomework || les.homework_file_url) && (
                             <div className="p-3 bg-pink-100/50 rounded-xl border border-pink-200 space-y-1.5">
                               <p className="font-bold text-pink-950 text-[11px]">📚 Assigned Homework:</p>
@@ -1480,50 +1519,270 @@ ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCust
                     </div>
                   );
                 })}
+                {completedMakeups.map((mc: any) => {
+                  const isExpanded = expandedReportIds.includes(mc.id);
+                  const matchedBook = books.find((b) => b.id === mc.book_id);
+
+                  return (
+                    <div key={mc.id} className="bg-pink-50/30 rounded-2xl border border-pink-100 text-xs transition-all overflow-hidden">
+                      <div
+                        onClick={() => toggleExpandReport(mc.id)}
+                        className="p-3.5 flex items-center justify-between cursor-pointer hover:bg-pink-100/40 select-none transition"
+                      >
+                        <div className="flex items-center gap-2">
+                          <button type="button" className="p-1 rounded-lg text-pink-600 bg-white border border-pink-200 shadow-2xs">
+                            {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                          </button>
+                          <h4 className="font-bold text-pink-950 text-xs">⭐ Makeup Class: {mc.topic || mc.title || "Makeup Session"}</h4>
+                        </div>
+
+                        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                          <span className="text-[11px] font-mono text-gray-500">
+                            {(mc.makeup_date || mc.date || "").substring(0, 10)}
+                          </span>
+                          <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 font-bold text-[10px] rounded-md uppercase border border-emerald-200">
+                            {mc.status || "Attended"}
+                          </span>
+                        </div>
+                      </div>
+
+                      {isExpanded && (
+                        <div className="px-4 pb-4 pt-1 border-t border-pink-100/60 space-y-2.5 bg-white/50">
+                          {matchedBook && (
+                            <div className="pt-1">
+                              <span className="text-[10px] font-bold text-pink-800 bg-pink-100/70 px-2.5 py-0.5 rounded-lg border border-pink-200">
+                                📖 {matchedBook.title}
+                              </span>
+                            </div>
+                          )}
+
+                          {mc.notes && (
+                            <div className="p-2.5 bg-white rounded-xl border border-pink-100">
+                              <p className="font-bold text-gray-900 text-[11px] mb-0.5">📝 Makeup Notes:</p>
+                              <p className="text-gray-700 text-xs whitespace-pre-wrap">{mc.notes}</p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
         </div>
       </div>
-{isEditModalOpen && (
-  <StudentEditModal
-    student={student}
-    onClose={() => setIsEditModalOpen(false)}
-    onSave={handleUpdateStudent}
-    teacherAliases={teacherAliases}
-    name={name}
-    setName={setName}
-    teacherAlias={teacherAlias}
-    setTeacherAlias={setTeacherAlias}
-    meetingLink={meetingLink}
-    setMeetingLink={setMeetingLink}
-    email={email}
-    setEmail={setEmail}
-    phone={phone}
-    setPhone={setPhone}
-    age={age}
-    setAge={setAge}
-    country={country}
-    setCountry={setCountry}
-    paymentCurrency={paymentCurrency}
-    setPaymentCurrency={setPaymentCurrency}
-    paymentAmount={paymentAmount}
-    setPaymentAmount={setPaymentAmount}
-    phpEquivalent={phpEquivalent}
-    classesIncluded={classesIncluded}
-    setClassesIncluded={setClassesIncluded}
-    freeClasses={freeClasses}
-    setFreeClasses={setFreeClasses}
-    classesCompleted={classesCompleted}
-    setClassesCompleted={setClassesCompleted}
-    classDuration={classDuration}
-    setClassDuration={setClassDuration}
-    paymentStatus={paymentStatus}
-    setPaymentStatus={setPaymentStatus}
-    notes={notes}
-    setNotes={setNotes}
-  />
+
+      {/* RENEWAL INVOICE & PARENT NOTICE MODAL */}
+      {isRenewalModalOpen && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto">
+          {/* Renewal Modal Contents */}
+        </div>
+      )}
+
+      {/* ASSIGN BOOKS MODAL */}
+      {isBookModalOpen && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="card bg-white w-full max-w-md p-6 rounded-3xl shadow-xl space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-bold text-pink-600">Assign Books</h2>
+              <button onClick={() => setIsBookModalOpen(false)} className="p-2 rounded-full hover:bg-pink-50 cursor-pointer">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+              {books.map((b) => {
+                const isAssigned = studentBooks.some((sb) => sb.book_id === b.id);
+                return (
+                  <div key={b.id} className="flex items-center justify-between p-3 bg-pink-50/50 rounded-xl border border-pink-100 text-xs">
+                    <span className="font-bold text-gray-800">📖 {b.title}</span>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (isAssigned) {
+                          await supabase.from("student_books").delete().eq("student_id", studentId).eq("book_id", b.id);
+                        } else {
+                          await supabase.from("student_books").insert({ student_id: studentId, book_id: b.id });
+                        }
+                        const { data: sbList } = await supabase.from("student_books").select("*, books(*)").eq("student_id", studentId);
+                        if (sbList) setStudentBooks(sbList);
+                      }}
+                      className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer ${
+                        isAssigned ? "bg-red-50 text-red-600 border border-red-200 hover:bg-red-100" : "bg-pink-600 text-white hover:bg-pink-700"
+                      }`}
+                    >
+                      {isAssigned ? "Remove" : "Assign"}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="flex justify-end pt-3 border-t border-pink-100">
+              <button
+                onClick={() => setIsBookModalOpen(false)}
+                className="px-4 py-2 rounded-xl bg-pink-600 text-white text-xs font-bold hover:bg-pink-700 cursor-pointer"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT STUDENT MODAL */}
+      {isEditModalOpen && (
+        <StudentEditModal
+          student={student}
+          onClose={() => setIsEditModalOpen(false)}
+          onSave={handleUpdateStudent}
+          books={books}
+          selectedBookIds={selectedBookIds}
+          setSelectedBookIds={setSelectedBookIds}
+          teacherAliases={teacherAliases}
+          name={name}
+          setName={setName}
+          teacherAlias={teacherAlias}
+          setTeacherAlias={setTeacherAlias}
+          meetingLink={meetingLink}
+          setMeetingLink={setMeetingLink}
+          email={email}
+          setEmail={setEmail}
+          phone={phone}
+          setPhone={setPhone}
+          age={age}
+          setAge={setAge}
+          country={country}
+          setCountry={setCountry}
+          paymentCurrency={paymentCurrency}
+          setPaymentCurrency={setPaymentCurrency}
+          paymentAmount={paymentAmount}
+          setPaymentAmount={setPaymentAmount}
+          phpEquivalent={phpEquivalent}
+          classesIncluded={classesIncluded}
+          setClassesIncluded={setClassesIncluded}
+          freeClasses={freeClasses}
+          setFreeClasses={setFreeClasses}
+          classesCompleted={classesCompleted}
+          setClassesCompleted={setClassesCompleted}
+          classDuration={classDuration}
+          setClassDuration={setClassDuration}
+          paymentStatus={paymentStatus}
+          setPaymentStatus={setPaymentStatus}
+          notes={notes}
+          setNotes={setNotes}
+        />
+      )}
+      {/* SCHEDULE MODAL */}
+{isScheduleModalOpen && (
+  <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+    <div className="card bg-white w-full max-w-md p-6 rounded-3xl shadow-xl space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-bold text-pink-600">Add Schedule</h2>
+        <button onClick={() => setIsScheduleModalOpen(false)} className="p-2 rounded-full hover:bg-pink-50 cursor-pointer">
+          <X size={18} />
+        </button>
+      </div>
+
+      <form onSubmit={handleAddSchedule} className="space-y-4 text-xs">
+        <div>
+          <label className="block mb-1 font-semibold text-gray-700">Days of the Week *</label>
+          <div className="grid grid-cols-2 gap-2">
+            {DAYS_OF_WEEK.map((day) => (
+              <label key={day} className="flex items-center gap-2 p-2 bg-pink-50/50 rounded-xl border border-pink-100 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={scheduleDays.includes(day)}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setScheduleDays([...scheduleDays, day]);
+                    } else {
+                      setScheduleDays(scheduleDays.filter((d) => d !== day));
+                    }
+                  }}
+                  className="rounded text-pink-600 focus:ring-pink-500"
+                />
+                <span className="font-medium text-gray-800">{day}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block mb-1 font-semibold text-gray-700">Start Time *</label>
+            <input
+              type="time"
+              className="input w-full border border-gray-200 rounded-xl p-2.5 bg-white text-gray-800"
+              value={scheduleTime}
+              onChange={(e) => setScheduleTime(e.target.value)}
+              required
+            />
+          </div>
+          <div>
+            <label className="block mb-1 font-semibold text-gray-700">Duration (mins)</label>
+            <select
+              className="input w-full border border-gray-200 rounded-xl p-2.5 bg-white text-gray-800"
+              value={scheduleDuration}
+              onChange={(e) => setScheduleDuration(e.target.value)}
+            >
+              <option value="25">25 mins</option>
+              <option value="40">40 mins</option>
+              <option value="50">50 mins</option>
+              <option value="60">60 mins</option>
+              <option value="90">90 mins</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label className="block mb-1 font-semibold text-gray-700">Topic / Label</label>
+          <input
+            type="text"
+            className="input w-full border border-gray-200 rounded-xl p-2.5 bg-white text-gray-800"
+            value={scheduleTopic}
+            onChange={(e) => setScheduleTopic(e.target.value)}
+            placeholder="Regular Class"
+          />
+        </div>
+
+        <div className="flex justify-end gap-2 pt-3 border-t border-pink-100">
+          <button
+            type="button"
+            onClick={() => setIsScheduleModalOpen(false)}
+            className="px-4 py-2 rounded-xl bg-gray-100 text-gray-700 font-bold hover:bg-gray-200 cursor-pointer"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={isSavingSchedule}
+            className="px-5 py-2 rounded-xl bg-pink-600 text-white font-bold hover:bg-pink-700 cursor-pointer disabled:opacity-50"
+          >
+            {isSavingSchedule ? "Saving..." : "Add Schedule"}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
 )}
+{/* Lesson Log Modal for Editing */}
+      {selectedLesson && (
+        <LessonLogModal
+          isOpen={true}
+          onClose={() => {
+            setSelectedLesson(null);
+            fetchStudentData();
+          }}
+          eventId={selectedLesson.eventId}
+          studentId={selectedLesson.studentId}
+          studentName={selectedLesson.studentName}
+          eventType={selectedLesson.type}
+          dateString={selectedLesson.dateString}
+          studentBooks={studentBooks.map((sb: any) => sb.books || sb)}
+        />
+      )}
     </div>
   );
 }
