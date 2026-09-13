@@ -275,19 +275,25 @@ export default function StudentEditModal({
             </div>
           </div>
 
-          <div>
-            <label className="block mb-1 font-semibold text-gray-700">Payment Status</label>
-            <select
-              className="input w-full border border-gray-200 rounded-xl p-2.5 bg-white text-gray-800"
-              value={paymentStatus}
-              onChange={(e) => setPaymentStatus(e.target.value)}
-            >
-              <option value="Active">Active</option>
-              <option value="Paid">Paid</option>
-              <option value="Pending">Pending</option>
-              <option value="Overdue">Overdue</option>
-            </select>
-          </div>
+        <div className="grid grid-cols-2 gap-3">
+  <div>
+    <label className="block mb-1 text-xs font-semibold text-gray-700">Class Duration</label>
+    {/* ... class duration select inputs ... */}
+  </div>
+
+  <div>
+    <label className="block mb-1 font-semibold text-gray-700">Payment Status</label>
+    <select
+      className="w-full border border-pink-200 rounded-xl p-2.5 bg-white text-gray-800 text-xs"
+      value={paymentStatus}
+      onChange={(e) => setPaymentStatus(e.target.value)}
+    >
+      <option value="Pending">Pending</option>
+      <option value="Paid">Paid</option>
+      <option value="Active">Active</option>
+    </select>
+  </div>
+</div>
 
           <div>
             <label className="block mb-1 font-semibold text-gray-700">Teacher Notes</label>

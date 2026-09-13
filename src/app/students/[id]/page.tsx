@@ -88,6 +88,8 @@ export default function StudentDetailsPage({
   // Payment Instructions & QR Upload State
   const [paymentQrFile, setPaymentQrFile] = useState<File | null>(null);
   const [paymentQrPreviewUrl, setPaymentQrPreviewUrl] = useState<string>("");
+  const [renewalBankDetails, setRenewalBankDetails] = useState("");
+  const [renewalPaymentQrPreview, setRenewalPaymentQrPreview] = useState<string>("");
 
   // Renewal Modal & PDF State
   const [isRenewalModalOpen, setIsRenewalModalOpen] = useState(false);
@@ -136,6 +138,9 @@ export default function StudentDetailsPage({
   const [reportBookId, setReportBookId] = useState("");
   const [selectedChapterIndex, setSelectedChapterIndex] = useState<string>("");
   const [isChapterComplete, setIsChapterComplete] = useState(false);
+  const [renewalThankYouMessage, setRenewalThankYouMessage] = useState(
+    "Thank you for continuing your private English classes! Please remit payment using the options below to confirm your schedule slots.\n\nIf payment has been made already, kindly disregard this notice. After remitting the payment, please send me a screenshot confirmation."
+  );
 
   // Duration State
   const [durationSelect, setDurationSelect] = useState<string>("40");
@@ -420,7 +425,7 @@ export default function StudentDetailsPage({
     }
   }
 
-  async function handleUpdateStudent() {
+ async function handleUpdateStudent() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
@@ -445,7 +450,7 @@ export default function StudentDetailsPage({
           free_classes: Number(freeClasses) || 0,
           classes_completed: Number(classesCompleted) || 0,
           class_duration: finalDuration,
-          payment_status: paymentStatus,
+          payment_status: paymentStatus, // 👈 Ensure this line is present and matches your state
           start_date: startDate || null,
           contract_start_date: startDate || null,
           end_date: endDate || null,
@@ -454,28 +459,13 @@ export default function StudentDetailsPage({
         .eq("id", studentId)
         .eq("user_id", user.id);
 
-      if (error) {
-        alert(error.message);
-        return;
-      }
-
-      await supabase.from("student_books").delete().eq("student_id", studentId);
-
-      if (selectedBookIds.length > 0) {
-        const rows = selectedBookIds.map((bookId) => ({
-          student_id: studentId,
-          book_id: bookId,
-        }));
-        await supabase.from("student_books").insert(rows);
-      }
-
       setIsEditModalOpen(false);
-      fetchStudentData();
-    } catch (err) {
-      console.error("Update error:", err);
+      await fetchStudentData();
+    } catch (err: any) {
+      console.error("Error updating student:", err);
+      alert("Failed to update student: " + err.message);
     }
   }
-
   async function handleAddSchedule(e: React.FormEvent) {
     e.preventDefault();
     if (scheduleDays.length === 0) {
@@ -744,13 +734,13 @@ export default function StudentDetailsPage({
     setTimeout(() => setCopiedPortal(false), 2000);
   }
 
-  function handleCopyRenewalMessage() {
+function handleCopyRenewalMessage() {
     const portalUrl = student?.access_token
       ? `${window.location.origin}/portal/${student.access_token}`
       : "";
 
     const freeText = Number(renewalFreeCount) > 0 ? ` (+${renewalFreeCount} Free Bonus Classes)` : "";
-    const currency = student?.payment_currency || "VND";
+    const currency = student?.payment_currency || "PHP";
     const cleanNum = Number(String(renewalRate).replace(/[^0-9.]/g, "")) || 0;
     const formattedAmount = cleanNum.toLocaleString("en-US");
     const teacherName = student?.teacher_alias || teacherAlias || "Teacher Gabi";
@@ -767,14 +757,27 @@ Thank you for continuing with ${teacherName}'s private English classes! Here are
 • Tuition Fee: ${formattedAmount} ${currency}
 • Target Start Date: ${renewalStartDate}
 
-${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCustomNotes ? `📝 Note:\n${renewalCustomNotes}\n\n` : ""}Please let me know once payment has been sent so we can secure the weekly schedule slots. Thank you very much! 😊`;
+${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCustomNotes ? `📝 Note:\n${renewalCustomNotes}\n\n` : ""}💳 Payment Instructions:
+${renewalThankYouMessage}
+
+${renewalBankDetails ? `🏦 Bank Details:\n${renewalBankDetails}\n` : ""}Please let me know once payment has been sent so we can secure the weekly schedule slots. Thank you very much! 😊`;
 
     navigator.clipboard.writeText(renewalText);
     setCopiedRenewalNotice(true);
     setTimeout(() => setCopiedRenewalNotice(false), 2000);
   }
 
-  async function handleDownloadInvoicePdf() {
+  function handlePaymentQrUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setRenewalPaymentQrPreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  }
+async function handleDownloadInvoicePdf() {
     if (!invoicePdfRef.current) return;
     setIsGeneratingPdf(true);
 
@@ -787,10 +790,11 @@ ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCust
         filename: `Renewal_Invoice_${student?.name?.replace(/\s+/g, "_") || "Student"}_${renewalStartDate}.pdf`,
         image: { type: "png" as const, quality: 1.0 },
         html2canvas: {
-          scale: 4,
+          scale: 5,
           useCORS: true,
           backgroundColor: "#ffffff",
           letterRendering: true,
+          scrollY: 0,
         },
         jsPDF: {
           unit: "mm" as const,
@@ -800,9 +804,9 @@ ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCust
       };
 
       await html2pdf().set(opt).from(element).save();
-    } catch (err) {
+    } catch (err: any) {
       console.error("Invoice PDF export error:", err);
-      alert("Failed to export Invoice PDF.");
+      alert("Failed to export Invoice PDF: " + (err.message || err));
     } finally {
       setIsGeneratingPdf(false);
     }
@@ -810,11 +814,26 @@ ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCust
 
   const combinedTotalClasses =
     Number(student?.classes_included || 0) + Number(student?.free_classes || 0);
-  const validReports = reports.filter(
-    (r) => !r.lesson_title?.toLowerCase().includes("cancelled") && !r.title?.toLowerCase().includes("cancelled") && r.status !== "Cancelled"
+const validReports = reports.filter(
+    (r) => {
+      const title = (r.lesson_title || r.title || "").toLowerCase();
+      const status = (r.status || "").toLowerCase();
+      return !title.includes("cancelled") && 
+             !title.includes("absent") && 
+             status !== "cancelled" && 
+             status !== "absent";
+    }
   );
+
   const validLessons = lessons.filter(
-    (l) => !l.title?.toLowerCase().includes("cancelled") && l.status !== "Cancelled"
+    (l) => {
+      const title = (l.title || "").toLowerCase();
+      const status = (l.status || "").toLowerCase();
+      return !title.includes("cancelled") && 
+             !title.includes("absent") && 
+             status !== "cancelled" && 
+             status !== "absent";
+    }
   );
  const completedMakeups = makeupClasses.filter(
   (m) => {
@@ -1573,10 +1592,214 @@ ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCust
         </div>
       </div>
 
-      {/* RENEWAL INVOICE & PARENT NOTICE MODAL */}
+    {/* RENEWAL INVOICE & PARENT NOTICE MODAL */}
       {isRenewalModalOpen && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto">
-          {/* Renewal Modal Contents */}
+          <div className="bg-white w-full max-w-2xl p-6 rounded-3xl shadow-2xl space-y-5 border border-pink-100 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-pink-100 pb-3">
+              <div>
+                <h2 className="text-lg font-extrabold text-pink-950">Package Renewal & Invoice</h2>
+                <p className="text-xs text-pink-700/80">Generate a renewal notice message and printable invoice for {student?.name}.</p>
+              </div>
+              <button onClick={() => setIsRenewalModalOpen(false)} className="p-2 rounded-full hover:bg-pink-50 cursor-pointer">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+              <div>
+                <label className="block mb-1 font-semibold text-gray-700">Renewal Classes Count</label>
+                <input
+                  type="number"
+                  className="w-full border border-pink-200 rounded-xl p-2.5 bg-white text-gray-800"
+                  value={renewalClassesCount}
+                  onChange={(e) => setRenewalClassesCount(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block mb-1 font-semibold text-gray-700">Free Bonus Classes</label>
+                <input
+                  type="number"
+                  className="w-full border border-pink-200 rounded-xl p-2.5 bg-white text-gray-800"
+                  value={renewalFreeCount}
+                  onChange={(e) => setRenewalFreeCount(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block mb-1 font-semibold text-gray-700">Tuition Fee Amount</label>
+                <input
+                  type="text"
+                  className="w-full border border-pink-200 rounded-xl p-2.5 bg-white text-gray-800"
+                  value={renewalRate}
+                  onChange={(e) => setRenewalRate(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block mb-1 font-semibold text-gray-700">Class Duration (minutes)</label>
+                <input
+                  type="text"
+                  className="w-full border border-pink-200 rounded-xl p-2.5 bg-white text-gray-800"
+                  value={renewalDuration}
+                  onChange={(e) => setRenewalDuration(e.target.value)}
+                />
+              </div>
+             <div className="md:col-span-2">
+                <label className="block mb-1 font-semibold text-gray-700">Thank You / Payment Message</label>
+                <textarea
+                  rows={3}
+                  className="w-full border border-pink-200 rounded-xl p-2.5 bg-white text-gray-800 text-xs"
+                  value={renewalThankYouMessage}
+                  onChange={(e) => setRenewalThankYouMessage(e.target.value)}
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block mb-1 font-semibold text-gray-700">Bank Account Details (Optional)</label>
+                <textarea
+                  rows={2}
+                  className="w-full border border-pink-200 rounded-xl p-2.5 bg-white text-gray-800 text-xs font-mono"
+                  value={renewalBankDetails}
+                  onChange={(e) => setRenewalBankDetails(e.target.value)}
+                  placeholder="e.g. Bank Name: BPI / KBANK&#10;Account Name: Teacher Gabi&#10;Account Number: 1234-5678-90"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block mb-1 font-semibold text-gray-700">Upload Payment QR Code (Optional)</label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handlePaymentQrUpload}
+                  className="w-full text-xs text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-pink-100 file:text-pink-800 hover:file:bg-pink-200 cursor-pointer border border-pink-200 rounded-xl p-1.5 bg-white"
+                />
+                {renewalPaymentQrPreview && (
+                  <p className="text-[10px] text-emerald-600 font-bold mt-1">✓ Payment QR code uploaded successfully</p>
+                )}
+              </div>
+            </div>
+{/* Printable Invoice Element for PDF Download (High Resolution) */}
+<div style={{ position: "absolute", left: "-9999px", top: 0, width: "800px", backgroundColor: "#ffffff", color: "#111827" }}>
+  <div 
+    ref={invoicePdfRef} 
+    style={{ 
+      padding: "45px", 
+      fontFamily: "Helvetica, Arial, sans-serif", 
+      backgroundColor: "#ffffff", 
+      color: "#111827",
+      boxSizing: "border-box"
+    }}
+  >
+    {/* Header */}
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", borderBottom: "3px solid #db2777", paddingBottom: "16px", marginBottom: "24px" }}>
+      <div>
+        <h1 style={{ fontSize: "24px", fontWeight: "900", color: "#db2777", margin: "0 0 4px 0", textTransform: "uppercase" }}>
+          Invoice & Renewal Notice
+        </h1>
+        <p style={{ fontSize: "12px", color: "#4b5563", margin: 0, fontWeight: "600" }}>
+          Private English Tutoring Services
+        </p>
+      </div>
+      <div style={{ textAlign: "right" }}>
+        <p style={{ fontSize: "11px", color: "#6b7280", margin: 0 }}>Instructor: <strong>{student?.teacher_alias || "Teacher Gabi"}</strong></p>
+        <p style={{ fontSize: "11px", color: "#6b7280", margin: "2px 0 0 0" }}>Date: {new Date().toLocaleDateString()}</p>
+      </div>
+    </div>
+
+    {/* Bill To Section */}
+    <div style={{ marginBottom: "24px", padding: "16px", backgroundColor: "#fdf2f8", borderRadius: "10px", border: "1px solid #fbcfe8" }}>
+      <p style={{ fontSize: "10px", fontWeight: "bold", color: "#9d174d", textTransform: "uppercase", margin: "0 0 4px 0" }}>Billed To:</p>
+      <p style={{ fontSize: "15px", fontWeight: "bold", color: "#111827", margin: "0 0 2px 0" }}>{student?.name}</p>
+      <p style={{ fontSize: "11px", color: "#4b5563", margin: 0 }}>Country: {student?.country || "International"} {student?.age ? `• Age: ${student.age}` : ""}</p>
+    </div>
+
+    {/* Package Summary Table Box */}
+    <div style={{ marginBottom: "24px", border: "1px solid #e5e7eb", borderRadius: "10px", overflow: "hidden" }}>
+      <div style={{ backgroundColor: "#f9fafb", padding: "10px 16px", borderBottom: "1px solid #e5e7eb", display: "flex", justifyContent: "space-between", fontSize: "11px", fontWeight: "bold", color: "#374151", textTransform: "uppercase" }}>
+        <span>Package Description</span>
+        <span>Amount</span>
+      </div>
+      <div style={{ padding: "16px", display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "13px" }}>
+        <div>
+          <p style={{ fontWeight: "bold", color: "#111827", margin: "0 0 4px 0" }}>
+            English Class Package ({renewalClassesCount} Classes{Number(renewalFreeCount) > 0 ? ` + ${renewalFreeCount} Free` : ""})
+          </p>
+          <p style={{ fontSize: "11px", color: "#6b7280", margin: 0 }}>
+            Duration: {renewalDuration} minutes per session • Target Start: {renewalStartDate}
+          </p>
+        </div>
+        <div style={{ textAlign: "right" }}>
+          <span style={{ fontSize: "16px", fontWeight: "900", color: "#db2777" }}>
+            {formattedRenewRate} {student?.payment_currency || "PHP"}
+          </span>
+        </div>
+      </div>
+    </div>
+
+    {/* Custom Notes Section if available */}
+    {renewalCustomNotes && (
+      <div style={{ marginBottom: "20px", padding: "14px", backgroundColor: "#fffbeb", border: "1px solid #fde68a", borderRadius: "10px" }}>
+        <p style={{ fontSize: "11px", fontWeight: "bold", color: "#b45309", margin: "0 0 4px 0" }}>Important Notes:</p>
+        <p style={{ fontSize: "11px", color: "#374151", margin: 0, whiteSpace: "pre-wrap" }}>{renewalCustomNotes}</p>
+      </div>
+    )}
+
+    {/* Payment Instructions & Options Section */}
+    <div style={{ display: "flex", gap: "20px", marginBottom: "30px", padding: "18px", backgroundColor: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", alignItems: "flex-start" }}>
+      <div style={{ flex: 1 }}>
+        <h3 style={{ fontSize: "13px", fontWeight: "bold", color: "#0f172a", margin: "0 0 8px 0" }}>
+          💳 Payment Instructions
+        </h3>
+        <p style={{ fontSize: "11px", color: "#475569", lineHeight: "1.5", margin: "0 0 10px 0", whiteSpace: "pre-wrap" }}>
+          {renewalThankYouMessage}
+        </p>
+
+        {renewalBankDetails && (
+          <div style={{ marginTop: "8px", padding: "10px", backgroundColor: "#ffffff", border: "1px solid #cbd5e1", borderRadius: "8px" }}>
+            <p style={{ fontSize: "10px", fontWeight: "bold", color: "#334155", margin: "0 0 2px 0" }}>Bank Transfer Details:</p>
+            <p style={{ fontSize: "11px", fontFamily: "monospace", color: "#0f172a", margin: 0, whiteSpace: "pre-wrap" }}>{renewalBankDetails}</p>
+          </div>
+        )}
+      </div>
+
+      {renewalPaymentQrPreview && (
+        <div style={{ textAlign: "center", backgroundColor: "#ffffff", padding: "8px", border: "1px solid #cbd5e1", borderRadius: "8px", minWidth: "110px" }}>
+          <img src={renewalPaymentQrPreview} alt="Payment QR" style={{ width: "100px", height: "100px", objectFit: "contain", display: "block" }} />
+          <span style={{ fontSize: "9px", color: "#64748b", fontWeight: "bold", display: "block", marginTop: "4px" }}>Scan to Pay</span>
+        </div>
+      )}
+    </div>
+
+    {/* Footer */}
+    <div style={{ paddingTop: "16px", borderTop: "1px solid #e5e7eb", textAlign: "center" }}>
+      <p style={{ fontSize: "11px", fontWeight: "bold", color: "#374151", margin: "0 0 2px 0" }}>If payment has been made already, kindly disregard this notice.</p>
+      <p style={{ fontSize: "10px", color: "#9ca3af", margin: 0 }}>After remitting the payment, please send a screenshot confirmation. Thank you!</p>
+    </div>
+  </div>
+</div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-pink-100">
+              <button
+                type="button"
+                onClick={handleCopyRenewalMessage}
+                className="px-4 py-2.5 bg-pink-50 hover:bg-pink-100 text-pink-700 rounded-xl font-bold transition flex items-center gap-1.5 cursor-pointer"
+              >
+                {copiedRenewalNotice ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
+                <span>{copiedRenewalNotice ? "Notice Copied!" : "Copy Parent Message"}</span>
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleDownloadInvoicePdf}
+                  disabled={isGeneratingPdf}
+                  className="px-4 py-2.5 bg-pink-600 hover:bg-pink-700 text-white rounded-xl font-bold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <Download size={14} />
+                  <span>{isGeneratingPdf ? "Generating PDF..." : "Download Invoice PDF"}</span>
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -1631,7 +1854,7 @@ ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCust
         </div>
       )}
 
-      {/* EDIT STUDENT MODAL */}
+    {/* EDIT STUDENT MODAL */}
       {isEditModalOpen && (
         <StudentEditModal
           student={student}
@@ -1668,8 +1891,8 @@ ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCust
           setClassesCompleted={setClassesCompleted}
           classDuration={classDuration}
           setClassDuration={setClassDuration}
-          paymentStatus={paymentStatus}
-          setPaymentStatus={setPaymentStatus}
+          paymentStatus={paymentStatus}       // 👈 Add this line
+          setPaymentStatus={setPaymentStatus} // 👈 Add this line
           notes={notes}
           setNotes={setNotes}
         />
