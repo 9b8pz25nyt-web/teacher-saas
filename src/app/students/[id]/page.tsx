@@ -1521,16 +1521,33 @@ const validReports = reports.filter(
                             <div className="p-3 bg-pink-100/50 rounded-xl border border-pink-200 space-y-1.5">
                               <p className="font-bold text-pink-950 text-[11px]">📚 Assigned Homework:</p>
                               {displayHomework && <p className="text-gray-800 text-xs whitespace-pre-wrap">{displayHomework}</p>}
-                              {les.homework_file_url && (
-                                <a
-                                  href={les.homework_file_url}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-white text-pink-700 font-bold rounded-lg text-[10px] border border-pink-200 hover:bg-pink-50"
-                                >
-                                  📄 View Attached Worksheet
-                                </a>
-                              )}
+                           {les.homework_file_url && (
+  <div>
+    <a
+      href={les.homework_file_url}
+      target="_blank"
+      rel="noreferrer"
+      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border-2 border-pink-300 text-pink-800 font-bold rounded-lg text-[10px] hover:bg-pink-50 transition shadow-2xs"
+    >
+      <span>📄 View Teacher Worksheet / Page</span>
+    </a>
+  </div>
+)}
+
+{/* Add this new block right here */}
+{les.homework_submission_url && (
+  <div className="pt-2 border-t border-pink-300/80 flex items-center gap-2">
+    <span className="text-xs text-emerald-800 font-bold">Completed File:</span>
+    <a
+      href={les.homework_submission_url}
+      target="_blank"
+      rel="noreferrer"
+      className="text-xs text-pink-700 font-bold underline hover:text-pink-800"
+    >
+      View Submitted Homework
+    </a>
+  </div>
+)}
                             </div>
                           )}
                         </div>

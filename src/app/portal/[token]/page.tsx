@@ -35,6 +35,10 @@ export default function StudentPortalPage({
   const [loading, setLoading] = useState(true);
   const [uploadingReportId, setUploadingReportId] = useState<string | null>(null);
   const [expandedReportIds, setExpandedReportIds] = useState<string[]>([]);
+  const [submissionText, setSubmissionText] = useState("");
+const [submissionFile, setSubmissionFile] = useState<File | null>(null);
+const [isSubmitting, setIsSubmitting] = useState(false);
+const [submitSuccess, setSubmitSuccess] = useState(false);
 
   function toggleExpandReport(id: string) {
     setExpandedReportIds((prev) =>
@@ -185,6 +189,90 @@ export default function StudentPortalPage({
     }
   }
 
+async function handleSubmitHomework(e: React.FormEvent) {
+    e.preventDefault();
+    if (!submissionText.trim() && !submissionFile) {
+      alert("Please enter your answers or attach a file.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      let fileUrl = null;
+
+      if (submissionFile) {
+        const fileExt = submissionFile.name.split(".").pop();
+        const fileName = `submissions/${student.id}/${Date.now()}.${fileExt}`;
+        const { error: uploadError } = await supabase.storage
+          .from("homework-files")
+          .upload(fileName, submissionFile);
+
+        if (uploadError) throw uploadError;
+
+        const { data: publicUrlData } = supabase.storage
+          .from("homework-files")
+          .getPublicUrl(fileName);
+
+        fileUrl = publicUrlData.publicUrl;
+      }
+
+      // 1. Find the most recent pending report or lesson to update
+      const targetReport = reports.find((r) => r.homework_status !== "Submitted");
+      const targetLesson = lessons.find((l) => l.homework_status !== "Submitted");
+
+      if (targetReport) {
+        const { error: updateError } = await supabase
+          .from("class_reports")
+          .update({
+            homework_submission_url: fileUrl,
+            homework_submitted_at: new Date().toISOString(),
+            homework_status: "Submitted",
+          })
+          .eq("id", targetReport.id);
+
+        if (updateError) throw updateError;
+      } else if (targetLesson) {
+        const { error: updateError } = await supabase
+          .from("lessons")
+          .update({
+            homework_submission_url: fileUrl,
+            homework_submitted_at: new Date().toISOString(),
+            homework_status: "Submitted",
+          })
+          .eq("id", targetLesson.id);
+
+        if (updateError) throw updateError;
+      } else {
+        // Fallback if no pending report/lesson exists to attach to
+        const { error: insertError } = await supabase
+          .from("homework_submissions")
+          .insert({
+            student_id: student.id,
+            answer_text: submissionText.trim() || null,
+            file_url: fileUrl,
+            status: "Submitted",
+          });
+
+        if (insertError) throw insertError;
+      }
+
+      setSubmitSuccess(true);
+      setSubmissionText("");
+      setSubmissionFile(null);
+      
+      // Reload data or refresh state to clear the pending banner immediately
+      setTimeout(() => {
+        setSubmitSuccess(false);
+        window.location.reload();
+      }, 2000);
+
+    } catch (err: any) {
+      console.error("Submission error:", err);
+      alert("Failed to submit homework: " + err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-neutral-50 text-pink-600 font-bold text-sm">
@@ -242,7 +330,7 @@ export default function StudentPortalPage({
                 Student Portal
               </span>
               <h1 className="text-2xl font-extrabold text-pink-950 mt-2">{student.name}</h1>
-              <p className="text-xs text-gray-600 mt-0.5">
+              <p className="text-sm text-gray-600 mt-0.5">
                 Instructor: <strong className="text-gray-900">{student.teacher_alias || "Teacher Gabi"}</strong>
               </p>
             </div>
@@ -252,7 +340,7 @@ export default function StudentPortalPage({
                 href={student.meeting_link}
                 target="_blank"
                 rel="noreferrer"
-                className="w-full px-4 py-3 bg-pink-600 hover:bg-pink-700 text-white rounded-2xl text-xs font-bold transition flex items-center justify-center gap-2 shadow-xs cursor-pointer"
+                className="w-full px-4 py-3 bg-pink-600 hover:bg-pink-700 text-white rounded-2xl text-sm font-bold transition flex items-center justify-center gap-2 shadow-xs cursor-pointer"
               >
                 <Video size={16} />
                 <span>Join Classroom</span>
@@ -269,7 +357,7 @@ export default function StudentPortalPage({
                 style={{ width: `${progressPercentage}%` }}
               />
             </div>
-            <div className="grid grid-cols-2 gap-2 text-center text-xs">
+            <div className="grid grid-cols-2 gap-2 text-center text-sm">
               <div className="p-3 bg-pink-50/60 rounded-2xl border border-pink-300">
                 <p className="text-gray-500 font-semibold text-[10px] uppercase">Completed</p>
                 <p className="text-xl font-extrabold text-gray-900 mt-0.5">{dynamicCompletedClasses}</p>
@@ -285,13 +373,13 @@ export default function StudentPortalPage({
           <div className="bg-white border-2 border-pink-300 rounded-3xl p-5 shadow-xs space-y-3">
             <h3 className="font-bold text-gray-900 text-sm">Class Schedule</h3>
             {schedules.length === 0 ? (
-              <p className="text-xs text-gray-400 italic">Schedule to be confirmed.</p>
+              <p className="text-sm text-gray-400 italic">Schedule to be confirmed.</p>
             ) : (
-              <div className="space-y-2 text-xs">
+              <div className="space-y-2 text-sm">
                 {schedules.map((s) => (
                   <div key={s.id} className="flex flex-col p-2.5 bg-pink-50/60 rounded-xl border border-pink-200 gap-0.5">
                     <span className="font-bold text-gray-800">{s.day_of_week}</span>
-                    <span className="text-pink-700 font-semibold text-[11px]">
+                    <span className="text-pink-700 font-semibold text-xs">
                       {s.start_time || s.time || s.class_time || s.schedule_time || "Time TBA"} {s.duration ? `(${s.duration}m)` : ""}
                     </span>
                   </div>
@@ -303,7 +391,7 @@ export default function StudentPortalPage({
           {/* Parent Requests Box */}
           <div className="bg-white border-2 border-pink-300 rounded-3xl p-5 shadow-xs space-y-3">
             <div className="flex items-center justify-between">
-              <h3 className="font-bold text-gray-900 text-xs flex items-center gap-1.5">
+              <h3 className="font-bold text-gray-900 text-sm flex items-center gap-1.5">
                 <MessageSquare size={15} className="text-pink-600" />
                 <span>Parent Requests & Notes</span>
               </h3>
@@ -313,14 +401,14 @@ export default function StudentPortalPage({
                 </span>
               )}
             </div>
-            <p className="text-[11px] text-gray-600">
+            <p className="text-xs text-gray-600">
               Special focus requests or notes for the teacher:
             </p>
 
             <textarea
               rows={3}
               placeholder="e.g. Please focus on speaking fluency..."
-              className="w-full text-xs p-2.5 rounded-xl border-2 border-pink-300 focus:outline-pink-500 bg-pink-50/30 text-gray-900"
+              className="w-full text-sm p-2.5 rounded-xl border-2 border-pink-300 focus:outline-pink-500 bg-pink-50/30 text-gray-900"
               value={parentRequestText}
               onChange={(e) => setParentRequestText(e.target.value)}
             />
@@ -328,7 +416,7 @@ export default function StudentPortalPage({
               <button
                 type="button"
                 onClick={handleSaveRequest}
-                className="px-3.5 py-1.5 bg-pink-600 hover:bg-pink-700 text-white rounded-xl text-[11px] font-bold transition shadow-xs cursor-pointer"
+                className="px-3.5 py-1.5 bg-pink-600 hover:bg-pink-700 text-white rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
               >
                 Submit Note
               </button>
@@ -348,14 +436,14 @@ export default function StudentPortalPage({
                 <h2 className="text-lg font-bold mt-2 text-rose-950">
                   You have {pendingHomeworkCount} pending homework assignment(s)
                 </h2>
-                <p className="text-rose-800 text-xs mt-0.5">
+                <p className="text-rose-800 text-sm mt-0.5">
                   Please complete and upload your worksheet below for teacher review.
                 </p>
               </div>
               
               <a 
                 href="#lesson-history" 
-                className="bg-rose-600 hover:bg-rose-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs shadow-xs transition whitespace-nowrap"
+                className="bg-rose-600 hover:bg-rose-700 text-white font-bold px-4 py-2.5 rounded-xl text-sm shadow-xs transition whitespace-nowrap"
               >
                 View & Upload Below 👇
               </a>
@@ -408,9 +496,9 @@ export default function StudentPortalPage({
 
                   return (
                     <div key={book?.id || index} className="p-3.5 bg-pink-50/60 rounded-2xl border-2 border-pink-200 space-y-1.5">
-                      <div className="flex justify-between items-center text-xs font-bold text-pink-950">
+                      <div className="flex justify-between items-center text-sm font-bold text-pink-950">
                         <span>📖 {book?.title || "Book"}</span>
-                        <span className="text-pink-700 text-[11px] font-extrabold">{bookProgress}%</span>
+                        <span className="text-pink-700 text-xs font-extrabold">{bookProgress}%</span>
                       </div>
                       <div className="w-full bg-pink-100 rounded-full h-2 overflow-hidden border border-pink-300">
                         <div className="bg-pink-600 h-2 rounded-full transition-all duration-300" style={{ width: `${bookProgress}%` }} />
@@ -419,7 +507,7 @@ export default function StudentPortalPage({
                   );
                 })
               ) : (
-                <p className="text-xs text-gray-400 italic col-span-2">No books assigned yet.</p>
+                <p className="text-sm text-gray-400 italic col-span-2">No books assigned yet.</p>
               )}
             </div>
           </div>
@@ -431,18 +519,20 @@ export default function StudentPortalPage({
                 <BookOpen size={16} className="text-pink-600" />
                 <span>Daily Lesson History & Teacher Feedback</span>
               </h3>
-              <span className="text-[11px] font-bold text-pink-700 bg-pink-100 px-2.5 py-0.5 rounded-lg border border-pink-300">
-                {reports.length + lessons.length} Sessions Logged
-              </span>
+            <span className="text-xs font-bold text-pink-700 bg-pink-100 px-2.5 py-0.5 rounded-lg border border-pink-300">
+  {validReports.length + uniqueLessons.length} Sessions Logged
+</span>
             </div>
 
             {reports.length === 0 && lessons.length === 0 ? (
               <div className="p-8 text-center bg-pink-50/40 rounded-2xl border-2 border-pink-200">
-                <p className="text-xs text-gray-500 italic">No daily lesson reports recorded yet.</p>
-                <p className="text-[11px] text-gray-400 mt-1">Lesson notes, new vocabulary, and homework will appear here after class.</p>
+                <p className="text-sm text-gray-500 italic">No daily lesson reports recorded yet.</p>
+                <p className="text-xs text-gray-400 mt-1">Lesson notes, new vocabulary, and homework will appear here after class.</p>
               </div>
             ) : (
               <div className="space-y-3">
+
+                
                 {/* Render Class Reports */}
                 {reports.map((rep) => {
                   const isExpanded = expandedReportIds.includes(rep.id);
@@ -450,7 +540,7 @@ export default function StudentPortalPage({
                   return (
                     <div
                       key={rep.id}
-                      className="bg-pink-50/40 rounded-2xl border-2 border-pink-200 text-xs transition-all overflow-hidden"
+                      className="bg-pink-50/40 rounded-2xl border-2 border-pink-200 text-sm transition-all overflow-hidden"
                     >
                       <div
                         onClick={() => toggleExpandReport(rep.id)}
@@ -469,7 +559,7 @@ export default function StudentPortalPage({
                           <h4 className="font-bold text-pink-950 text-sm">{rep.lesson_title || rep.title || "Class Report"}</h4>
                         </div>
 
-                        <span className="text-gray-500 text-[11px] flex items-center gap-1 font-mono font-semibold">
+                        <span className="text-gray-500 text-xs flex items-center gap-1 font-mono font-semibold">
                           <Calendar size={12} /> {rep.report_date}
                         </span>
                       </div>
@@ -478,10 +568,10 @@ export default function StudentPortalPage({
                         <div className="px-5 pb-5 pt-2 border-t border-pink-200 space-y-3.5 bg-white/60">
                           {rep.vocabulary && (
                             <div className="space-y-1">
-                              <span className="font-bold text-gray-900 flex items-center gap-1.5 text-[11px]">
+                              <span className="font-bold text-gray-900 flex items-center gap-1.5 text-xs">
                                 <Sparkles size={13} className="text-pink-600" /> Vocabulary & Target Structures:
                               </span>
-                              <p className="text-gray-800 bg-white p-3 rounded-xl border-2 border-pink-200 leading-relaxed font-mono text-[11px] whitespace-pre-wrap">
+                              <p className="text-gray-800 bg-white p-3 rounded-xl border-2 border-pink-200 leading-relaxed font-mono text-xs whitespace-pre-wrap">
                                 {rep.vocabulary}
                               </p>
                             </div>
@@ -491,19 +581,19 @@ export default function StudentPortalPage({
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                               {rep.strengths && (
                                 <div className="p-3 bg-emerald-50/80 rounded-xl border-2 border-emerald-200 space-y-1">
-                                  <span className="font-bold text-emerald-900 flex items-center gap-1 text-[11px]">
+                                  <span className="font-bold text-emerald-900 flex items-center gap-1 text-xs">
                                     <Award size={13} className="text-emerald-600" /> Strengths & Highlights:
                                   </span>
-                                  <p className="text-emerald-950 leading-relaxed text-[11px] whitespace-pre-wrap">{rep.strengths}</p>
+                                  <p className="text-emerald-950 leading-relaxed text-xs whitespace-pre-wrap">{rep.strengths}</p>
                                 </div>
                               )}
 
                               {rep.improvements && (
                                 <div className="p-3 bg-amber-50/80 rounded-xl border-2 border-amber-200 space-y-1">
-                                  <span className="font-bold text-amber-900 flex items-center gap-1 text-[11px]">
+                                  <span className="font-bold text-amber-900 flex items-center gap-1 text-xs">
                                     <TrendingUp size={13} className="text-amber-600" /> Next Focus / Tips:
                                   </span>
-                                  <p className="text-amber-950 leading-relaxed text-[11px] whitespace-pre-wrap">{rep.improvements}</p>
+                                  <p className="text-amber-950 leading-relaxed text-m whitespace-pre-wrap">{rep.improvements}</p>
                                 </div>
                               )}
                             </div>
@@ -512,7 +602,7 @@ export default function StudentPortalPage({
                           {(rep.homework || rep.homework_file_url) && (
                             <div className="p-4 bg-pink-100/60 rounded-2xl border-2 border-pink-300 text-pink-950 space-y-3">
                               <div className="flex items-center justify-between">
-                                <span className="font-bold flex items-center gap-1.5 text-xs text-pink-950">
+                                <span className="font-bold flex items-center gap-1.5 text-m text-pink-950">
                                   <FileCheck size={15} className="text-pink-600" />
                                   <span>Assigned Homework / Review:</span>
                                 </span>
@@ -529,7 +619,7 @@ export default function StudentPortalPage({
                               </div>
 
                               {rep.homework && (
-                                <p className="leading-relaxed text-[11px] font-medium text-gray-900 bg-white p-2.5 rounded-xl border-2 border-pink-200 whitespace-pre-wrap">
+                                <p className="leading-relaxed text-xs font-medium text-gray-900 bg-white p-2.5 rounded-xl border-2 border-pink-200 whitespace-pre-wrap">
                                   {rep.homework}
                                 </p>
                               )}
@@ -546,16 +636,54 @@ export default function StudentPortalPage({
                                   </a>
                                 </div>
                               )}
+<div className="pt-2 border-t border-pink-300/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+  {rep.homework_submission_url ? (
+    <div className="flex items-center gap-2">
+      <span className="text-xs text-emerald-800 font-bold">Completed File:</span>
+      <a
+        href={rep.homework_submission_url}
+        target="_blank"
+        rel="noreferrer"
+        className="text-xs text-pink-700 font-bold underline hover:text-pink-800"
+      >
+        View Submitted Homework
+      </a>
+    </div>
+  ) : (
+    <p className="text-[10px] text-gray-600 italic">
+      Upload photo of worksheet or notebook when done.
+    </p>
+  )}
 
+  <label className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-pink-600 hover:bg-pink-700 text-white rounded-xl text-[10px] font-bold transition shadow-2xs cursor-pointer self-start sm:self-auto">
+    <span>
+      {uploadingReportId === rep.id
+        ? "Uploading..."
+        : rep.homework_submission_url
+        ? "Re-upload Homework"
+        : "Upload Homework"}
+    </span>
+    <input
+      type="file"
+      accept="image/*,application/pdf"
+      className="hidden"
+      disabled={uploadingReportId === rep.id}
+      onChange={(e) => {
+        const file = e.target.files?.[0];
+        if (file) handleStudentHomeworkUpload(rep.id, file, true);
+      }}
+    />
+  </label>
+</div>
                               <div className="pt-2 border-t border-pink-300/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                                 {rep.homework_submission_url ? (
                                   <div className="flex items-center gap-2">
-                                    <span className="text-[11px] text-emerald-800 font-bold">Completed File:</span>
+                                    <span className="text-xs text-emerald-800 font-bold">Completed File:</span>
                                     <a
                                       href={rep.homework_submission_url}
                                       target="_blank"
                                       rel="noreferrer"
-                                      className="text-[11px] text-pink-700 font-bold underline hover:text-pink-800"
+                                      className="text-xs text-pink-700 font-bold underline hover:text-pink-800"
                                     >
                                       View Submitted Homework
                                     </a>
@@ -612,7 +740,7 @@ export default function StudentPortalPage({
   const fallbackMain = !displayStrengths && !displayImprovements && !displayVocab ? text : "";
 
   return (
-    <div key={les.id} className="bg-pink-50/40 rounded-2xl border-2 border-pink-200 text-xs transition-all overflow-hidden">
+    <div key={les.id} className="bg-pink-50/40 rounded-2xl border-2 border-pink-200 text-sm transition-all overflow-hidden">
       <div
         onClick={() => toggleExpandReport(les.id)}
         className="p-4 flex items-center justify-between cursor-pointer hover:bg-pink-100/50 select-none transition"
@@ -630,7 +758,7 @@ export default function StudentPortalPage({
           <h4 className="font-bold text-pink-950 text-sm">{les.title || "Lesson Log"}</h4>
         </div>
 
-        <span className="text-gray-500 text-[11px] flex items-center gap-1 font-mono font-semibold">
+        <span className="text-gray-500 text-xs flex items-center gap-1 font-mono font-semibold">
           <Calendar size={12} /> {les.lesson_date?.substring(0, 10)}
         </span>
       </div>
@@ -652,10 +780,10 @@ export default function StudentPortalPage({
 
           {displayVocab && (
             <div className="space-y-1">
-              <span className="font-bold text-gray-900 flex items-center gap-1.5 text-[11px]">
+              <span className="font-bold text-gray-900 flex items-center gap-1.5 text-xs">
                 <Sparkles size={13} className="text-pink-600" /> Vocabulary & Target Structures:
               </span>
-              <p className="text-gray-800 bg-white p-3 rounded-xl border-2 border-pink-200 leading-relaxed font-mono text-[11px] whitespace-pre-wrap">
+              <p className="text-gray-800 bg-white p-3 rounded-xl border-2 border-pink-200 leading-relaxed font-mono text-xs whitespace-pre-wrap">
                 {displayVocab}
               </p>
             </div>
@@ -665,43 +793,43 @@ export default function StudentPortalPage({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {displayStrengths && (
                 <div className="p-3 bg-emerald-50/80 rounded-xl border-2 border-emerald-200 space-y-1">
-                  <span className="font-bold text-emerald-900 flex items-center gap-1 text-[11px]">
+                  <span className="font-bold text-emerald-900 flex items-center gap-1 text-xs">
                     <Award size={13} className="text-emerald-600" /> Class Feedback & Strengths:
                   </span>
-                  <p className="text-emerald-950 leading-relaxed text-[11px] whitespace-pre-wrap">{displayStrengths}</p>
+                  <p className="text-emerald-950 leading-relaxed text-xs whitespace-pre-wrap">{displayStrengths}</p>
                 </div>
               )}
               {displayImprovements && (
                 <div className="p-3 bg-amber-50/80 rounded-xl border-2 border-amber-200 space-y-1">
-                  <span className="font-bold text-amber-900 flex items-center gap-1 text-[11px]">
+                  <span className="font-bold text-amber-900 flex items-center gap-1 text-xs">
                     <TrendingUp size={13} className="text-amber-600" /> Next Focus & Improvements:
                   </span>
-                  <p className="text-amber-950 leading-relaxed text-[11px] whitespace-pre-wrap">{displayImprovements}</p>
+                  <p className="text-amber-950 leading-relaxed text-xs whitespace-pre-wrap">{displayImprovements}</p>
                 </div>
               )}
               {fallbackMain && !displayStrengths && !displayImprovements && (
                 <div className="col-span-2 p-3 bg-white rounded-xl border-2 border-pink-200 space-y-1">
-                  <span className="font-bold text-gray-900 flex items-center gap-1 text-[11px]">
+                  <span className="font-bold text-gray-900 flex items-center gap-1 text-xs">
                     <Sparkles size={13} className="text-pink-600" /> Teacher Feedback & Notes:
                   </span>
-                  <p className="text-gray-800 leading-relaxed text-[11px] whitespace-pre-wrap">{fallbackMain}</p>
+                  <p className="text-gray-800 leading-relaxed text-xs whitespace-pre-wrap">{fallbackMain}</p>
                 </div>
               )}
             </div>
           )}
 {les.teacher_message && (
             <div className="p-3.5 bg-pink-50/70 rounded-xl border-2 border-pink-200 space-y-1">
-              <span className="font-bold text-pink-950 text-[11px] flex items-center gap-1">
+              <span className="font-bold text-pink-950 text-xs flex items-center gap-1">
                 💌 Message from Teacher:
               </span>
-              <p className="text-gray-900 text-[11px] whitespace-pre-wrap leading-relaxed">{les.teacher_message}</p>
+              <p className="text-gray-900 text-xs whitespace-pre-wrap leading-relaxed">{les.teacher_message}</p>
             </div>
           )}
 
           {(((les.homework_notes || les.homework) && (les.homework_notes || les.homework).toLowerCase() !== "none") || les.homework_file_url) && (
             <div className="p-4 bg-pink-100/60 rounded-2xl border-2 border-pink-300 text-pink-950 space-y-3">
               <div className="flex items-center justify-between">
-                <span className="font-bold flex items-center gap-1.5 text-xs text-pink-950">
+                <span className="font-bold flex items-center gap-1.5 text-m text-pink-950">
                   <FileCheck size={15} className="text-pink-600" />
                   <span>Assigned Homework / Review:</span>
                 </span>
@@ -718,7 +846,7 @@ export default function StudentPortalPage({
               </div>
 
               {displayHomework && displayHomework.toLowerCase() !== "none" && (
-                <p className="leading-relaxed text-[11px] font-medium text-gray-900 bg-white p-2.5 rounded-xl border-2 border-pink-200 whitespace-pre-wrap">
+                <p className="leading-relaxed text-m font-medium text-gray-900 bg-white p-2.5 rounded-xl border-2 border-pink-200 whitespace-pre-wrap">
                   {displayHomework}
                 </p>
               )}
@@ -745,6 +873,53 @@ export default function StudentPortalPage({
               </div>
             )}
           </div>
+          {/* General Homework Submission Form */}
+          <form onSubmit={handleSubmitHomework} className="bg-white border-2 border-pink-300 rounded-3xl p-6 shadow-xs space-y-4">
+            <h3 className="font-bold text-gray-900 text-sm flex items-center gap-2">
+              <FileCheck size={16} className="text-pink-600" />
+              <span>Submit Your Homework & Answers</span>
+            </h3>
+            <p className="text-sm text-gray-600">
+              Type your answers below or attach an image/file of your completed work to send it directly to your teacher.
+            </p>
+
+            <div>
+              <label className="block mb-1 text-xs font-semibold text-gray-700">Type your answers / sentences here:</label>
+              <textarea
+                rows={4}
+                value={submissionText}
+                onChange={(e) => setSubmissionText(e.target.value)}
+                placeholder="Type your homework answers here..."
+                className="w-full border-2 border-pink-300 rounded-2xl p-3 text-m text-gray-900 bg-pink-50/30 focus:outline-pink-500"
+              />
+            </div>
+
+            <div>
+              <label className="block mb-1 text-xs font-semibold text-gray-700">Attach an image or PDF (optional):</label>
+              <input
+                type="file"
+                accept="image/*,.pdf"
+                onChange={(e) => setSubmissionFile(e.target.files?.[0] || null)}
+                className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-bold file:bg-pink-100 file:text-pink-800 hover:file:bg-pink-200 cursor-pointer border-2 border-pink-300 rounded-2xl p-1.5 bg-pink-50/30"
+              />
+            </div>
+
+            {submitSuccess && (
+              <p className="text-sm text-emerald-600 font-bold flex items-center gap-1">
+                <CheckCircle2 size={14} /> Homework submitted successfully! Your teacher has been notified.
+              </p>
+            )}
+
+            <div className="flex justify-end">
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="px-5 py-2.5 bg-pink-600 hover:bg-pink-700 text-white text-sm font-bold rounded-xl transition shadow-xs cursor-pointer disabled:opacity-50"
+              >
+                {isSubmitting ? "Sending..." : "Submit to Teacher"}
+              </button>
+            </div>
+          </form>
         </div>
 
       </div>

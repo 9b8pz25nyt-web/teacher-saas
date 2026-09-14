@@ -1,16 +1,23 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { Poppins } from "next/font/google";
 import Sidebar from "@/components/Sidebar";
 import "./globals.css";
+
+const poppins = Poppins({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-poppins",
+});
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isPortal = pathname?.startsWith("/portal");
 
   return (
-    <html lang="en">
-      <body className="bg-gray-50 text-gray-900">
+    <html lang="en" className={poppins.variable}>
+      <body className="bg-gray-50 text-gray-900 font-sans">
         {isPortal ? (
           <main className="min-h-screen bg-[#fff7fb] overflow-y-auto">
             {children}
