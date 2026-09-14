@@ -92,6 +92,7 @@ export default function StudentDetailsPage({
   const [renewalPaymentQrPreview, setRenewalPaymentQrPreview] = useState<string>("");
 
   // Renewal Modal & PDF State
+// Renewal Modal & PDF State
   const [isRenewalModalOpen, setIsRenewalModalOpen] = useState(false);
   const [renewalClassesCount, setRenewalClassesCount] = useState("20");
   const [renewalFreeCount, setRenewalFreeCount] = useState("0");
@@ -100,9 +101,10 @@ export default function StudentDetailsPage({
   const [renewalStartDate, setRenewalStartDate] = useState(
     new Date().toISOString().split("T")[0]
   );
+  const [renewalQrCode, setRenewalQrCode] = useState("");
   const [renewalCustomNotes, setRenewalCustomNotes] = useState("");
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
-  const [invoiceQrDataUrl, setInvoiceQrDataUrl] = useState<string>("");
+  const [invoiceQrDataUrl, setInvoiceQrDataUrl] = useState("");
   const invoicePdfRef = useRef<HTMLDivElement>(null);
 
   function toggleExpandReport(id: string) {
@@ -1619,216 +1621,265 @@ const validReports = reports.filter(
         </div>
       </div>
 
-    {/* RENEWAL INVOICE & PARENT NOTICE MODAL */}
-      {isRenewalModalOpen && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-white w-full max-w-2xl p-6 rounded-3xl shadow-2xl space-y-5 border border-pink-100 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-pink-100 pb-3">
-              <div>
-                <h2 className="text-lg font-extrabold text-pink-950">Package Renewal & Invoice</h2>
-                <p className="text-xs text-pink-700/80">Generate a renewal notice message and printable invoice for {student?.name}.</p>
-              </div>
-              <button onClick={() => setIsRenewalModalOpen(false)} className="p-2 rounded-full hover:bg-pink-50 cursor-pointer">
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-              <div>
-                <label className="block mb-1 font-semibold text-gray-700">Renewal Classes Count</label>
-                <input
-                  type="number"
-                  className="w-full border border-pink-200 rounded-xl p-2.5 bg-white text-gray-800"
-                  value={renewalClassesCount}
-                  onChange={(e) => setRenewalClassesCount(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="block mb-1 font-semibold text-gray-700">Free Bonus Classes</label>
-                <input
-                  type="number"
-                  className="w-full border border-pink-200 rounded-xl p-2.5 bg-white text-gray-800"
-                  value={renewalFreeCount}
-                  onChange={(e) => setRenewalFreeCount(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="block mb-1 font-semibold text-gray-700">Tuition Fee Amount</label>
-                <input
-                  type="text"
-                  className="w-full border border-pink-200 rounded-xl p-2.5 bg-white text-gray-800"
-                  value={renewalRate}
-                  onChange={(e) => setRenewalRate(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="block mb-1 font-semibold text-gray-700">Class Duration (minutes)</label>
-                <input
-                  type="text"
-                  className="w-full border border-pink-200 rounded-xl p-2.5 bg-white text-gray-800"
-                  value={renewalDuration}
-                  onChange={(e) => setRenewalDuration(e.target.value)}
-                />
-              </div>
-             <div className="md:col-span-2">
-                <label className="block mb-1 font-semibold text-gray-700">Thank You / Payment Message</label>
-                <textarea
-                  rows={3}
-                  className="w-full border border-pink-200 rounded-xl p-2.5 bg-white text-gray-800 text-xs"
-                  value={renewalThankYouMessage}
-                  onChange={(e) => setRenewalThankYouMessage(e.target.value)}
-                />
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="block mb-1 font-semibold text-gray-700">Bank Account Details (Optional)</label>
-                <textarea
-                  rows={2}
-                  className="w-full border border-pink-200 rounded-xl p-2.5 bg-white text-gray-800 text-xs font-mono"
-                  value={renewalBankDetails}
-                  onChange={(e) => setRenewalBankDetails(e.target.value)}
-                  placeholder="e.g. Bank Name: BPI / KBANK&#10;Account Name: Teacher Gabi&#10;Account Number: 1234-5678-90"
-                />
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="block mb-1 font-semibold text-gray-700">Upload Payment QR Code (Optional)</label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handlePaymentQrUpload}
-                  className="w-full text-xs text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-pink-100 file:text-pink-800 hover:file:bg-pink-200 cursor-pointer border border-pink-200 rounded-xl p-1.5 bg-white"
-                />
-                {renewalPaymentQrPreview && (
-                  <p className="text-[10px] text-emerald-600 font-bold mt-1">✓ Payment QR code uploaded successfully</p>
-                )}
-              </div>
-            </div>
-{/* Printable Invoice Element for PDF Download (High Resolution) */}
-<div style={{ position: "absolute", left: "-9999px", top: 0, width: "800px", backgroundColor: "#ffffff", color: "#111827" }}>
-  <div 
-    ref={invoicePdfRef} 
-    style={{ 
-      padding: "45px", 
-      fontFamily: "Helvetica, Arial, sans-serif", 
-      backgroundColor: "#ffffff", 
-      color: "#111827",
-      boxSizing: "border-box"
-    }}
-  >
-    {/* Header */}
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", borderBottom: "3px solid #db2777", paddingBottom: "16px", marginBottom: "24px" }}>
-      <div>
-        <h1 style={{ fontSize: "24px", fontWeight: "900", color: "#db2777", margin: "0 0 4px 0", textTransform: "uppercase" }}>
-          Invoice & Renewal Notice
-        </h1>
-        <p style={{ fontSize: "12px", color: "#4b5563", margin: 0, fontWeight: "600" }}>
-          Private English Tutoring Services
-        </p>
-      </div>
-      <div style={{ textAlign: "right" }}>
-        <p style={{ fontSize: "11px", color: "#6b7280", margin: 0 }}>Instructor: <strong>{student?.teacher_alias || "Teacher Gabi"}</strong></p>
-        <p style={{ fontSize: "11px", color: "#6b7280", margin: "2px 0 0 0" }}>Date: {new Date().toLocaleDateString()}</p>
-      </div>
-    </div>
-
-    {/* Bill To Section */}
-    <div style={{ marginBottom: "24px", padding: "16px", backgroundColor: "#fdf2f8", borderRadius: "10px", border: "1px solid #fbcfe8" }}>
-      <p style={{ fontSize: "10px", fontWeight: "bold", color: "#9d174d", textTransform: "uppercase", margin: "0 0 4px 0" }}>Billed To:</p>
-      <p style={{ fontSize: "15px", fontWeight: "bold", color: "#111827", margin: "0 0 2px 0" }}>{student?.name}</p>
-      <p style={{ fontSize: "11px", color: "#4b5563", margin: 0 }}>Country: {student?.country || "International"} {student?.age ? `• Age: ${student.age}` : ""}</p>
-    </div>
-
-    {/* Package Summary Table Box */}
-    <div style={{ marginBottom: "24px", border: "1px solid #e5e7eb", borderRadius: "10px", overflow: "hidden" }}>
-      <div style={{ backgroundColor: "#f9fafb", padding: "10px 16px", borderBottom: "1px solid #e5e7eb", display: "flex", justifyContent: "space-between", fontSize: "11px", fontWeight: "bold", color: "#374151", textTransform: "uppercase" }}>
-        <span>Package Description</span>
-        <span>Amount</span>
-      </div>
-      <div style={{ padding: "16px", display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "13px" }}>
+{/* RENEWAL INVOICE & PARENT NOTICE MODAL */}
+{isRenewalModalOpen && (
+  <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto">
+    <div className="bg-white w-full max-w-2xl p-6 rounded-3xl shadow-2xl space-y-5 border border-pink-100 max-h-[90vh] overflow-y-auto">
+      <div className="flex items-center justify-between border-b border-pink-100 pb-3">
         <div>
-          <p style={{ fontWeight: "bold", color: "#111827", margin: "0 0 4px 0" }}>
-            English Class Package ({renewalClassesCount} Classes{Number(renewalFreeCount) > 0 ? ` + ${renewalFreeCount} Free` : ""})
-          </p>
-          <p style={{ fontSize: "11px", color: "#6b7280", margin: 0 }}>
-            Duration: {renewalDuration} minutes per session • Target Start: {renewalStartDate}
-          </p>
+          <h2 className="text-lg font-extrabold text-pink-950">Package Renewal & Invoice</h2>
+          <p className="text-xs text-pink-700/80">Generate a renewal notice message and printable invoice for {student?.name}.</p>
         </div>
-        <div style={{ textAlign: "right" }}>
-          <span style={{ fontSize: "16px", fontWeight: "900", color: "#db2777" }}>
-            {formattedRenewRate} {student?.payment_currency || "PHP"}
-          </span>
+        <button onClick={() => setIsRenewalModalOpen(false)} className="p-2 rounded-full hover:bg-pink-50 cursor-pointer">
+          <X size={18} />
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+        <div>
+          <label className="block mb-1 font-semibold text-gray-700">Renewal Classes Count</label>
+          <input
+            type="number"
+            className="w-full border border-pink-200 rounded-xl p-2.5 bg-white text-gray-800"
+            value={renewalClassesCount}
+            onChange={(e) => setRenewalClassesCount(e.target.value)}
+          />
         </div>
-      </div>
-    </div>
-
-    {/* Custom Notes Section if available */}
-    {renewalCustomNotes && (
-      <div style={{ marginBottom: "20px", padding: "14px", backgroundColor: "#fffbeb", border: "1px solid #fde68a", borderRadius: "10px" }}>
-        <p style={{ fontSize: "11px", fontWeight: "bold", color: "#b45309", margin: "0 0 4px 0" }}>Important Notes:</p>
-        <p style={{ fontSize: "11px", color: "#374151", margin: 0, whiteSpace: "pre-wrap" }}>{renewalCustomNotes}</p>
-      </div>
-    )}
-
-    {/* Payment Instructions & Options Section */}
-    <div style={{ display: "flex", gap: "20px", marginBottom: "30px", padding: "18px", backgroundColor: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", alignItems: "flex-start" }}>
-      <div style={{ flex: 1 }}>
-        <h3 style={{ fontSize: "13px", fontWeight: "bold", color: "#0f172a", margin: "0 0 8px 0" }}>
-          💳 Payment Instructions
-        </h3>
-        <p style={{ fontSize: "11px", color: "#475569", lineHeight: "1.5", margin: "0 0 10px 0", whiteSpace: "pre-wrap" }}>
-          {renewalThankYouMessage}
-        </p>
-
-        {renewalBankDetails && (
-          <div style={{ marginTop: "8px", padding: "10px", backgroundColor: "#ffffff", border: "1px solid #cbd5e1", borderRadius: "8px" }}>
-            <p style={{ fontSize: "10px", fontWeight: "bold", color: "#334155", margin: "0 0 2px 0" }}>Bank Transfer Details:</p>
-            <p style={{ fontSize: "11px", fontFamily: "monospace", color: "#0f172a", margin: 0, whiteSpace: "pre-wrap" }}>{renewalBankDetails}</p>
+        <div>
+          <label className="block mb-1 font-semibold text-gray-700">Free Bonus Classes</label>
+          <input
+            type="number"
+            className="w-full border border-pink-200 rounded-xl p-2.5 bg-white text-gray-800"
+            value={renewalFreeCount}
+            onChange={(e) => setRenewalFreeCount(e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="block mb-1 font-semibold text-gray-700">Tuition Fee Amount</label>
+          <input
+            type="text"
+            className="w-full border border-pink-200 rounded-xl p-2.5 bg-white text-gray-800"
+            value={renewalRate}
+            onChange={(e) => setRenewalRate(e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="block mb-1 font-semibold text-gray-700">Class Duration (minutes)</label>
+          <input
+            type="text"
+            className="w-full border border-pink-200 rounded-xl p-2.5 bg-white text-gray-800"
+            value={renewalDuration}
+            onChange={(e) => setRenewalDuration(e.target.value)}
+          />
+        </div>
+        <div className="md:col-span-2">
+          <label className="block mb-1 font-semibold text-gray-700">Target Start Date</label>
+          <DatePicker
+            selected={renewalStartDate ? new Date(renewalStartDate) : new Date()}
+            onChange={(date: Date | null) => {
+              if (date) {
+                const formatted = date.toISOString().split("T")[0];
+                setRenewalStartDate(formatted);
+              }
+            }}
+            dateFormat="yyyy-MM-dd"
+            className="w-full border border-pink-200 rounded-xl p-2.5 bg-white text-gray-800 text-xs focus:outline-none focus:ring-2 focus:ring-pink-400"
+            wrapperClassName="w-full"
+          />
+          <div className="flex gap-1.5 mt-1.5">
+            <button
+              type="button"
+              onClick={() => {
+                const today = new Date().toISOString().split("T")[0];
+                setRenewalStartDate(today);
+              }}
+              className="px-2.5 py-1 bg-pink-50 hover:bg-pink-100 text-pink-700 rounded-lg text-[10px] font-bold border border-pink-200 cursor-pointer transition"
+            >
+              Today
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const nextWeek = new Date();
+                nextWeek.setDate(nextWeek.getDate() + 7);
+                setRenewalStartDate(nextWeek.toISOString().split("T")[0]);
+              }}
+              className="px-2.5 py-1 bg-pink-50 hover:bg-pink-100 text-pink-700 rounded-lg text-[10px] font-bold border border-pink-200 cursor-pointer transition"
+            >
+              +7 Days
+            </button>
           </div>
-        )}
-      </div>
-
-      {renewalPaymentQrPreview && (
-        <div style={{ textAlign: "center", backgroundColor: "#ffffff", padding: "8px", border: "1px solid #cbd5e1", borderRadius: "8px", minWidth: "110px" }}>
-          <img src={renewalPaymentQrPreview} alt="Payment QR" style={{ width: "100px", height: "100px", objectFit: "contain", display: "block" }} />
-          <span style={{ fontSize: "9px", color: "#64748b", fontWeight: "bold", display: "block", marginTop: "4px" }}>Scan to Pay</span>
         </div>
-      )}
-    </div>
-
-    {/* Footer */}
-    <div style={{ paddingTop: "16px", borderTop: "1px solid #e5e7eb", textAlign: "center" }}>
-      <p style={{ fontSize: "11px", fontWeight: "bold", color: "#374151", margin: "0 0 2px 0" }}>If payment has been made already, kindly disregard this notice.</p>
-      <p style={{ fontSize: "10px", color: "#9ca3af", margin: 0 }}>After remitting the payment, please send a screenshot confirmation. Thank you!</p>
-    </div>
-  </div>
-</div>
-
-            <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-pink-100">
+        <div className="md:col-span-2">
+          <label className="block mb-1 font-semibold text-gray-700">Thank You / Payment Message</label>
+          <textarea
+            rows={3}
+            className="w-full border border-pink-200 rounded-xl p-2.5 bg-white text-gray-800 text-xs"
+            value={renewalThankYouMessage}
+            onChange={(e) => setRenewalThankYouMessage(e.target.value)}
+          />
+        </div>
+        <div className="md:col-span-2">
+          <label className="block mb-1 font-semibold text-gray-700">Bank Account Details (Optional)</label>
+          <textarea
+            rows={2}
+            className="w-full border border-pink-200 rounded-xl p-2.5 bg-white text-gray-800 text-xs font-mono"
+            value={renewalBankDetails}
+            onChange={(e) => setRenewalBankDetails(e.target.value)}
+            placeholder="e.g. Bank Name: BPI / KBANK&#10;Account Name: Teacher Gabi&#10;Account Number: 1234-5678-90"
+          />
+        </div>
+        <div className="md:col-span-2">
+          <label className="block mb-1 font-semibold text-gray-700">Payment QR Code (Optional)</label>
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) {
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                  setRenewalQrCode(reader.result as string);
+                };
+                reader.readAsDataURL(file);
+              }
+            }}
+            className="w-full border border-pink-200 rounded-xl p-2 bg-white text-gray-800 text-xs file:mr-4 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-pink-50 file:text-pink-700 hover:file:bg-pink-100 cursor-pointer"
+          />
+          {renewalQrCode && (
+            <div className="mt-2 flex items-center gap-3">
+              <img src={renewalQrCode} alt="QR Preview" className="w-16 h-16 object-cover rounded-xl border border-pink-200 shadow-sm" />
               <button
                 type="button"
-                onClick={handleCopyRenewalMessage}
-                className="px-4 py-2.5 bg-pink-50 hover:bg-pink-100 text-pink-700 rounded-xl font-bold transition flex items-center gap-1.5 cursor-pointer"
+                onClick={() => setRenewalQrCode("")}
+                className="text-xs text-red-600 hover:text-red-700 font-semibold cursor-pointer"
               >
-                {copiedRenewalNotice ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
-                <span>{copiedRenewalNotice ? "Notice Copied!" : "Copy Parent Message"}</span>
+                Remove QR Image
               </button>
+            </div>
+          )}
+        </div>
+      </div>
 
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleDownloadInvoicePdf}
-                  disabled={isGeneratingPdf}
-                  className="px-4 py-2.5 bg-pink-600 hover:bg-pink-700 text-white rounded-xl font-bold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                >
-                  <Download size={14} />
-                  <span>{isGeneratingPdf ? "Generating PDF..." : "Download Invoice PDF"}</span>
-                </button>
+      {/* Printable Invoice Element for PDF Download (High Resolution) */}
+      <div style={{ position: "absolute", left: "-9999px", top: 0, width: "800px", backgroundColor: "#ffffff", color: "#111827" }}>
+        <div 
+          ref={invoicePdfRef} 
+          style={{ 
+            padding: "45px", 
+            fontFamily: "Helvetica, Arial, sans-serif", 
+            backgroundColor: "#ffffff", 
+            color: "#111827",
+            boxSizing: "border-box"
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", borderBottom: "3px solid #db2777", paddingBottom: "16px", marginBottom: "24px" }}>
+            <div>
+              <h1 style={{ fontSize: "24px", fontWeight: "900", color: "#db2777", margin: "0 0 4px 0", textTransform: "uppercase" }}>
+                Invoice & Renewal Notice
+              </h1>
+              <p style={{ fontSize: "12px", color: "#4b5563", margin: 0, fontWeight: "600" }}>
+                Private English Tutoring Services
+              </p>
+            </div>
+            <div style={{ textAlign: "right" }}>
+              <p style={{ fontSize: "11px", color: "#6b7280", margin: 0 }}>Instructor: <strong>{student?.teacher_alias || "Teacher Gabi"}</strong></p>
+              <p style={{ fontSize: "11px", color: "#6b7280", margin: "2px 0 0 0" }}>Date: {new Date().toLocaleDateString()}</p>
+            </div>
+          </div>
+
+          <div style={{ marginBottom: "24px", padding: "16px", backgroundColor: "#fdf2f8", borderRadius: "10px", border: "1px solid #fbcfe8" }}>
+            <p style={{ fontSize: "10px", fontWeight: "bold", color: "#9d174d", textTransform: "uppercase", margin: "0 0 4px 0" }}>Billed To:</p>
+            <p style={{ fontSize: "15px", fontWeight: "bold", color: "#111827", margin: "0 0 2px 0" }}>{student?.name}</p>
+            <p style={{ fontSize: "11px", color: "#4b5563", margin: 0 }}>Country: {student?.country || "International"} {student?.age ? `• Age: ${student.age}` : ""}</p>
+          </div>
+
+          <div style={{ marginBottom: "24px", border: "1px solid #e5e7eb", borderRadius: "10px", overflow: "hidden" }}>
+            <div style={{ backgroundColor: "#f9fafb", padding: "10px 16px", borderBottom: "1px solid #e5e7eb", display: "flex", justifyContent: "space-between", fontSize: "11px", fontWeight: "bold", color: "#374151", textTransform: "uppercase" }}>
+              <span>Package Description</span>
+              <span>Amount</span>
+            </div>
+            <div style={{ padding: "16px", display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "13px" }}>
+              <div>
+                <p style={{ fontWeight: "bold", color: "#111827", margin: "0 0 4px 0" }}>
+                  English Class Package ({renewalClassesCount} Classes{Number(renewalFreeCount) > 0 ? ` + ${renewalFreeCount} Free` : ""})
+                </p>
+                <p style={{ fontSize: "11px", color: "#6b7280", margin: 0 }}>
+                  Duration: {renewalDuration} minutes per session • Target Start: {renewalStartDate}
+                </p>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <span style={{ fontSize: "16px", fontWeight: "900", color: "#db2777" }}>
+                  {formattedRenewRate} {student?.payment_currency || "PHP"}
+                </span>
               </div>
             </div>
           </div>
+
+          {renewalCustomNotes && (
+            <div style={{ marginBottom: "20px", padding: "14px", backgroundColor: "#fffbeb", border: "1px solid #fde68a", borderRadius: "10px" }}>
+              <p style={{ fontSize: "11px", fontWeight: "bold", color: "#b45309", margin: "0 0 4px 0" }}>Important Notes:</p>
+              <p style={{ fontSize: "11px", color: "#374151", margin: 0, whiteSpace: "pre-wrap" }}>{renewalCustomNotes}</p>
+            </div>
+          )}
+
+          <div style={{ display: "flex", gap: "20px", marginBottom: "30px", padding: "18px", backgroundColor: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", alignItems: "flex-start" }}>
+            <div style={{ flex: 1 }}>
+              <h3 style={{ fontSize: "13px", fontWeight: "bold", color: "#0f172a", margin: "0 0 8px 0" }}>
+                💳 Payment Instructions
+              </h3>
+              <p style={{ fontSize: "11px", color: "#475569", lineHeight: "1.5", margin: "0 0 10px 0", whiteSpace: "pre-wrap" }}>
+                {renewalThankYouMessage}
+              </p>
+
+              {renewalBankDetails && (
+                <div style={{ marginTop: "8px", padding: "10px", backgroundColor: "#ffffff", border: "1px solid #cbd5e1", borderRadius: "8px" }}>
+                  <p style={{ fontSize: "10px", fontWeight: "bold", color: "#334155", margin: "0 0 2px 0" }}>Bank Transfer Details:</p>
+                  <p style={{ fontSize: "11px", fontFamily: "monospace", color: "#0f172a", margin: 0, whiteSpace: "pre-wrap" }}>{renewalBankDetails}</p>
+                </div>
+              )}
+
+              {renewalQrCode && (
+                <div style={{ marginTop: "12px", textAlign: "center" }}>
+                  <p style={{ fontSize: "10px", fontWeight: "bold", color: "#334155", margin: "0 0 6px 0" }}>Scan to Pay:</p>
+                  <img src={renewalQrCode} alt="Payment QR" style={{ width: "110px", height: "110px", objectFit: "cover", borderRadius: "8px", border: "1px solid #cbd5e1", margin: "0 auto" }} />
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div style={{ paddingTop: "16px", borderTop: "1px solid #e5e7eb", textAlign: "center" }}>
+            <p style={{ fontSize: "11px", fontWeight: "bold", color: "#374151", margin: "0 0 2px 0" }}>If payment has been made already, kindly disregard this notice.</p>
+            <p style={{ fontSize: "10px", color: "#9ca3af", margin: 0 }}>After remitting the payment, please send a screenshot confirmation. Thank you!</p>
+          </div>
         </div>
-      )}
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-pink-100">
+        <button
+          type="button"
+          onClick={handleCopyRenewalMessage}
+          className="px-4 py-2.5 bg-pink-50 hover:bg-pink-100 text-pink-700 rounded-xl font-bold transition flex items-center gap-1.5 cursor-pointer"
+        >
+          {copiedRenewalNotice ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
+          <span>{copiedRenewalNotice ? "Notice Copied!" : "Copy Parent Message"}</span>
+        </button>
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleDownloadInvoicePdf}
+            disabled={isGeneratingPdf}
+            className="px-4 py-2.5 bg-pink-600 hover:bg-pink-700 text-white rounded-xl font-bold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+          >
+            <Download size={14} />
+            <span>{isGeneratingPdf ? "Generating PDF..." : "Download Invoice PDF"}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
 
       {/* ASSIGN BOOKS MODAL */}
       {isBookModalOpen && (

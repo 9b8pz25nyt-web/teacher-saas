@@ -40,3 +40,45 @@ body {
   padding: 0.75rem 1.25rem;
   font-weight: 600;
 }
+/* Custom styling for native date input calendar popup */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  filter: invert(33%) sepia(85%) saturate(1450%) hue-rotate(315deg) brightness(95%) contrast(92%);
+}
+
+/* Custom classes for container rounded corners if needed */
+input[type="date"] {
+  border-radius: 0.75rem;
+}
+/* Custom React DatePicker Pink Theme */
+.react-datepicker {
+  font-family: inherit;
+  border: 1px solid #fbcfe8 !important;
+  border-radius: 1rem !important;
+  overflow: hidden;
+  box-shadow: 0 10px 25px -5px rgba(219, 39, 119, 0.1);
+}
+
+.react-datepicker__header {
+  background-color: #fdf2f8 !important;
+  border-bottom: 1px solid #fbcfe8 !important;
+  border-top-left-radius: 1rem !important;
+}
+
+.react-datepicker__day--selected, 
+.react-datepicker__day--keyboard-selected {
+  background-color: #db2777 !important;
+  border-radius: 50% !important;
+  color: white !important;
+}
+
+.react-datepicker__day:hover {
+  background-color: #fce7f3 !important;
+  border-radius: 50% !important;
+  color: #db2777 !important;
+}
+
+.react-datepicker__current-month {
+  color: #831843;
+  font-weight: 700;
+}
