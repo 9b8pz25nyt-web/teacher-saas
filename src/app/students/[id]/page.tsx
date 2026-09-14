@@ -576,7 +576,7 @@ export default function StudentDetailsPage({
     }
   }
 
-  async function handleAddReport(e: React.FormEvent) {
+ async function handleAddReport(e: React.FormEvent) {
     e.preventDefault();
     if (!lessonTitle.trim()) return alert("Please enter a lesson title");
 
@@ -607,6 +607,10 @@ export default function StudentDetailsPage({
       }
 
       const validBookId = reportBookId && reportBookId.trim() !== "" ? reportBookId : null;
+      
+      const isAbsentOrCancelled = 
+        lessonTitle.toLowerCase().includes("absent") || 
+        lessonTitle.toLowerCase().includes("cancelled");
 
       const payload: any = {
         teacher_id: user.id,
@@ -620,7 +624,9 @@ export default function StudentDetailsPage({
         improvements: improvements.trim() || null,
         homework: homework.trim() || null,
         teacher_alias: student?.teacher_alias || teacherAlias || "Teacher Gabi",
-        status: "Completed",
+        status: isAbsentOrCancelled 
+          ? (lessonTitle.toLowerCase().includes("absent") ? "Absent" : "Cancelled") 
+          : "Completed",
       };
 
       const selectedBookItem = studentBooks.find((item: any) => item.books?.id === reportBookId);
@@ -659,7 +665,9 @@ export default function StudentDetailsPage({
           student_id: studentId,
           title: lessonTitle.trim(),
           lesson_date: reportDate,
-          status: "Completed",
+          status: isAbsentOrCancelled 
+            ? (lessonTitle.toLowerCase().includes("absent") ? "Absent" : "Cancelled") 
+            : "Completed",
           description: `Vocab: ${vocabulary}\nStrengths: ${strengths}\nHomework: ${homework}`,
           homework_file_url: uploadedFileUrl || null,
           book_id: validBookId,
@@ -681,12 +689,14 @@ export default function StudentDetailsPage({
           }
         }
 
-        const currentCompleted = student?.classes_completed || 0;
-        await supabase
-          .from("students")
-          .update({ classes_completed: currentCompleted + 1 })
-          .eq("id", studentId)
-          .eq("teacher_id", user.id);
+        if (!isAbsentOrCancelled) {
+          const currentCompleted = student?.classes_completed || 0;
+          await supabase
+            .from("students")
+            .update({ classes_completed: currentCompleted + 1 })
+            .eq("id", studentId)
+            .eq("teacher_id", user.id);
+        }
       }
 
       setEditingReportId(null);

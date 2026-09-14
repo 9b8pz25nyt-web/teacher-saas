@@ -289,12 +289,28 @@ async function handleSubmitHomework(e: React.FormEvent) {
     );
   }
 
- const validReports = reports.filter(
-    (r) => !r.lesson_title?.toLowerCase().includes("cancelled") && !r.title?.toLowerCase().includes("cancelled") && r.status !== "Cancelled"
+const validReports = reports.filter(
+    (r) => {
+      const title = (r.lesson_title || r.title || "").toLowerCase();
+      const status = (r.status || "").toLowerCase();
+      return !title.includes("cancelled") && 
+             !title.includes("absent") && 
+             status !== "cancelled" && 
+             status !== "absent";
+    }
   );
   
   const uniqueLessons = lessons.filter((les) => {
-    if (les.title?.toLowerCase().includes("cancelled") || les.status === "Cancelled") return false;
+    const title = (les.title || "").toLowerCase();
+    const status = (les.status || "").toLowerCase();
+    if (
+      title.includes("cancelled") ||
+      title.includes("absent") ||
+      status === "cancelled" ||
+      status === "absent"
+    ) {
+      return false;
+    }
     const hasMatchingReport = reports.some(
       (rep) =>
         (rep.report_date === les.lesson_date || rep.lesson_date === les.lesson_date) &&
@@ -302,7 +318,6 @@ async function handleSubmitHomework(e: React.FormEvent) {
     );
     return !hasMatchingReport;
   });
-
  const dynamicCompletedClasses = Math.max(validReports.length, uniqueLessons.length);
   const totalIncludedClasses = Number(student.classes_included || 0) + Number(student.free_classes || 0);
   const remainingClasses = Math.max(totalIncludedClasses - dynamicCompletedClasses, 0);
