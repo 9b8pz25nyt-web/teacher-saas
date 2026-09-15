@@ -218,11 +218,14 @@ export default function StudentEditModal({
                 value={paymentCurrency}
                 onChange={(e) => setPaymentCurrency(e.target.value)}
               >
-                {Object.keys(currencies).map((cur) => (
-                  <option key={cur} value={cur}>
-                    {cur} ({currencies[cur].symbol})
-                  </option>
-                ))}
+                {Object.keys(currencies).map((cur) => {
+                  const currData = (currencies as Record<string, any>)[cur];
+                  return (
+                    <option key={cur} value={cur}>
+                      {cur} ({currData?.symbol || ""})
+                    </option>
+                  );
+                })}
               </select>
             </div>
             <div>
@@ -275,25 +278,18 @@ export default function StudentEditModal({
             </div>
           </div>
 
-        <div className="grid grid-cols-2 gap-3">
-  <div>
-    <label className="block mb-1 text-xs font-semibold text-gray-700">Class Duration</label>
-    {/* ... class duration select inputs ... */}
-  </div>
-
-  <div>
-    <label className="block mb-1 font-semibold text-gray-700">Payment Status</label>
-    <select
-      className="w-full border border-pink-200 rounded-xl p-2.5 bg-white text-gray-800 text-xs"
-      value={paymentStatus}
-      onChange={(e) => setPaymentStatus(e.target.value)}
-    >
-      <option value="Pending">Pending</option>
-      <option value="Paid">Paid</option>
-      <option value="Active">Active</option>
-    </select>
-  </div>
-</div>
+          <div>
+            <label className="block mb-1 font-semibold text-gray-700">Payment Status</label>
+            <select
+              className="w-full border border-pink-200 rounded-xl p-2.5 bg-white text-gray-800 text-xs"
+              value={paymentStatus}
+              onChange={(e) => setPaymentStatus(e.target.value)}
+            >
+              <option value="Pending">Pending</option>
+              <option value="Paid">Paid</option>
+              <option value="Active">Active</option>
+            </select>
+          </div>
 
           <div>
             <label className="block mb-1 font-semibold text-gray-700">Teacher Notes</label>
