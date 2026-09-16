@@ -1523,12 +1523,12 @@ const validReports = reports.filter(
                             </div>
                           )}
 
-                          {les.teacher_message && (
-                            <div className="p-3 bg-pink-50/70 rounded-xl border border-pink-200 space-y-1">
-                              <p className="font-bold text-pink-950 text-[11px]">💌 Message from Teacher:</p>
-                              <p className="text-gray-800 text-xs whitespace-pre-wrap">{les.teacher_message}</p>
-                            </div>
-                          )}
+                         {les.teacher_message && (
+  <div className="p-3 bg-pink-50/70 rounded-xl border border-pink-200 space-y-1">
+    <p className="font-bold text-pink-950 text-[11px]">💌 Message from Teacher:</p>
+    <p className="text-gray-800 text-xs whitespace-pre-wrap">{les.teacher_message}</p>
+  </div>
+)}
 
                           {(displayHomework || les.homework_file_url || les.homework_submission_url) && (
                             <div className="p-3 bg-pink-100/50 rounded-xl border border-pink-200 space-y-1.5">
@@ -2066,6 +2066,7 @@ const validReports = reports.filter(
               required
             />
           </div>
+          
           <div>
             <label className="block mb-1 font-semibold text-gray-700">Duration (mins)</label>
             <select
@@ -2113,6 +2114,80 @@ const validReports = reports.filter(
     </div>
   </div>
 )}
+
+{/* EDIT SCHEDULE MODAL */}
+      {editingSchedule && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="card bg-white w-full max-w-md p-6 rounded-3xl shadow-xl space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-bold text-pink-600">Edit Schedule Slot</h2>
+              <button onClick={() => setEditingSchedule(null)} className="p-2 rounded-full hover:bg-pink-50 cursor-pointer">
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateSchedule} className="space-y-4 text-xs">
+              <div>
+                <label className="block mb-1 font-semibold text-gray-700">Day of the Week *</label>
+                <select
+                  className="input w-full border border-gray-200 rounded-xl p-2.5 bg-white text-gray-800"
+                  value={editDayOfWeek}
+                  onChange={(e) => setEditDayOfWeek(e.target.value)}
+                  required
+                >
+                  {DAYS_OF_WEEK.map((day) => (
+                    <option key={day} value={day}>{day}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block mb-1 font-semibold text-gray-700">Start Time *</label>
+                  <input
+                    type="time"
+                    className="input w-full border border-gray-200 rounded-xl p-2.5 bg-white text-gray-800"
+                    value={editStartTime}
+                    onChange={(e) => setEditStartTime(e.target.value)}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1 font-semibold text-gray-700">Duration (mins)</label>
+                  <select
+                    className="input w-full border border-gray-200 rounded-xl p-2.5 bg-white text-gray-800"
+                    value={editDuration}
+                    onChange={(e) => setEditDuration(Number(e.target.value))}
+                  >
+                    <option value={25}>25 mins</option>
+                    <option value={40}>40 mins</option>
+                    <option value={50}>50 mins</option>
+                    <option value={60}>60 mins</option>
+                    <option value={90}>90 mins</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-pink-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingSchedule(null)}
+                  className="px-4 py-2 rounded-xl bg-gray-100 text-gray-700 font-bold hover:bg-gray-200 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isUpdatingSchedule}
+                  className="px-5 py-2 rounded-xl bg-pink-600 text-white font-bold hover:bg-pink-700 cursor-pointer disabled:opacity-50"
+                >
+                  {isUpdatingSchedule ? "Saving..." : "Update Schedule"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 {/* Lesson Log Modal for Editing */}
       {selectedLesson && (
         <LessonLogModal
