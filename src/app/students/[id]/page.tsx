@@ -357,8 +357,7 @@ export default function StudentDetailsPage({
           .from("class_reports")
           .select("*")
           .eq("student_id", studentId)
-          .eq("user_id", user.id)
-          .order("report_date", { ascending: false }),
+          .eq("teacher_id", user.id),
         supabase.from("student_books").select("*").eq("student_id", studentId),
         supabase
           .from("payments")
@@ -615,7 +614,7 @@ export default function StudentDetailsPage({
         lessonTitle.toLowerCase().includes("cancelled");
 
       const payload: any = {
-        teacher_id: user.id,
+        user_id: user.id, // 👈 Fixed from teacher_id to user_id
         lesson_title: lessonTitle.trim(),
         title: lessonTitle.trim(),
         report_date: reportDate,
@@ -646,7 +645,7 @@ export default function StudentDetailsPage({
           .from("class_reports")
           .update(payload)
           .eq("id", editingReportId)
-          .eq("teacher_id", user.id);
+          .eq("user_id", user.id); // 👈 Fixed from teacher_id to user_id
 
         if (updateError) throw updateError;
       } else {
@@ -697,7 +696,7 @@ export default function StudentDetailsPage({
             .from("students")
             .update({ classes_completed: currentCompleted + 1 })
             .eq("id", studentId)
-            .eq("teacher_id", user.id);
+            .eq("user_id", user.id);
         }
       }
 
@@ -1295,330 +1294,373 @@ const validReports = reports.filter(
           </div>
         </div>
 
-        {/* Right Column (7/12): Logged Lessons & Reports */}
-        <div className="lg:col-span-7">
-          <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-bold text-gray-900">
-                  Logged Lessons & Reports
-                </h3>
-                <span className="px-2 py-0.5 bg-pink-50 text-pink-600 font-bold text-xs rounded-full border border-pink-100">
-                  {validReports.length + validLessons.length}
-                </span>
-              </div>
-              <button
-                onClick={() => {
-                  const today = new Date().toISOString().split("T")[0];
-                  setReportDate(today);
-                  setEditingReportId(null);
-                  setLessonTitle("");
-                  setVocabulary("");
-                  setStrengths("");
-                  setImprovements("");
-                  setHomework("");
-                  setHomeworkFile(null);
-                  setSelectedChapterIndex("");
-                  setIsChapterComplete(false);
-                  setIsReportModalOpen(true);
-                }}
-                className="text-xs font-bold text-pink-600 hover:text-pink-700 flex items-center gap-1 cursor-pointer"
-              >
-                <Plus size={14} />
-                <span>Add Report</span>
+        <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs space-y-4">
+  <div className="flex items-center justify-between">
+    <div className="flex items-center gap-2">
+      <h3 className="text-sm font-bold text-gray-900">
+        Logged Lessons & Reports
+      </h3>
+      <span className="px-2 py-0.5 bg-pink-50 text-pink-600 font-bold text-xs rounded-full border border-pink-100">
+        {validReports.length + validLessons.length + completedMakeups.length} {/* 👈 Added completedMakeups */}
+      </span>
+    </div>
+    <button
+      onClick={() => {
+        const today = new Date().toISOString().split("T")[0];
+        setReportDate(today);
+        setEditingReportId(null);
+        setLessonTitle("");
+        setVocabulary("");
+        setStrengths("");
+        setImprovements("");
+        setHomework("");
+        setHomeworkFile(null);
+        setSelectedChapterIndex("");
+        setIsChapterComplete(false);
+        setIsReportModalOpen(true);
+      }}
+      className="text-xs font-bold text-pink-600 hover:text-pink-700 flex items-center gap-1 cursor-pointer"
+    >
+      <Plus size={14} />
+      <span>Add Report</span>
+    </button>
+  </div>
+
+{validReports.length === 0 && validLessons.length === 0 && completedMakeups.length === 0 ? (
+  <div className="p-8 text-center text-xs text-gray-400 space-y-2">
+    <p className="italic">No class reports logged yet.</p>
+    <button
+      type="button"
+      onClick={() => setIsReportModalOpen(true)}
+      className="text-pink-600 font-bold hover:underline"
+    >
+      Click here to log your first lesson
+    </button>
+  </div>
+) : (
+  <div className="space-y-3">
+    {validReports.map((rep) => {
+      const isExpanded = expandedReportIds.includes(rep.id);
+      const matchedBook = books.find((b) => b.id === rep.book_id);
+
+      return (
+        <div key={rep.id} className="bg-pink-50/30 rounded-2xl border border-pink-100 text-xs transition-all overflow-hidden">
+          <div
+            onClick={() => toggleExpandReport(rep.id)}
+            className="p-3.5 flex items-center justify-between cursor-pointer hover:bg-pink-100/40 select-none transition"
+          >
+            <div className="flex items-center gap-2">
+              <button type="button" className="p-1 rounded-lg text-pink-600 bg-white border border-pink-200 shadow-2xs">
+                {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
               </button>
+              <h4 className="font-bold text-pink-950 text-xs">{rep.lesson_title || rep.title || "Class Report"}</h4>
             </div>
 
-            {validReports.length === 0 && validLessons.length === 0 ? (
-              <div className="p-8 text-center text-xs text-gray-400 space-y-2">
-                <p className="italic">No class reports logged yet.</p>
-                <button
-                  type="button"
-                  onClick={() => setIsReportModalOpen(true)}
-                  className="text-pink-600 font-bold hover:underline"
-                >
-                  Click here to log your first lesson
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {validReports.map((rep) => {
-                  const isExpanded = expandedReportIds.includes(rep.id);
-                  const matchedBook = books.find((b) => b.id === rep.book_id);
-
-                  return (
-                    <div key={rep.id} className="bg-pink-50/30 rounded-2xl border border-pink-100 text-xs transition-all overflow-hidden">
-                      <div
-                        onClick={() => toggleExpandReport(rep.id)}
-                        className="p-3.5 flex items-center justify-between cursor-pointer hover:bg-pink-100/40 select-none transition"
-                      >
-                        <div className="flex items-center gap-2">
-                          <button type="button" className="p-1 rounded-lg text-pink-600 bg-white border border-pink-200 shadow-2xs">
-                            {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-                          </button>
-                          <h4 className="font-bold text-pink-950 text-xs">{rep.lesson_title || rep.title || "Class Report"}</h4>
-                        </div>
-
-                        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                          <span className="text-[11px] font-mono text-gray-500">{rep.report_date?.substring(0, 10)}</span>
-                          <button onClick={() => handleOpenEditReport(rep)} className="text-gray-400 hover:text-pink-600 p-1 cursor-pointer">
-                            <Edit2 size={13} />
-                          </button>
-                          <button onClick={() => handleDeleteReport(rep.id, rep.homework_file_url)} className="text-gray-400 hover:text-red-600 p-1 cursor-pointer">
-                            <Trash2 size={13} />
-                          </button>
-                        </div>
-                      </div>
-
-                      {isExpanded && (
-                        <div className="px-4 pb-4 pt-1 border-t border-pink-100/60 space-y-2.5 bg-white/50">
-                          {matchedBook && (
-                            <div className="pt-1">
-                              <span className="text-[10px] font-bold text-pink-800 bg-pink-100/70 px-2.5 py-0.5 rounded-lg border border-pink-200">
-                                📖 {matchedBook.title}: p. {rep.start_page || 1} - {rep.end_page || "N/A"}
-                              </span>
-                            </div>
-                          )}
-
-                          {rep.vocabulary && (
-                            <div className="p-2.5 bg-white rounded-xl border border-pink-100">
-                              <p className="font-bold text-gray-900 text-[11px] mb-0.5">✨ Vocabulary & Structures:</p>
-                              <p className="text-gray-700 font-mono text-xs whitespace-pre-wrap">{rep.vocabulary}</p>
-                            </div>
-                          )}
-
-                          {(rep.strengths || rep.improvements) && (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                              {rep.strengths && (
-                                <div className="p-2.5 bg-emerald-50/60 rounded-xl border border-emerald-100">
-                                  <p className="font-bold text-emerald-900 text-[11px] mb-0.5">🏆 Strengths & Highlights:</p>
-                                  <p className="text-emerald-950 text-xs whitespace-pre-wrap">{rep.strengths}</p>
-                                </div>
-                              )}
-                              {rep.improvements && (
-                                <div className="p-2.5 bg-amber-50/60 rounded-xl border border-amber-100">
-                                  <p className="font-bold text-amber-900 text-[11px] mb-0.5">📈 Next Focus / Tips:</p>
-                                  <p className="text-amber-950 text-xs whitespace-pre-wrap">{rep.improvements}</p>
-                                </div>
-                              )}
-                            </div>
-                          )}
-
-                          {(rep.homework || rep.homework_file_url) && (
-                            <div className="p-3 bg-pink-100/50 rounded-xl border border-pink-200 space-y-1.5">
-                              <p className="font-bold text-pink-950 text-[11px]">📚 Assigned Homework:</p>
-                              {rep.homework && <p className="text-gray-800 text-xs whitespace-pre-wrap">{rep.homework}</p>}
-                              {rep.homework_file_url && (
-                                <a
-                                  href={rep.homework_file_url}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-white text-pink-700 font-bold rounded-lg text-[10px] border border-pink-200 hover:bg-pink-50"
-                                >
-                                  📄 View Attached Worksheet
-                                </a>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-
-                {validLessons.map((les: any) => {
-                  const isExpanded = expandedReportIds.includes(les.id);
-                  const text = les.description || "";
-
-                  const vocabMatch = text.match(/Vocab[:\-]?\s*([\s\S]*?)(?=\n(?:Strengths|Improvements|Homework):|$)/i);
-                  const strengthsMatch = text.match(/Strengths[:\-]?\s*([\s\S]*?)(?=\n(?:Vocab|Improvements|Homework):|$)/i);
-                  const improvementsMatch = text.match(/(?:Improvements|Next Focus)[:\-]?\s*([\s\S]*?)(?=\n(?:Vocab|Strengths|Homework):|$)/i);
-                  const homeworkMatch = text.match(/Homework[:\-]?\s*([\s\S]*?)(?=\n(?:Message|Vocab|Strengths|Improvements):|$)/i);
-
-                  const displayVocab = les.vocab_notes || les.vocabulary || (vocabMatch ? vocabMatch[1].trim() : "");
-                  const displayStrengths = les.strengths_notes || les.strengths || (strengthsMatch ? strengthsMatch[1].trim() : "");
-                  const displayImprovements = les.improvement_notes || les.improvements || (improvementsMatch ? improvementsMatch[1].trim() : "");
-                  const displayHomework = les.homework_notes || les.homework || (homeworkMatch ? homeworkMatch[1].trim() : "");
-
-                  const fallbackMain = !displayStrengths && !displayImprovements && !displayVocab ? text : "";
-
-                  return (
-                    <div key={les.id} className="bg-pink-50/30 rounded-2xl border border-pink-100 text-xs transition-all overflow-hidden">
-                      <div
-                        onClick={() => toggleExpandReport(les.id)}
-                        className="p-3.5 flex items-center justify-between cursor-pointer hover:bg-pink-100/40 select-none transition"
-                      >
-                        <div className="flex items-center gap-2">
-                          <button type="button" className="p-1 rounded-lg text-pink-600 bg-white border border-pink-200 shadow-2xs">
-                            {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-                          </button>
-                          <h4 className="font-bold text-pink-950 text-xs">{les.title || "Lesson Log"}</h4>
-                        </div>
-
-                        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                          <span className="text-[11px] font-mono text-gray-500">
-                            {les.lesson_date?.substring(0, 10)}
-                          </span>
-                          <button
-    onClick={() => {
-      setSelectedLesson({
-        eventId: les.id,
-        studentId: student.id,
-        studentName: student.name,
-        type: "regular",
-        dateString: les.lesson_date,
-      });
-    }}
-    className="px-2.5 py-1 bg-pink-50 hover:bg-pink-100 text-pink-700 text-[10px] font-bold rounded-lg border border-pink-200 transition cursor-pointer flex items-center gap-1"
-  >
-    ✏️ Edit
-  </button>
-                        </div>
-                      </div>
-
-                      {isExpanded && (
-                        <div className="px-4 pb-4 pt-1 border-t border-pink-100/60 space-y-2.5 bg-white/50">
-                          {Array.isArray(les.book_progress) && les.book_progress.length > 0 && (
-                            <div className="flex flex-wrap gap-1.5 pt-1">
-                              {les.book_progress.map((bp: any, idx: number) => {
-                                const matchedBook = books.find((b) => b.id === bp.book_id);
-                                return (
-                                  <span key={idx} className="text-[10px] font-bold text-pink-800 bg-pink-100/70 px-2.5 py-0.5 rounded-lg border border-pink-200">
-                                    📖 {matchedBook?.title || "Book"}: p. {bp.start_page || 1} - {bp.end_page}
-                                  </span>
-                                );
-                              })}
-                            </div>
-                          )}
-
-                          {displayVocab && (
-                            <div className="p-2.5 bg-white rounded-xl border border-pink-100">
-                              <p className="font-bold text-gray-900 text-[11px] mb-0.5">✨ Vocabulary & Structures:</p>
-                              <p className="text-gray-700 font-mono text-xs whitespace-pre-wrap">{displayVocab}</p>
-                            </div>
-                          )}
-
-                          {(displayStrengths || displayImprovements) && (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                              {displayStrengths && (
-                                <div className="p-2.5 bg-emerald-50/60 rounded-xl border border-emerald-100">
-                                  <p className="font-bold text-emerald-900 text-[11px] mb-0.5">🏆 Strengths & Highlights:</p>
-                                  <p className="text-emerald-950 text-xs whitespace-pre-wrap">{displayStrengths}</p>
-                                </div>
-                              )}
-                              {displayImprovements && (
-                                <div className="p-2.5 bg-amber-50/60 rounded-xl border border-amber-100">
-                                  <p className="font-bold text-amber-900 text-[11px] mb-0.5">📈 Next Focus / Tips:</p>
-                                  <p className="text-amber-950 text-xs whitespace-pre-wrap">{displayImprovements}</p>
-                                </div>
-                              )}
-                            </div>
-                          )}
-
-                          {fallbackMain && (
-                            <div className="p-3 bg-white rounded-xl border border-pink-100">
-                              <p className="font-bold text-gray-900 text-[11px] mb-0.5">📝 Teacher Feedback & Notes:</p>
-                              <p className="text-gray-800 text-xs whitespace-pre-wrap leading-relaxed">{fallbackMain}</p>
-                            </div>
-                          )}
-
-                          {les.teacher_message && (
-                          <div className="p-3 bg-pink-50/70 rounded-xl border border-pink-200 space-y-1">
-                            <p className="font-bold text-pink-950 text-[11px]">💌 Message from Teacher:</p>
-                            <p className="text-gray-800 text-xs whitespace-pre-wrap">{les.teacher_message}</p>
-                          </div>
-                        )}
-
-                          {(displayHomework || les.homework_file_url) && (
-                            <div className="p-3 bg-pink-100/50 rounded-xl border border-pink-200 space-y-1.5">
-                              <p className="font-bold text-pink-950 text-[11px]">📚 Assigned Homework:</p>
-                              {displayHomework && <p className="text-gray-800 text-xs whitespace-pre-wrap">{displayHomework}</p>}
-                           {les.homework_file_url && (
-  <div>
-    <a
-      href={les.homework_file_url}
-      target="_blank"
-      rel="noreferrer"
-      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border-2 border-pink-300 text-pink-800 font-bold rounded-lg text-[10px] hover:bg-pink-50 transition shadow-2xs"
-    >
-      <span>📄 View Teacher Worksheet / Page</span>
-    </a>
-  </div>
-)}
-
-{/* Add this new block right here */}
-{les.homework_submission_url && (
-  <div className="pt-2 border-t border-pink-300/80 flex items-center gap-2">
-    <span className="text-xs text-emerald-800 font-bold">Completed File:</span>
-    <a
-      href={les.homework_submission_url}
-      target="_blank"
-      rel="noreferrer"
-      className="text-xs text-pink-700 font-bold underline hover:text-pink-800"
-    >
-      View Submitted Homework
-    </a>
-  </div>
-)}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-                {completedMakeups.map((mc: any) => {
-                  const isExpanded = expandedReportIds.includes(mc.id);
-                  const matchedBook = books.find((b) => b.id === mc.book_id);
-
-                  return (
-                    <div key={mc.id} className="bg-pink-50/30 rounded-2xl border border-pink-100 text-xs transition-all overflow-hidden">
-                      <div
-                        onClick={() => toggleExpandReport(mc.id)}
-                        className="p-3.5 flex items-center justify-between cursor-pointer hover:bg-pink-100/40 select-none transition"
-                      >
-                        <div className="flex items-center gap-2">
-                          <button type="button" className="p-1 rounded-lg text-pink-600 bg-white border border-pink-200 shadow-2xs">
-                            {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-                          </button>
-                          <h4 className="font-bold text-pink-950 text-xs">⭐ Makeup Class: {mc.topic || mc.title || "Makeup Session"}</h4>
-                        </div>
-
-                        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                          <span className="text-[11px] font-mono text-gray-500">
-                            {(mc.makeup_date || mc.date || "").substring(0, 10)}
-                          </span>
-                          <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 font-bold text-[10px] rounded-md uppercase border border-emerald-200">
-                            {mc.status || "Attended"}
-                          </span>
-                        </div>
-                      </div>
-
-                      {isExpanded && (
-                        <div className="px-4 pb-4 pt-1 border-t border-pink-100/60 space-y-2.5 bg-white/50">
-                          {matchedBook && (
-                            <div className="pt-1">
-                              <span className="text-[10px] font-bold text-pink-800 bg-pink-100/70 px-2.5 py-0.5 rounded-lg border border-pink-200">
-                                📖 {matchedBook.title}
-                              </span>
-                            </div>
-                          )}
-
-                          {mc.notes && (
-                            <div className="p-2.5 bg-white rounded-xl border border-pink-100">
-                              <p className="font-bold text-gray-900 text-[11px] mb-0.5">📝 Makeup Notes:</p>
-                              <p className="text-gray-700 text-xs whitespace-pre-wrap">{mc.notes}</p>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+              <span className="text-[11px] font-mono text-gray-500">{rep.report_date?.substring(0, 10)}</span>
+              <button onClick={() => handleOpenEditReport(rep)} className="text-gray-400 hover:text-pink-600 p-1 cursor-pointer">
+                <Edit2 size={13} />
+              </button>
+              <button onClick={() => handleDeleteReport(rep.id, rep.homework_file_url)} className="text-gray-400 hover:text-red-600 p-1 cursor-pointer">
+                <Trash2 size={13} />
+              </button>
+            </div>
           </div>
+
+          {isExpanded && (
+            <div className="px-4 pb-4 pt-1 border-t border-pink-100/60 space-y-2.5 bg-white/50">
+              {matchedBook && (
+                <div className="pt-1">
+                  <span className="text-[10px] font-bold text-pink-800 bg-pink-100/70 px-2.5 py-0.5 rounded-lg border border-pink-200">
+                    📖 {matchedBook.title}: p. {rep.start_page || 1} - {rep.end_page || "N/A"}
+                  </span>
+                </div>
+              )}
+
+              {rep.vocabulary && (
+                <div className="p-2.5 bg-white rounded-xl border border-pink-100">
+                  <p className="font-bold text-gray-900 text-[11px] mb-0.5">✨ Vocabulary & Structures:</p>
+                  <p className="text-gray-700 font-mono text-xs whitespace-pre-wrap">{rep.vocabulary}</p>
+                </div>
+              )}
+
+              {(rep.strengths || rep.improvements) && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {rep.strengths && (
+                    <div className="p-2.5 bg-emerald-50/60 rounded-xl border border-emerald-100">
+                      <p className="font-bold text-emerald-900 text-[11px] mb-0.5">🏆 Strengths & Highlights:</p>
+                      <p className="text-emerald-950 text-xs whitespace-pre-wrap">{rep.strengths}</p>
+                    </div>
+                  )}
+                  {rep.improvements && (
+                    <div className="p-2.5 bg-amber-50/60 rounded-xl border border-amber-100">
+                      <p className="font-bold text-amber-900 text-[11px] mb-0.5">📈 Next Focus / Tips:</p>
+                      <p className="text-amber-950 text-xs whitespace-pre-wrap">{rep.improvements}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {(rep.homework || rep.homework_file_url) && (
+                <div className="p-3 bg-pink-100/50 rounded-xl border border-pink-200 space-y-1.5">
+                  <p className="font-bold text-pink-950 text-[11px]">📚 Assigned Homework:</p>
+                  {rep.homework && <p className="text-gray-800 text-xs whitespace-pre-wrap">{rep.homework}</p>}
+                  {rep.homework_file_url && (
+                    <a
+                      href={rep.homework_file_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-white text-pink-700 font-bold rounded-lg text-[10px] border border-pink-200 hover:bg-pink-50"
+                    >
+                      📄 View Attached Worksheet
+                    </a>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
+      );
+    })}
+
+    {validLessons.map((les: any) => {
+      const isExpanded = expandedReportIds.includes(les.id);
+      const text = les.description || "";
+
+      const vocabMatch = text.match(/Vocab[:\-]?\s*([\s\S]*?)(?=\n(?:Strengths|Improvements|Homework):|$)/i);
+      const strengthsMatch = text.match(/Strengths[:\-]?\s*([\s\S]*?)(?=\n(?:Vocab|Improvements|Homework):|$)/i);
+      const improvementsMatch = text.match(/(?:Improvements|Next Focus)[:\-]?\s*([\s\S]*?)(?=\n(?:Vocab|Strengths|Homework):|$)/i);
+      const homeworkMatch = text.match(/Homework[:\-]?\s*([\s\S]*?)(?=\n(?:Message|Vocab|Strengths|Improvements):|$)/i);
+
+      const displayVocab = les.vocab_notes || les.vocabulary || (vocabMatch ? vocabMatch[1].trim() : "");
+      const displayStrengths = les.strengths_notes || les.strengths || (strengthsMatch ? strengthsMatch[1].trim() : "");
+      const displayImprovements = les.improvement_notes || les.improvements || (improvementsMatch ? improvementsMatch[1].trim() : "");
+      const displayHomework = les.homework_notes || les.homework || (homeworkMatch ? homeworkMatch[1].trim() : "");
+
+      const fallbackMain = !displayStrengths && !displayImprovements && !displayVocab ? text : "";
+
+      return (
+        <div key={les.id} className="bg-pink-50/30 rounded-2xl border border-pink-100 text-xs transition-all overflow-hidden">
+          <div
+            onClick={() => toggleExpandReport(les.id)}
+            className="p-3.5 flex items-center justify-between cursor-pointer hover:bg-pink-100/40 select-none transition"
+          >
+            <div className="flex items-center gap-2">
+              <button type="button" className="p-1 rounded-lg text-pink-600 bg-white border border-pink-200 shadow-2xs">
+                {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+              </button>
+              <h4 className="font-bold text-pink-950 text-xs">{les.title || "Lesson Log"}</h4>
+            </div>
+
+            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+              <span className="text-[11px] font-mono text-gray-500">
+                {les.lesson_date?.substring(0, 10)}
+              </span>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedLesson({
+                    eventId: les.id,
+                    studentId: student.id,
+                    studentName: student.name,
+                    type: "regular",
+                    dateString: les.lesson_date,
+                  });
+                }}
+                className="px-2.5 py-1 bg-pink-50 hover:bg-pink-100 text-pink-700 text-[10px] font-bold rounded-lg border border-pink-200 transition cursor-pointer flex items-center gap-1"
+              >
+                ✏️ Edit
+              </button>
+            </div>
+          </div>
+
+          {isExpanded && (
+            <div className="px-4 pb-4 pt-1 border-t border-pink-100/60 space-y-2.5 bg-white/50">
+              {Array.isArray(les.book_progress) && les.book_progress.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {les.book_progress.map((bp: any, idx: number) => {
+                    const matchedBook = books.find((b) => b.id === bp.book_id);
+                    return (
+                      <span key={idx} className="text-[10px] font-bold text-pink-800 bg-pink-100/70 px-2.5 py-0.5 rounded-lg border border-pink-200">
+                        📖 {matchedBook?.title || "Book"}: p. {bp.start_page || 1} - {bp.end_page}
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+
+              {displayVocab && (
+                <div className="p-2.5 bg-white rounded-xl border border-pink-100">
+                  <p className="font-bold text-gray-900 text-[11px] mb-0.5">✨ Vocabulary & Structures:</p>
+                  <p className="text-gray-700 font-mono text-xs whitespace-pre-wrap">{displayVocab}</p>
+                </div>
+              )}
+
+              {(displayStrengths || displayImprovements) && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {displayStrengths && (
+                    <div className="p-2.5 bg-emerald-50/60 rounded-xl border border-emerald-100">
+                      <p className="font-bold text-emerald-900 text-[11px] mb-0.5">🏆 Strengths & Highlights:</p>
+                      <p className="text-emerald-950 text-xs whitespace-pre-wrap">{displayStrengths}</p>
+                    </div>
+                  )}
+                  {displayImprovements && (
+                    <div className="p-2.5 bg-amber-50/60 rounded-xl border border-amber-100">
+                      <p className="font-bold text-amber-900 text-[11px] mb-0.5">📈 Next Focus / Tips:</p>
+                      <p className="text-amber-950 text-xs whitespace-pre-wrap">{displayImprovements}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {fallbackMain && (
+                <div className="p-3 bg-white rounded-xl border border-pink-100">
+                  <p className="font-bold text-gray-900 text-[11px] mb-0.5">📝 Teacher Feedback & Notes:</p>
+                  <p className="text-gray-800 text-xs whitespace-pre-wrap leading-relaxed">{fallbackMain}</p>
+                </div>
+              )}
+
+              {les.teacher_message && (
+                <div className="p-3 bg-pink-50/70 rounded-xl border border-pink-200 space-y-1">
+                  <p className="font-bold text-pink-950 text-[11px]">💌 Message from Teacher:</p>
+                  <p className="text-gray-800 text-xs whitespace-pre-wrap">{les.teacher_message}</p>
+                </div>
+              )}
+
+              {(displayHomework || les.homework_file_url || les.homework_submission_url) && (
+                <div className="p-3 bg-pink-100/50 rounded-xl border border-pink-200 space-y-1.5">
+                  <p className="font-bold text-pink-950 text-[11px]">📚 Assigned Homework:</p>
+                  {displayHomework && <p className="text-gray-800 text-xs whitespace-pre-wrap">{displayHomework}</p>}
+                  
+                  {les.homework_file_url && (
+                    <div>
+                      <a
+                        href={les.homework_file_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border-2 border-pink-300 text-pink-800 font-bold rounded-lg text-[10px] hover:bg-pink-50 transition shadow-2xs"
+                      >
+                        <span>📄 View Teacher Worksheet / Page</span>
+                      </a>
+                    </div>
+                  )}
+
+                  {les.homework_submission_url && (
+                    <div className="pt-2 border-t border-pink-300/80 flex items-center gap-2">
+                      <span className="text-xs text-emerald-800 font-bold">Completed File:</span>
+                      <a
+                        href={les.homework_submission_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs text-pink-700 font-bold underline hover:text-pink-800"
+                      >
+                        View Submitted Homework
+                      </a>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    })}
+
+ {completedMakeups.map((mc: any) => {
+  const isExpanded = expandedReportIds.includes(mc.id);
+  const matchedBook = books.find((b) => b.id === mc.book_id);
+  const text = mc.notes || "";
+
+  const vocabMatch = text.match(/Vocab[:\-]?\s*([\s\S]*?)(?=\n(?:Strengths|Improvements|Homework):|$)/i);
+  const strengthsMatch = text.match(/Strengths[:\-]?\s*([\s\S]*?)(?=\n(?:Vocab|Improvements|Homework):|$)/i);
+  const improvementsMatch = text.match(/(?:Improvements|Next Focus)[:\-]?\s*([\s\S]*?)(?=\n(?:Vocab|Strengths|Homework):|$)/i);
+  const homeworkMatch = text.match(/Homework[:\-]?\s*([\s\S]*?)(?=\n(?:Message|Vocab|Strengths|Improvements):|$)/i);
+
+  const displayVocab = vocabMatch ? vocabMatch[1].trim() : "";
+  const displayStrengths = strengthsMatch ? strengthsMatch[1].trim() : "";
+  const displayImprovements = improvementsMatch ? improvementsMatch[1].trim() : "";
+  const displayHomework = homeworkMatch ? homeworkMatch[1].trim() : "";
+  const fallbackMain = !displayStrengths && !displayImprovements && !displayVocab ? text : "";
+
+  return (
+    <div key={mc.id} className="bg-pink-50/30 rounded-2xl border border-pink-100 text-xs transition-all overflow-hidden">
+      <div
+        onClick={() => toggleExpandReport(mc.id)}
+        className="p-3.5 flex items-center justify-between cursor-pointer hover:bg-pink-100/40 select-none transition"
+      >
+        <div className="flex items-center gap-2">
+          <button type="button" className="p-1 rounded-lg text-pink-600 bg-white border border-pink-200 shadow-2xs">
+            {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+          </button>
+          <h4 className="font-bold text-pink-950 text-xs">⭐ Makeup Class: {mc.topic || mc.title || "Makeup Session"}</h4>
+        </div>
+
+        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+          <span className="text-[11px] font-mono text-gray-500">
+            {(mc.makeup_date || mc.date || "").substring(0, 10)}
+          </span>
+          <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 font-bold text-[10px] rounded-md uppercase border border-emerald-200">
+            {mc.status || "Attended"}
+          </span>
+        </div>
+      </div>
+
+      {isExpanded && (
+        <div className="px-4 pb-4 pt-1 border-t border-pink-100/60 space-y-2.5 bg-white/50">
+          {matchedBook && (
+            <div className="pt-1">
+              <span className="text-[10px] font-bold text-pink-800 bg-pink-100/70 px-2.5 py-0.5 rounded-lg border border-pink-200">
+                📖 {matchedBook.title}
+              </span>
+            </div>
+          )}
+
+          {displayVocab && (
+            <div className="p-2.5 bg-white rounded-xl border border-pink-100">
+              <p className="font-bold text-gray-900 text-[11px] mb-0.5">✨ Vocabulary & Structures:</p>
+              <p className="text-gray-700 font-mono text-xs whitespace-pre-wrap">{displayVocab}</p>
+            </div>
+          )}
+
+          {(displayStrengths || displayImprovements) && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {displayStrengths && (
+                <div className="p-2.5 bg-emerald-50/60 rounded-xl border border-emerald-100">
+                  <p className="font-bold text-emerald-900 text-[11px] mb-0.5">🏆 Strengths & Highlights:</p>
+                  <p className="text-emerald-950 text-xs whitespace-pre-wrap">{displayStrengths}</p>
+                </div>
+              )}
+              {displayImprovements && (
+                <div className="p-2.5 bg-amber-50/60 rounded-xl border border-amber-100">
+                  <p className="font-bold text-amber-900 text-[11px] mb-0.5">📈 Next Focus / Tips:</p>
+                  <p className="text-amber-950 text-xs whitespace-pre-wrap">{displayImprovements}</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {fallbackMain && (
+            <div className="p-3 bg-white rounded-xl border border-pink-100">
+              <p className="font-bold text-gray-900 text-[11px] mb-0.5">📝 Makeup Notes:</p>
+              <p className="text-gray-800 text-xs whitespace-pre-wrap leading-relaxed">{fallbackMain}</p>
+            </div>
+          )}
+
+          {displayHomework && (
+            <div className="p-3 bg-pink-100/50 rounded-xl border border-pink-200 space-y-1.5">
+              <p className="font-bold text-pink-950 text-[11px]">📚 Assigned Homework:</p>
+              <p className="text-gray-800 text-xs whitespace-pre-wrap">{displayHomework}</p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+})}
+  </div>
+)}
+</div>
       </div>
 
 {/* RENEWAL INVOICE & PARENT NOTICE MODAL */}

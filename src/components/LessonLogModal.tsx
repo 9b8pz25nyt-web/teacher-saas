@@ -162,13 +162,14 @@ Homework: ${homework || "None"}
 
 Message: ${parentMessage || ""}`
 
-      if (eventType === 'makeup') {
+if (eventType === 'makeup') {
         const { error: makeupErr } = await supabase
           .from('makeup_classes')
           .update({
             status: 'Completed',
             topic: title || 'Make-up Lesson',
             book_progress: validBooks,
+            notes: structuredDesc, // 👈 Save the structured feedback notes here
           })
           .eq('id', eventId)
 

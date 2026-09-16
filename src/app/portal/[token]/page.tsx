@@ -176,16 +176,21 @@ const [submitSuccess, setSubmitSuccess] = useState(false);
     loadPortalData();
   }, [token]);
 
-  async function handleSaveRequest() {
+ async function handleSaveRequest() {
     if (!student) return;
+    
+    // Explicitly update the parent_requests column in the students table
     const { error } = await supabase
       .from("students")
-      .update({ parent_requests: parentRequestText })
+      .update({ parent_requests: parentRequestText.trim() }) // 👈 Matches teacher dashboard state key
       .eq("id", student.id);
 
     if (!error) {
       setSavedSuccess(true);
       setTimeout(() => setSavedSuccess(false), 3000);
+    } else {
+      console.error("Failed to save parent request:", error);
+      alert("Failed to send note to teacher.");
     }
   }
 
