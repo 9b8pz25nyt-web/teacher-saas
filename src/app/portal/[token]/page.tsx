@@ -28,6 +28,7 @@ export default function StudentPortalPage({
   const [schedules, setSchedules] = useState<any[]>([]);
   const [reports, setReports] = useState<any[]>([]);
   const [lessons, setLessons] = useState<any[]>([]);
+  const [makeupClasses, setMakeupClasses] = useState<any[]>([]);
   const [studentBooks, setStudentBooks] = useState<any[]>([]);
   const [allBooks, setAllBooks] = useState<any[]>([]);
   const [parentRequestText, setParentRequestText] = useState("");
@@ -36,9 +37,9 @@ export default function StudentPortalPage({
   const [uploadingReportId, setUploadingReportId] = useState<string | null>(null);
   const [expandedReportIds, setExpandedReportIds] = useState<string[]>([]);
   const [submissionText, setSubmissionText] = useState("");
-const [submissionFile, setSubmissionFile] = useState<File | null>(null);
-const [isSubmitting, setIsSubmitting] = useState(false);
-const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [submissionFile, setSubmissionFile] = useState<File | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitSuccess, setSubmitSuccess] = useState(false);
 
   function toggleExpandReport(id: string) {
     setExpandedReportIds((prev) =>
@@ -135,6 +136,7 @@ const [submitSuccess, setSubmitSuccess] = useState(false);
           { data: studentBks },
           { data: booksData },
           { data: lessonList },
+          { data: makeupList },
         ] = await Promise.all([
           supabase.from("schedules").select("*").eq("student_id", studentData.id),
           supabase
@@ -149,6 +151,7 @@ const [submitSuccess, setSubmitSuccess] = useState(false);
             .select("*")
             .eq("student_id", studentData.id)
             .order("lesson_date", { ascending: false }),
+          supabase.from("makeup_classes").select("*").eq("student_id", studentData.id),
         ]);
 
         if (scheds) setSchedules(scheds);
@@ -158,12 +161,8 @@ const [submitSuccess, setSubmitSuccess] = useState(false);
             setExpandedReportIds([repList[0].id]);
           }
         }
-        if (lessonList) {
-          setLessons(lessonList);
-          if (repList?.length === 0 && lessonList.length > 0) {
-            setExpandedReportIds([lessonList[0].id]);
-          }
-        }
+        if (lessonList) setLessons(lessonList);
+        if (makeupList) setMakeupClasses(makeupList);
         if (studentBks) setStudentBooks(studentBks);
         if (booksData) setAllBooks(booksData);
       } catch (err) {
@@ -176,25 +175,22 @@ const [submitSuccess, setSubmitSuccess] = useState(false);
     loadPortalData();
   }, [token]);
 
- async function handleSaveRequest() {
+  async function handleSaveRequest() {
     if (!student) return;
-    
-    // Explicitly update the parent_requests column in the students table
     const { error } = await supabase
       .from("students")
-      .update({ parent_requests: parentRequestText.trim() }) // 👈 Matches teacher dashboard state key
+      .update({ parent_requests: parentRequestText.trim() })
       .eq("id", student.id);
 
     if (!error) {
       setSavedSuccess(true);
       setTimeout(() => setSavedSuccess(false), 3000);
     } else {
-      console.error("Failed to save parent request:", error);
       alert("Failed to send note to teacher.");
     }
   }
 
-async function handleSubmitHomework(e: React.FormEvent) {
+  async function handleSubmitHomework(e: React.FormEvent) {
     e.preventDefault();
     if (!submissionText.trim() && !submissionFile) {
       alert("Please enter your answers or attach a file.");
@@ -221,7 +217,6 @@ async function handleSubmitHomework(e: React.FormEvent) {
         fileUrl = publicUrlData.publicUrl;
       }
 
-      // 1. Find the most recent pending report or lesson to update
       const targetReport = reports.find((r) => r.homework_status !== "Submitted");
       const targetLesson = lessons.find((l) => l.homework_status !== "Submitted");
 
@@ -248,7 +243,6 @@ async function handleSubmitHomework(e: React.FormEvent) {
 
         if (updateError) throw updateError;
       } else {
-        // Fallback if no pending report/lesson exists to attach to
         const { error: insertError } = await supabase
           .from("homework_submissions")
           .insert({
@@ -265,19 +259,17 @@ async function handleSubmitHomework(e: React.FormEvent) {
       setSubmissionText("");
       setSubmissionFile(null);
       
-      // Reload data or refresh state to clear the pending banner immediately
       setTimeout(() => {
         setSubmitSuccess(false);
         window.location.reload();
       }, 2000);
-
     } catch (err: any) {
-      console.error("Submission error:", err);
       alert("Failed to submit homework: " + err.message);
     } finally {
       setIsSubmitting(false);
     }
   }
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-neutral-50 text-pink-600 font-bold text-sm">
@@ -294,26 +286,16 @@ async function handleSubmitHomework(e: React.FormEvent) {
     );
   }
 
-const validReports = reports.filter(
-    (r) => {
-      const title = (r.lesson_title || r.title || "").toLowerCase();
-      const status = (r.status || "").toLowerCase();
-      return !title.includes("cancelled") && 
-             !title.includes("absent") && 
-             status !== "cancelled" && 
-             status !== "absent";
-    }
-  );
+  const validReports = reports.filter((r) => {
+    const title = (r.lesson_title || r.title || "").toLowerCase();
+    const status = (r.status || "").toLowerCase();
+    return !title.includes("cancelled") && !title.includes("absent") && status !== "cancelled" && status !== "absent";
+  });
   
   const uniqueLessons = lessons.filter((les) => {
     const title = (les.title || "").toLowerCase();
     const status = (les.status || "").toLowerCase();
-    if (
-      title.includes("cancelled") ||
-      title.includes("absent") ||
-      status === "cancelled" ||
-      status === "absent"
-    ) {
+    if (title.includes("cancelled") || title.includes("absent") || status === "cancelled" || status === "absent") {
       return false;
     }
     const hasMatchingReport = reports.some(
@@ -323,7 +305,13 @@ const validReports = reports.filter(
     );
     return !hasMatchingReport;
   });
- const dynamicCompletedClasses = Math.max(validReports.length, uniqueLessons.length);
+
+  const completedMakeups = makeupClasses.filter((m) => {
+    const s = (m.status || "").trim().toLowerCase();
+    return s === "completed" || s === "attended";
+  });
+
+  const dynamicCompletedClasses = Math.max(validReports.length, uniqueLessons.length) + completedMakeups.length;
   const totalIncludedClasses = Number(student.classes_included || 0) + Number(student.free_classes || 0);
   const remainingClasses = Math.max(totalIncludedClasses - dynamicCompletedClasses, 0);
   const progressPercentage = Math.min(
@@ -343,7 +331,6 @@ const validReports = reports.filter(
         
         {/* Left Column (Col 1): Sidebar */}
         <div className="lg:col-span-1 space-y-5 lg:sticky lg:top-8 self-start">
-          {/* Student Profile Card */}
           <div className="bg-white border-2 border-pink-300 rounded-3xl p-5 shadow-xs space-y-4">
             <div>
               <span className="text-[10px] font-bold text-pink-700 tracking-widest uppercase bg-pink-100 px-2.5 py-1 rounded-lg border border-pink-300">
@@ -368,7 +355,6 @@ const validReports = reports.filter(
             )}
           </div>
 
-          {/* Package Progress Card */}
           <div className="bg-white border-2 border-pink-300 rounded-3xl p-5 shadow-xs space-y-3">
             <h3 className="font-bold text-gray-900 text-sm">Package Progress</h3>
             <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden border border-pink-200">
@@ -389,7 +375,6 @@ const validReports = reports.filter(
             </div>
           </div>
 
-          {/* Class Schedule */}
           <div className="bg-white border-2 border-pink-300 rounded-3xl p-5 shadow-xs space-y-3">
             <h3 className="font-bold text-gray-900 text-sm">Class Schedule</h3>
             {schedules.length === 0 ? (
@@ -408,7 +393,6 @@ const validReports = reports.filter(
             )}
           </div>
 
-          {/* Parent Requests Box */}
           <div className="bg-white border-2 border-pink-300 rounded-3xl p-5 shadow-xs space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="font-bold text-gray-900 text-sm flex items-center gap-1.5">
@@ -421,10 +405,6 @@ const validReports = reports.filter(
                 </span>
               )}
             </div>
-            <p className="text-xs text-gray-600">
-              Special focus requests or notes for the teacher:
-            </p>
-
             <textarea
               rows={3}
               placeholder="e.g. Please focus on speaking fluency..."
@@ -446,7 +426,6 @@ const validReports = reports.filter(
 
         {/* Right Main Area (Cols 2-4) */}
         <div className="lg:col-span-3 space-y-6">
-          {/* Action Required Banner */}
           {pendingHomeworkCount > 0 && (
             <div className="bg-gradient-to-r from-rose-50 to-pink-50 border-2 border-rose-300 text-rose-950 rounded-3xl p-6 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
               <div>
@@ -456,11 +435,7 @@ const validReports = reports.filter(
                 <h2 className="text-lg font-bold mt-2 text-rose-950">
                   You have {pendingHomeworkCount} pending homework assignment(s)
                 </h2>
-                <p className="text-rose-800 text-sm mt-0.5">
-                  Please complete and upload your worksheet below for teacher review.
-                </p>
               </div>
-              
               <a 
                 href="#lesson-history" 
                 className="bg-rose-600 hover:bg-rose-700 text-white font-bold px-4 py-2.5 rounded-xl text-sm shadow-xs transition whitespace-nowrap"
@@ -470,331 +445,70 @@ const validReports = reports.filter(
             </div>
           )}
 
-          {/* Assigned Books & Curriculum Progress */}
-          <div className="bg-white border-2 border-pink-300 rounded-3xl p-6 shadow-xs space-y-3">
-            <div className="flex items-center gap-2 text-pink-700 font-bold text-sm">
-              <BookOpen size={18} />
-              <span>Assigned Books & Curriculum Progress</span>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {studentBooks && studentBooks.length > 0 ? (
-                studentBooks.map((item: any, index: number) => {
-                  const book = allBooks?.find((b: any) => b.id === item.book_id);
-                  const isPageBased = book?.book_type === "pages";
-                  
-                  let bookProgress = 0;
-                  if (book) {
-                    if (isPageBased) {
-                      const reportMax = reports
-                        .filter((r) => r.book_id === book.id)
-                        .reduce((max: number, r: any) => Math.max(max, r.end_page || 0), 0);
-
-                      let lessonMax = 0;
-                      lessons.forEach((l) => {
-                        if (Array.isArray(l.book_progress)) {
-                          l.book_progress.forEach((bp: any) => {
-                            if (bp.book_id === book.id) {
-                              const ep = Number(bp.end_page) || 0;
-                              if (ep > lessonMax) lessonMax = ep;
-                            }
-                          });
-                        } else if (l.book_id === book.id) {
-                          const ep = Number(l.end_page) || 0;
-                          if (ep > lessonMax) lessonMax = ep;
-                        }
-                      });
-
-                      const maxPageReached = Math.max(reportMax, lessonMax);
-                      const totalPages = book.total_pages || 1;
-                      bookProgress = Math.min(100, Math.round((maxPageReached / totalPages) * 100));
-                    } else {
-                      const totalChapters = book.chapters?.length || 1;
-                      const completedChapters = item.completed_chapters?.length || 0;
-                      bookProgress = Math.min(100, Math.round((completedChapters / totalChapters) * 100));
-                    }
-                  }
-
-                  return (
-                    <div key={book?.id || index} className="p-3.5 bg-pink-50/60 rounded-2xl border-2 border-pink-200 space-y-1.5">
-                      <div className="flex justify-between items-center text-sm font-bold text-pink-950">
-                        <span>📖 {book?.title || "Book"}</span>
-                        <span className="text-pink-700 text-xs font-extrabold">{bookProgress}%</span>
-                      </div>
-                      <div className="w-full bg-pink-100 rounded-full h-2 overflow-hidden border border-pink-300">
-                        <div className="bg-pink-600 h-2 rounded-full transition-all duration-300" style={{ width: `${bookProgress}%` }} />
-                      </div>
-                    </div>
-                  );
-                })
-              ) : (
-                <p className="text-sm text-gray-400 italic col-span-2">No books assigned yet.</p>
-              )}
-            </div>
-          </div>
-
-          {/* Daily Class Reports & Lessons */}
           <div id="lesson-history" className="bg-white border-2 border-pink-300 rounded-3xl p-6 shadow-xs space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="font-bold text-gray-900 text-sm flex items-center gap-2">
                 <BookOpen size={16} className="text-pink-600" />
                 <span>Daily Lesson History & Teacher Feedback</span>
               </h3>
-            <span className="text-xs font-bold text-pink-700 bg-pink-100 px-2.5 py-0.5 rounded-lg border border-pink-300">
-  {validReports.length + uniqueLessons.length} Sessions Logged
-</span>
+              <span className="text-xs font-bold text-pink-700 bg-pink-100 px-2.5 py-0.5 rounded-lg border border-pink-300">
+                {validReports.length + uniqueLessons.length + completedMakeups.length} Sessions Logged
+              </span>
             </div>
 
-            {reports.length === 0 && lessons.length === 0 ? (
+            {validReports.length === 0 && uniqueLessons.length === 0 && completedMakeups.length === 0 ? (
               <div className="p-8 text-center bg-pink-50/40 rounded-2xl border-2 border-pink-200">
                 <p className="text-sm text-gray-500 italic">No daily lesson reports recorded yet.</p>
-                <p className="text-xs text-gray-400 mt-1">Lesson notes, new vocabulary, and homework will appear here after class.</p>
               </div>
             ) : (
               <div className="space-y-3">
-
-                
-                {/* Render Class Reports */}
-                {reports.map((rep) => {
-                  const isExpanded = expandedReportIds.includes(rep.id);
-
-                  return (
-                    <div
-                      key={rep.id}
-                      className="bg-pink-50/40 rounded-2xl border-2 border-pink-200 text-sm transition-all overflow-hidden"
-                    >
-                      <div
-                        onClick={() => toggleExpandReport(rep.id)}
-                        className="p-4 flex items-center justify-between cursor-pointer hover:bg-pink-100/50 select-none transition"
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <button
-                            type="button"
-                            className="p-1 rounded-lg text-pink-600 bg-white border border-pink-300 shadow-2xs"
-                          >
-                            {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                          </button>
-                          <span className="px-2 py-0.5 bg-pink-600 text-white text-[10px] font-extrabold rounded-md uppercase">
-                            Report
-                          </span>
-                          <h4 className="font-bold text-pink-950 text-sm">{rep.lesson_title || rep.title || "Class Report"}</h4>
-                        </div>
-
-                        <span className="text-gray-500 text-xs flex items-center gap-1 font-mono font-semibold">
-                          <Calendar size={12} /> {rep.report_date}
-                        </span>
-                      </div>
-
-                      {isExpanded && (
-                        <div className="px-5 pb-5 pt-2 border-t border-pink-200 space-y-3.5 bg-white/60">
-                          {rep.vocabulary && (
-                            <div className="space-y-1">
-                              <span className="font-bold text-gray-900 flex items-center gap-1.5 text-xs">
-                                <Sparkles size={13} className="text-pink-600" /> Vocabulary & Target Structures:
-                              </span>
-                              <p className="text-gray-800 bg-white p-3 rounded-xl border-2 border-pink-200 leading-relaxed font-mono text-xs whitespace-pre-wrap">
-                                {rep.vocabulary}
-                              </p>
-                            </div>
-                          )}
-
-                          {(rep.strengths || rep.improvements) && (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                              {rep.strengths && (
-                                <div className="p-3 bg-emerald-50/80 rounded-xl border-2 border-emerald-200 space-y-1">
-                                  <span className="font-bold text-emerald-900 flex items-center gap-1 text-xs">
-                                    <Award size={13} className="text-emerald-600" /> Strengths & Highlights:
-                                  </span>
-                                  <p className="text-emerald-950 leading-relaxed text-xs whitespace-pre-wrap">{rep.strengths}</p>
-                                </div>
-                              )}
-
-                              {rep.improvements && (
-                                <div className="p-3 bg-amber-50/80 rounded-xl border-2 border-amber-200 space-y-1">
-                                  <span className="font-bold text-amber-900 flex items-center gap-1 text-xs">
-                                    <TrendingUp size={13} className="text-amber-600" /> Next Focus / Tips:
-                                  </span>
-                                  <p className="text-amber-950 leading-relaxed text-m whitespace-pre-wrap">{rep.improvements}</p>
-                                </div>
-                              )}
-                            </div>
-                          )}
-
-                          {(rep.homework || rep.homework_file_url) && (
-                            <div className="p-4 bg-pink-100/60 rounded-2xl border-2 border-pink-300 text-pink-950 space-y-3">
-                              <div className="flex items-center justify-between">
-                                <span className="font-bold flex items-center gap-1.5 text-m text-pink-950">
-                                  <FileCheck size={15} className="text-pink-600" />
-                                  <span>Assigned Homework / Review:</span>
-                                </span>
-
-                                <span
-                                  className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider ${
-                                    rep.homework_status === "Submitted"
-                                      ? "bg-emerald-100 text-emerald-900 border border-emerald-300"
-                                      : "bg-pink-200 text-pink-800 border border-pink-300"
-                                  }`}
-                                >
-                                  {rep.homework_status === "Submitted" ? "✓ Submitted" : "Pending"}
-                                </span>
-                              </div>
-
-                              {rep.homework && (
-                                <p className="leading-relaxed text-xs font-medium text-gray-900 bg-white p-2.5 rounded-xl border-2 border-pink-200 whitespace-pre-wrap">
-                                  {rep.homework}
-                                </p>
-                              )}
-
-                              {rep.homework_file_url && (
-                                <div>
-                                  <a
-                                    href={rep.homework_file_url}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border-2 border-pink-300 text-pink-800 font-bold rounded-lg text-[10px] hover:bg-pink-50 transition shadow-2xs"
-                                  >
-                                    <span>📄 View Teacher Worksheet / Page</span>
-                                  </a>
-                                </div>
-                              )}
-<div className="pt-2 border-t border-pink-300/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-  {rep.homework_submission_url ? (
-    <div className="flex items-center gap-2">
-      <span className="text-xs text-emerald-800 font-bold">Completed File:</span>
-      <a
-        href={rep.homework_submission_url}
-        target="_blank"
-        rel="noreferrer"
-        className="text-xs text-pink-700 font-bold underline hover:text-pink-800"
-      >
-        View Submitted Homework
-      </a>
-    </div>
-  ) : (
-    <p className="text-[10px] text-gray-600 italic">
-      Upload photo of worksheet or notebook when done.
-    </p>
-  )}
-
-  <label className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-pink-600 hover:bg-pink-700 text-white rounded-xl text-[10px] font-bold transition shadow-2xs cursor-pointer self-start sm:self-auto">
-    <span>
-      {uploadingReportId === rep.id
-        ? "Uploading..."
-        : rep.homework_submission_url
-        ? "Re-upload Homework"
-        : "Upload Homework"}
-    </span>
-    <input
-      type="file"
-      accept="image/*,application/pdf"
-      className="hidden"
-      disabled={uploadingReportId === rep.id}
-      onChange={(e) => {
-        const file = e.target.files?.[0];
-        if (file) handleStudentHomeworkUpload(rep.id, file, true);
-      }}
-    />
-  </label>
-</div>
-                              <div className="pt-2 border-t border-pink-300/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                                {rep.homework_submission_url ? (
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-xs text-emerald-800 font-bold">Completed File:</span>
-                                    <a
-                                      href={rep.homework_submission_url}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="text-xs text-pink-700 font-bold underline hover:text-pink-800"
-                                    >
-                                      View Submitted Homework
-                                    </a>
-                                  </div>
-                                ) : (
-                                  <p className="text-[10px] text-gray-600 italic">
-                                    Upload photo of worksheet or notebook when done.
-                                  </p>
-                                )}
-
-                                <label className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-pink-600 hover:bg-pink-700 text-white rounded-xl text-[10px] font-bold transition shadow-2xs cursor-pointer self-start sm:self-auto">
-                                  <span>
-                                    {uploadingReportId === rep.id
-                                      ? "Uploading..."
-                                      : rep.homework_submission_url
-                                      ? "Re-upload Homework"
-                                      : "Upload Homework"}
-                                  </span>
-                                  <input
-                                    type="file"
-                                    accept="image/*,application/pdf"
-                                    className="hidden"
-                                    disabled={uploadingReportId === rep.id}
-                                    onChange={(e) => {
-                                      const file = e.target.files?.[0];
-                                      if (file) handleStudentHomeworkUpload(rep.id, file, false);
-                                    }}
-                                  />
-                                </label>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-
-  {/* Render Lessons with Robust Database Column Fallbacks */}
-{uniqueLessons.map((les: any) => {
-  const isExpanded = expandedReportIds.includes(les.id);
-  const text = les.description || "";
+                {/* Render Makeup Classes */}
+             {completedMakeups.map((mc: any) => {
+  const isExpanded = expandedReportIds.includes(mc.id);
+  const matchedBook = allBooks.find((b) => b.id === mc.book_id);
+  const text = mc.notes || "";
 
   const vocabMatch = text.match(/Vocab[:\-]?\s*([\s\S]*?)(?=\n(?:Strengths|Improvements|Homework):|$)/i);
   const strengthsMatch = text.match(/Strengths[:\-]?\s*([\s\S]*?)(?=\n(?:Vocab|Improvements|Homework):|$)/i);
   const improvementsMatch = text.match(/(?:Improvements|Next Focus)[:\-]?\s*([\s\S]*?)(?=\n(?:Vocab|Strengths|Homework):|$)/i);
- const homeworkMatch = text.match(/Homework[:\-]?\s*([\s\S]*?)(?=\n(?:Message|Teacher Message|Vocab|Strengths|Improvements|Next Focus):|$)/i);
+  const homeworkMatch = text.match(/Homework[:\-]?\s*([\s\S]*?)(?=\n(?:Message|Vocab|Strengths|Improvements):|$)/i);
+  const messageMatch = text.match(/Message[:\-]?\s*([\s\S]*?)(?=\n(?:Vocab|Strengths|Improvements|Homework):|$)/i); // 👈 Added message match
 
-  const displayVocab = les.vocab_notes || les.vocabulary || (vocabMatch ? vocabMatch[1].trim() : "");
-  const displayStrengths = les.strengths_notes || les.strengths || (strengthsMatch ? strengthsMatch[1].trim() : "");
-  const displayImprovements = les.improvement_notes || les.improvements || (improvementsMatch ? improvementsMatch[1].trim() : "");
-  const displayHomework = les.homework_notes || les.homework || (homeworkMatch ? homeworkMatch[1].trim() : "");
-
+  const displayVocab = vocabMatch ? vocabMatch[1].trim() : "";
+  const displayStrengths = strengthsMatch ? strengthsMatch[1].trim() : "";
+  const displayImprovements = improvementsMatch ? improvementsMatch[1].trim() : "";
+  const displayHomework = homeworkMatch ? homeworkMatch[1].trim() : "";
+  const displayMessage = messageMatch ? messageMatch[1].trim() : ""; // 👈 Added display message
   const fallbackMain = !displayStrengths && !displayImprovements && !displayVocab ? text : "";
 
   return (
-    <div key={les.id} className="bg-pink-50/40 rounded-2xl border-2 border-pink-200 text-sm transition-all overflow-hidden">
+    <div key={mc.id} className="bg-pink-50/40 rounded-2xl border-2 border-pink-200 text-sm transition-all overflow-hidden">
       <div
-        onClick={() => toggleExpandReport(les.id)}
+        onClick={() => toggleExpandReport(mc.id)}
         className="p-4 flex items-center justify-between cursor-pointer hover:bg-pink-100/50 select-none transition"
       >
         <div className="flex items-center gap-2.5">
-          <button
-            type="button"
-            className="p-1 rounded-lg text-pink-600 bg-white border border-pink-300 shadow-2xs"
-          >
+          <button type="button" className="p-1 rounded-lg text-pink-600 bg-white border border-pink-300 shadow-2xs">
             {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
           </button>
-          <span className="px-2 py-0.5 bg-pink-600 text-white text-[10px] font-extrabold rounded-md uppercase">
-            Lesson
+          <span className="px-2 py-0.5 bg-emerald-600 text-white text-[10px] font-extrabold rounded-md uppercase">
+            Makeup Class
           </span>
-          <h4 className="font-bold text-pink-950 text-sm">{les.title || "Lesson Log"}</h4>
+          <h4 className="font-bold text-pink-950 text-sm">⭐ {mc.topic || mc.title || "Makeup Session"}</h4>
         </div>
 
         <span className="text-gray-500 text-xs flex items-center gap-1 font-mono font-semibold">
-          <Calendar size={12} /> {les.lesson_date?.substring(0, 10)}
+          <Calendar size={12} /> {(mc.makeup_date || mc.date || "").substring(0, 10)}
         </span>
       </div>
 
       {isExpanded && (
         <div className="px-5 pb-5 pt-2 border-t border-pink-200 space-y-3.5 bg-white/60">
-          {Array.isArray(les.book_progress) && les.book_progress.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 pt-1">
-              {les.book_progress.map((bp: any, idx: number) => {
-                const matchedBook = allBooks.find((b) => b.id === bp.book_id);
-                return (
-                  <span key={idx} className="text-[10px] font-bold text-pink-800 bg-pink-100/70 px-2.5 py-0.5 rounded-lg border border-pink-300">
-                    📖 {matchedBook?.title || "Book"}: p. {bp.start_page || 1} - {bp.end_page}
-                  </span>
-                );
-              })}
+          {matchedBook && (
+            <div className="pt-1">
+              <span className="text-[10px] font-bold text-pink-800 bg-pink-100/70 px-2.5 py-0.5 rounded-lg border border-pink-200">
+                📖 {matchedBook.title}
+              </span>
             </div>
           )}
 
@@ -809,12 +523,12 @@ const validReports = reports.filter(
             </div>
           )}
 
-          {(displayStrengths || displayImprovements || fallbackMain) && (
+          {(displayStrengths || displayImprovements) && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {displayStrengths && (
                 <div className="p-3 bg-emerald-50/80 rounded-xl border-2 border-emerald-200 space-y-1">
                   <span className="font-bold text-emerald-900 flex items-center gap-1 text-xs">
-                    <Award size={13} className="text-emerald-600" /> Class Feedback & Strengths:
+                    <Award size={13} className="text-emerald-600" /> Strengths & Highlights:
                   </span>
                   <p className="text-emerald-950 leading-relaxed text-xs whitespace-pre-wrap">{displayStrengths}</p>
                 </div>
@@ -822,67 +536,41 @@ const validReports = reports.filter(
               {displayImprovements && (
                 <div className="p-3 bg-amber-50/80 rounded-xl border-2 border-amber-200 space-y-1">
                   <span className="font-bold text-amber-900 flex items-center gap-1 text-xs">
-                    <TrendingUp size={13} className="text-amber-600" /> Next Focus & Improvements:
+                    <TrendingUp size={13} className="text-amber-600" /> Next Focus / Tips:
                   </span>
                   <p className="text-amber-950 leading-relaxed text-xs whitespace-pre-wrap">{displayImprovements}</p>
                 </div>
               )}
-              {fallbackMain && !displayStrengths && !displayImprovements && (
-                <div className="col-span-2 p-3 bg-white rounded-xl border-2 border-pink-200 space-y-1">
-                  <span className="font-bold text-gray-900 flex items-center gap-1 text-xs">
-                    <Sparkles size={13} className="text-pink-600" /> Teacher Feedback & Notes:
-                  </span>
-                  <p className="text-gray-800 leading-relaxed text-xs whitespace-pre-wrap">{fallbackMain}</p>
-                </div>
-              )}
             </div>
           )}
-{les.teacher_message && (
+
+          {/* 💌 Teacher Message Display Block */}
+          {displayMessage && (
             <div className="p-3.5 bg-pink-50/70 rounded-xl border-2 border-pink-200 space-y-1">
               <span className="font-bold text-pink-950 text-xs flex items-center gap-1">
                 💌 Message from Teacher:
               </span>
-              <p className="text-gray-900 text-xs whitespace-pre-wrap leading-relaxed">{les.teacher_message}</p>
+              <p className="text-gray-900 text-xs whitespace-pre-wrap leading-relaxed">{displayMessage}</p>
             </div>
           )}
 
-          {(((les.homework_notes || les.homework) && (les.homework_notes || les.homework).toLowerCase() !== "none") || les.homework_file_url) && (
-            <div className="p-4 bg-pink-100/60 rounded-2xl border-2 border-pink-300 text-pink-950 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="font-bold flex items-center gap-1.5 text-m text-pink-950">
-                  <FileCheck size={15} className="text-pink-600" />
-                  <span>Assigned Homework / Review:</span>
-                </span>
+          {fallbackMain && (
+            <div className="p-3 bg-white rounded-xl border-2 border-pink-200 space-y-1">
+              <span className="font-bold text-gray-900 flex items-center gap-1 text-xs">
+                <Sparkles size={13} className="text-pink-600" /> Makeup Notes:
+              </span>
+              <p className="text-gray-800 leading-relaxed text-xs whitespace-pre-wrap">{fallbackMain}</p>
+            </div>
+          )}
 
-                <span
-                  className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider ${
-                    les.homework_status === "Submitted"
-                      ? "bg-emerald-100 text-emerald-900 border border-emerald-300"
-                      : "bg-pink-200 text-pink-800 border border-pink-300"
-                  }`}
-                >
-                  {les.homework_status === "Submitted" ? "✓ Submitted" : "Pending"}
-                </span>
-              </div>
-
-              {displayHomework && displayHomework.toLowerCase() !== "none" && (
-                <p className="leading-relaxed text-m font-medium text-gray-900 bg-white p-2.5 rounded-xl border-2 border-pink-200 whitespace-pre-wrap">
-                  {displayHomework}
-                </p>
-              )}
-
-              {les.homework_file_url && (
-                <div>
-                  <a
-                    href={les.homework_file_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border-2 border-pink-300 text-pink-800 font-bold rounded-lg text-[10px] hover:bg-pink-50 transition shadow-2xs"
-                  >
-                    <span>📄 View Teacher Worksheet / Page</span>
-                  </a>
-                </div>
-              )}
+          {displayHomework && (
+            <div className="p-4 bg-pink-100/60 rounded-2xl border-2 border-pink-300 text-pink-950 space-y-2">
+              <span className="font-bold flex items-center gap-1.5 text-sm">
+                <FileCheck size={15} className="text-pink-600" /> Assigned Homework:
+              </span>
+              <p className="leading-relaxed text-xs font-medium text-gray-900 bg-white p-2.5 rounded-xl border-2 border-pink-200 whitespace-pre-wrap">
+                {displayHomework}
+              </p>
             </div>
           )}
         </div>
@@ -890,56 +578,58 @@ const validReports = reports.filter(
     </div>
   );
 })}
+
+                {/* Render Regular Lessons & Reports */}
+                {uniqueLessons.map((les: any) => {
+                  const isExpanded = expandedReportIds.includes(les.id);
+                  const text = les.description || "";
+                  const displayVocab = les.vocab_notes || les.vocabulary || "";
+                  const displayStrengths = les.strengths_notes || les.strengths || "";
+                  const displayImprovements = les.improvement_notes || les.improvements || "";
+                  const displayHomework = les.homework_notes || les.homework || "";
+
+                  return (
+                    <div key={les.id} className="bg-pink-50/40 rounded-2xl border-2 border-pink-200 text-sm transition-all overflow-hidden">
+                      <div
+                        onClick={() => toggleExpandReport(les.id)}
+                        className="p-4 flex items-center justify-between cursor-pointer hover:bg-pink-100/50 select-none transition"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <button type="button" className="p-1 rounded-lg text-pink-600 bg-white border border-pink-300">
+                            {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                          </button>
+                          <span className="px-2 py-0.5 bg-pink-600 text-white text-[10px] font-extrabold rounded-md uppercase">
+                            Lesson
+                          </span>
+                          <h4 className="font-bold text-pink-950 text-sm">{les.title || "Lesson Log"}</h4>
+                        </div>
+                        <span className="text-gray-500 text-xs font-mono font-semibold">
+                          {les.lesson_date?.substring(0, 10)}
+                        </span>
+                      </div>
+
+                      {isExpanded && (
+                        <div className="px-5 pb-5 pt-2 border-t border-pink-200 space-y-3.5 bg-white/60">
+                          {displayVocab && (
+                            <div className="space-y-1">
+                              <span className="font-bold text-gray-900 text-xs">Vocabulary & Structures:</span>
+                              <p className="text-gray-800 bg-white p-3 rounded-xl border-2 border-pink-200 text-xs whitespace-pre-wrap">{displayVocab}</p>
+                            </div>
+                          )}
+                          {les.teacher_message && (
+                            <div className="p-3.5 bg-pink-50/70 rounded-xl border-2 border-pink-200 space-y-1">
+                              <span className="font-bold text-pink-950 text-xs">💌 Message from Teacher:</span>
+                              <p className="text-gray-900 text-xs whitespace-pre-wrap">{les.teacher_message}</p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
-          {/* General Homework Submission Form */}
-          <form onSubmit={handleSubmitHomework} className="bg-white border-2 border-pink-300 rounded-3xl p-6 shadow-xs space-y-4">
-            <h3 className="font-bold text-gray-900 text-sm flex items-center gap-2">
-              <FileCheck size={16} className="text-pink-600" />
-              <span>Submit Your Homework & Answers</span>
-            </h3>
-            <p className="text-sm text-gray-600">
-              Type your answers below or attach an image/file of your completed work to send it directly to your teacher.
-            </p>
-
-            <div>
-              <label className="block mb-1 text-xs font-semibold text-gray-700">Type your answers / sentences here:</label>
-              <textarea
-                rows={4}
-                value={submissionText}
-                onChange={(e) => setSubmissionText(e.target.value)}
-                placeholder="Type your homework answers here..."
-                className="w-full border-2 border-pink-300 rounded-2xl p-3 text-m text-gray-900 bg-pink-50/30 focus:outline-pink-500"
-              />
-            </div>
-
-            <div>
-              <label className="block mb-1 text-xs font-semibold text-gray-700">Attach an image or PDF (optional):</label>
-              <input
-                type="file"
-                accept="image/*,.pdf"
-                onChange={(e) => setSubmissionFile(e.target.files?.[0] || null)}
-                className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-bold file:bg-pink-100 file:text-pink-800 hover:file:bg-pink-200 cursor-pointer border-2 border-pink-300 rounded-2xl p-1.5 bg-pink-50/30"
-              />
-            </div>
-
-            {submitSuccess && (
-              <p className="text-sm text-emerald-600 font-bold flex items-center gap-1">
-                <CheckCircle2 size={14} /> Homework submitted successfully! Your teacher has been notified.
-              </p>
-            )}
-
-            <div className="flex justify-end">
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="px-5 py-2.5 bg-pink-600 hover:bg-pink-700 text-white text-sm font-bold rounded-xl transition shadow-xs cursor-pointer disabled:opacity-50"
-              >
-                {isSubmitting ? "Sending..." : "Submit to Teacher"}
-              </button>
-            </div>
-          </form>
         </div>
 
       </div>
