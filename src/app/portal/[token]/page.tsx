@@ -292,18 +292,10 @@ export default function StudentPortalPage({
     return !title.includes("cancelled") && !title.includes("absent") && status !== "cancelled" && status !== "absent";
   });
   
-  const uniqueLessons = lessons.filter((les) => {
+  const validLessons = lessons.filter((les) => {
     const title = (les.title || "").toLowerCase();
     const status = (les.status || "").toLowerCase();
-    if (title.includes("cancelled") || title.includes("absent") || status === "cancelled" || status === "absent") {
-      return false;
-    }
-    const hasMatchingReport = reports.some(
-      (rep) =>
-        (rep.report_date === les.lesson_date || rep.lesson_date === les.lesson_date) &&
-        (rep.lesson_title === les.title || rep.title === les.title)
-    );
-    return !hasMatchingReport;
+    return !title.includes("cancelled") && !title.includes("absent") && status !== "cancelled" && status !== "absent";
   });
 
   const completedMakeups = makeupClasses.filter((m) => {
@@ -311,7 +303,13 @@ export default function StudentPortalPage({
     return s === "completed" || s === "attended";
   });
 
-  const dynamicCompletedClasses = Math.max(validReports.length, uniqueLessons.length) + completedMakeups.length;
+  const allSessionDates = new Set([
+    ...validReports.map(r => r.report_date || r.lesson_date),
+    ...validLessons.map(l => l.lesson_date),
+    ...completedMakeups.map(m => m.makeup_date || m.date)
+  ]);
+  const dynamicCompletedClasses = allSessionDates.size || Math.max(validReports.length, validLessons.length) + completedMakeups.length;
+  
   const totalIncludedClasses = Number(student.classes_included || 0) + Number(student.free_classes || 0);
   const remainingClasses = Math.max(totalIncludedClasses - dynamicCompletedClasses, 0);
   const progressPercentage = Math.min(
@@ -321,7 +319,7 @@ export default function StudentPortalPage({
 
   const pendingHomeworkCount = validReports.filter(
     (report) => (report.homework || report.homework_file_url) && report.homework_status !== "Submitted"
-  ).length + uniqueLessons.filter(
+  ).length + validLessons.filter(
     (lesson) => (lesson.homework || lesson.homework_file_url || lesson.homework_notes) && lesson.homework_status !== "Submitted"
   ).length;
 
@@ -452,141 +450,202 @@ export default function StudentPortalPage({
                 <span>Daily Lesson History & Teacher Feedback</span>
               </h3>
               <span className="text-xs font-bold text-pink-700 bg-pink-100 px-2.5 py-0.5 rounded-lg border border-pink-300">
-                {validReports.length + uniqueLessons.length + completedMakeups.length} Sessions Logged
+                {validReports.length + validLessons.length + completedMakeups.length} Sessions Logged
               </span>
             </div>
 
-            {validReports.length === 0 && uniqueLessons.length === 0 && completedMakeups.length === 0 ? (
+            {validReports.length === 0 && validLessons.length === 0 && completedMakeups.length === 0 ? (
               <div className="p-8 text-center bg-pink-50/40 rounded-2xl border-2 border-pink-200">
                 <p className="text-sm text-gray-500 italic">No daily lesson reports recorded yet.</p>
               </div>
             ) : (
               <div className="space-y-3">
-                {/* Render Makeup Classes */}
-             {completedMakeups.map((mc: any) => {
-  const isExpanded = expandedReportIds.includes(mc.id);
-  const matchedBook = allBooks.find((b) => b.id === mc.book_id);
-  const text = mc.notes || "";
+                {/* 1. Render Makeup Classes */}
+                {completedMakeups.map((mc: any) => {
+                  const isExpanded = expandedReportIds.includes(mc.id);
+                  const matchedBook = allBooks.find((b) => b.id === mc.book_id);
+                  const text = mc.notes || "";
 
-  const vocabMatch = text.match(/Vocab[:\-]?\s*([\s\S]*?)(?=\n(?:Strengths|Improvements|Homework):|$)/i);
-  const strengthsMatch = text.match(/Strengths[:\-]?\s*([\s\S]*?)(?=\n(?:Vocab|Improvements|Homework):|$)/i);
-  const improvementsMatch = text.match(/(?:Improvements|Next Focus)[:\-]?\s*([\s\S]*?)(?=\n(?:Vocab|Strengths|Homework):|$)/i);
-  const homeworkMatch = text.match(/Homework[:\-]?\s*([\s\S]*?)(?=\n(?:Message|Vocab|Strengths|Improvements):|$)/i);
-  const messageMatch = text.match(/Message[:\-]?\s*([\s\S]*?)(?=\n(?:Vocab|Strengths|Improvements|Homework):|$)/i); // 👈 Added message match
+                  const vocabMatch = text.match(/Vocab[:\-]?\s*([\s\S]*?)(?=\n(?:Strengths|Improvements|Homework):|$)/i);
+                  const strengthsMatch = text.match(/Strengths[:\-]?\s*([\s\S]*?)(?=\n(?:Vocab|Improvements|Homework):|$)/i);
+                  const improvementsMatch = text.match(/(?:Improvements|Next Focus)[:\-]?\s*([\s\S]*?)(?=\n(?:Vocab|Strengths|Homework):|$)/i);
+                  const homeworkMatch = text.match(/Homework[:\-]?\s*([\s\S]*?)(?=\n(?:Message|Vocab|Strengths|Improvements):|$)/i);
+                  const messageMatch = text.match(/Message[:\-]?\s*([\s\S]*?)(?=\n(?:Vocab|Strengths|Improvements|Homework):|$)/i);
 
-  const displayVocab = vocabMatch ? vocabMatch[1].trim() : "";
-  const displayStrengths = strengthsMatch ? strengthsMatch[1].trim() : "";
-  const displayImprovements = improvementsMatch ? improvementsMatch[1].trim() : "";
-  const displayHomework = homeworkMatch ? homeworkMatch[1].trim() : "";
-  const displayMessage = messageMatch ? messageMatch[1].trim() : ""; // 👈 Added display message
-  const fallbackMain = !displayStrengths && !displayImprovements && !displayVocab ? text : "";
+                  const displayVocab = vocabMatch ? vocabMatch[1].trim() : "";
+                  const displayStrengths = strengthsMatch ? strengthsMatch[1].trim() : "";
+                  const displayImprovements = improvementsMatch ? improvementsMatch[1].trim() : "";
+                  const displayHomework = homeworkMatch ? homeworkMatch[1].trim() : "";
+                  const displayMessage = messageMatch ? messageMatch[1].trim() : "";
+                  const fallbackMain = !displayStrengths && !displayImprovements && !displayVocab ? text : "";
 
-  return (
-    <div key={mc.id} className="bg-pink-50/40 rounded-2xl border-2 border-pink-200 text-sm transition-all overflow-hidden">
-      <div
-        onClick={() => toggleExpandReport(mc.id)}
-        className="p-4 flex items-center justify-between cursor-pointer hover:bg-pink-100/50 select-none transition"
-      >
-        <div className="flex items-center gap-2.5">
-          <button type="button" className="p-1 rounded-lg text-pink-600 bg-white border border-pink-300 shadow-2xs">
-            {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-          </button>
-          <span className="px-2 py-0.5 bg-emerald-600 text-white text-[10px] font-extrabold rounded-md uppercase">
-            Makeup Class
-          </span>
-          <h4 className="font-bold text-pink-950 text-sm">⭐ {mc.topic || mc.title || "Makeup Session"}</h4>
-        </div>
+                  return (
+                    <div key={mc.id} className="bg-pink-50/40 rounded-2xl border-2 border-pink-200 text-sm transition-all overflow-hidden">
+                      <div
+                        onClick={() => toggleExpandReport(mc.id)}
+                        className="p-4 flex items-center justify-between cursor-pointer hover:bg-pink-100/50 select-none transition"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <button type="button" className="p-1 rounded-lg text-pink-600 bg-white border border-pink-300 shadow-2xs">
+                            {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                          </button>
+                          <span className="px-2 py-0.5 bg-emerald-600 text-white text-[10px] font-extrabold rounded-md uppercase">
+                            Makeup Class
+                          </span>
+                          <h4 className="font-bold text-pink-950 text-sm">⭐ {mc.topic || mc.title || "Makeup Session"}</h4>
+                        </div>
 
-        <span className="text-gray-500 text-xs flex items-center gap-1 font-mono font-semibold">
-          <Calendar size={12} /> {(mc.makeup_date || mc.date || "").substring(0, 10)}
-        </span>
-      </div>
+                        <span className="text-gray-500 text-xs flex items-center gap-1 font-mono font-semibold">
+                          <Calendar size={12} /> {(mc.makeup_date || mc.date || "").substring(0, 10)}
+                        </span>
+                      </div>
 
-      {isExpanded && (
-        <div className="px-5 pb-5 pt-2 border-t border-pink-200 space-y-3.5 bg-white/60">
-          {matchedBook && (
-            <div className="pt-1">
-              <span className="text-[10px] font-bold text-pink-800 bg-pink-100/70 px-2.5 py-0.5 rounded-lg border border-pink-200">
-                📖 {matchedBook.title}
-              </span>
-            </div>
-          )}
+                      {isExpanded && (
+                        <div className="px-5 pb-5 pt-2 border-t border-pink-200 space-y-3.5 bg-white/60">
+                          {matchedBook && (
+                            <div className="pt-1">
+                              <span className="text-[10px] font-bold text-pink-800 bg-pink-100/70 px-2.5 py-0.5 rounded-lg border border-pink-200">
+                                📖 {matchedBook.title}
+                              </span>
+                            </div>
+                          )}
 
-          {displayVocab && (
-            <div className="space-y-1">
-              <span className="font-bold text-gray-900 flex items-center gap-1.5 text-xs">
-                <Sparkles size={13} className="text-pink-600" /> Vocabulary & Target Structures:
-              </span>
-              <p className="text-gray-800 bg-white p-3 rounded-xl border-2 border-pink-200 leading-relaxed font-mono text-xs whitespace-pre-wrap">
-                {displayVocab}
-              </p>
-            </div>
-          )}
+                          {displayVocab && (
+                            <div className="space-y-1">
+                              <span className="font-bold text-gray-900 flex items-center gap-1.5 text-xs">
+                                <Sparkles size={13} className="text-pink-600" /> Vocabulary & Target Structures:
+                              </span>
+                              <p className="text-gray-800 bg-white p-3 rounded-xl border-2 border-pink-200 leading-relaxed font-mono text-xs whitespace-pre-wrap">
+                                {displayVocab}
+                              </p>
+                            </div>
+                          )}
 
-          {(displayStrengths || displayImprovements) && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {displayStrengths && (
-                <div className="p-3 bg-emerald-50/80 rounded-xl border-2 border-emerald-200 space-y-1">
-                  <span className="font-bold text-emerald-900 flex items-center gap-1 text-xs">
-                    <Award size={13} className="text-emerald-600" /> Strengths & Highlights:
-                  </span>
-                  <p className="text-emerald-950 leading-relaxed text-xs whitespace-pre-wrap">{displayStrengths}</p>
-                </div>
-              )}
-              {displayImprovements && (
-                <div className="p-3 bg-amber-50/80 rounded-xl border-2 border-amber-200 space-y-1">
-                  <span className="font-bold text-amber-900 flex items-center gap-1 text-xs">
-                    <TrendingUp size={13} className="text-amber-600" /> Next Focus / Tips:
-                  </span>
-                  <p className="text-amber-950 leading-relaxed text-xs whitespace-pre-wrap">{displayImprovements}</p>
-                </div>
-              )}
-            </div>
-          )}
+                          {(displayStrengths || displayImprovements) && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              {displayStrengths && (
+                                <div className="p-3 bg-emerald-50/80 rounded-xl border-2 border-emerald-200 space-y-1">
+                                  <span className="font-bold text-emerald-900 flex items-center gap-1 text-xs">
+                                    <Award size={13} className="text-emerald-600" /> Strengths & Highlights:
+                                  </span>
+                                  <p className="text-emerald-950 leading-relaxed text-xs whitespace-pre-wrap">{displayStrengths}</p>
+                                </div>
+                              )}
+                              {displayImprovements && (
+                                <div className="p-3 bg-amber-50/80 rounded-xl border-2 border-amber-200 space-y-1">
+                                  <span className="font-bold text-amber-900 flex items-center gap-1 text-xs">
+                                    <TrendingUp size={13} className="text-amber-600" /> Next Focus / Tips:
+                                  </span>
+                                  <p className="text-amber-950 leading-relaxed text-xs whitespace-pre-wrap">{displayImprovements}</p>
+                                </div>
+                              )}
+                            </div>
+                          )}
 
-          {/* 💌 Teacher Message Display Block */}
-          {displayMessage && (
-            <div className="p-3.5 bg-pink-50/70 rounded-xl border-2 border-pink-200 space-y-1">
-              <span className="font-bold text-pink-950 text-xs flex items-center gap-1">
-                💌 Message from Teacher:
-              </span>
-              <p className="text-gray-900 text-xs whitespace-pre-wrap leading-relaxed">{displayMessage}</p>
-            </div>
-          )}
+                          {displayMessage && (
+                            <div className="p-3.5 bg-pink-50/70 rounded-xl border-2 border-pink-200 space-y-1">
+                              <span className="font-bold text-pink-950 text-xs flex items-center gap-1">
+                                💌 Message from Teacher:
+                              </span>
+                              <p className="text-gray-900 text-xs whitespace-pre-wrap leading-relaxed">{displayMessage}</p>
+                            </div>
+                          )}
 
-          {fallbackMain && (
-            <div className="p-3 bg-white rounded-xl border-2 border-pink-200 space-y-1">
-              <span className="font-bold text-gray-900 flex items-center gap-1 text-xs">
-                <Sparkles size={13} className="text-pink-600" /> Makeup Notes:
-              </span>
-              <p className="text-gray-800 leading-relaxed text-xs whitespace-pre-wrap">{fallbackMain}</p>
-            </div>
-          )}
+                          {fallbackMain && (
+                            <div className="p-3 bg-white rounded-xl border-2 border-pink-200 space-y-1">
+                              <span className="font-bold text-gray-900 flex items-center gap-1 text-xs">
+                                <Sparkles size={13} className="text-pink-600" /> Makeup Notes:
+                              </span>
+                              <p className="text-gray-800 leading-relaxed text-xs whitespace-pre-wrap">{fallbackMain}</p>
+                            </div>
+                          )}
 
-          {displayHomework && (
-            <div className="p-4 bg-pink-100/60 rounded-2xl border-2 border-pink-300 text-pink-950 space-y-2">
-              <span className="font-bold flex items-center gap-1.5 text-sm">
-                <FileCheck size={15} className="text-pink-600" /> Assigned Homework:
-              </span>
-              <p className="leading-relaxed text-xs font-medium text-gray-900 bg-white p-2.5 rounded-xl border-2 border-pink-200 whitespace-pre-wrap">
-                {displayHomework}
-              </p>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-})}
+                          {displayHomework && (
+                            <div className="p-4 bg-pink-100/60 rounded-2xl border-2 border-pink-300 text-pink-950 space-y-2">
+                              <span className="font-bold flex items-center gap-1.5 text-sm">
+                                <FileCheck size={15} className="text-pink-600" /> Assigned Homework:
+                              </span>
+                              <p className="leading-relaxed text-xs font-medium text-gray-900 bg-white p-2.5 rounded-xl border-2 border-pink-200 whitespace-pre-wrap">
+                                {displayHomework}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
 
-                {/* Render Regular Lessons & Reports */}
-                {uniqueLessons.map((les: any) => {
+                {/* 2. Render Class Reports */}
+                {validReports.map((rep: any) => {
+                  const isExpanded = expandedReportIds.includes(rep.id);
+                  const matchedBook = allBooks.find((b) => b.id === rep.book_id);
+
+                  return (
+                    <div key={rep.id} className="bg-pink-50/40 rounded-2xl border-2 border-pink-200 text-sm transition-all overflow-hidden">
+                      <div
+                        onClick={() => toggleExpandReport(rep.id)}
+                        className="p-4 flex items-center justify-between cursor-pointer hover:bg-pink-100/50 select-none transition"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <button type="button" className="p-1 rounded-lg text-pink-600 bg-white border border-pink-300">
+                            {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                          </button>
+                          <span className="px-2 py-0.5 bg-pink-600 text-white text-[10px] font-extrabold rounded-md uppercase">
+                            Report
+                          </span>
+                          <h4 className="font-bold text-pink-950 text-sm">{rep.lesson_title || rep.title || "Class Report"}</h4>
+                        </div>
+                        <span className="text-gray-500 text-xs font-mono font-semibold">
+                          {rep.report_date?.substring(0, 10)}
+                        </span>
+                      </div>
+
+                      {isExpanded && (
+                        <div className="px-5 pb-5 pt-2 border-t border-pink-200 space-y-3.5 bg-white/60">
+                          {matchedBook && (
+                            <div>
+                              <span className="text-[10px] font-bold text-pink-800 bg-pink-100/70 px-2.5 py-0.5 rounded-lg border border-pink-200">
+                                📖 {matchedBook.title}: p. {rep.start_page || 1} - {rep.end_page || "N/A"}
+                              </span>
+                            </div>
+                          )}
+                          {rep.vocabulary && (
+                            <div className="space-y-1">
+                              <span className="font-bold text-gray-900 text-xs">Vocabulary & Structures:</span>
+                              <p className="text-gray-800 bg-white p-3 rounded-xl border-2 border-pink-200 text-xs whitespace-pre-wrap">{rep.vocabulary}</p>
+                            </div>
+                          )}
+                          {rep.strengths && (
+                            <div className="p-3 bg-emerald-50/80 rounded-xl border-2 border-emerald-200">
+                              <span className="font-bold text-emerald-900 text-xs">Strengths:</span>
+                              <p className="text-emerald-950 text-xs whitespace-pre-wrap">{rep.strengths}</p>
+                            </div>
+                          )}
+                          {rep.improvements && (
+                            <div className="p-3 bg-amber-50/80 rounded-xl border-2 border-amber-200">
+                              <span className="font-bold text-amber-900 text-xs">Next Focus:</span>
+                              <p className="text-amber-950 text-xs whitespace-pre-wrap">{rep.improvements}</p>
+                            </div>
+                          )}
+                          {rep.teacher_message && (
+                            <div className="p-3.5 bg-pink-50/70 rounded-xl border-2 border-pink-200 space-y-1">
+                              <span className="font-bold text-pink-950 text-xs">💌 Message from Teacher:</span>
+                              <p className="text-gray-900 text-xs whitespace-pre-wrap">{rep.teacher_message}</p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+
+                {/* 3. Render Regular Lessons */}
+                {validLessons.map((les: any) => {
                   const isExpanded = expandedReportIds.includes(les.id);
-                  const text = les.description || "";
                   const displayVocab = les.vocab_notes || les.vocabulary || "";
                   const displayStrengths = les.strengths_notes || les.strengths || "";
                   const displayImprovements = les.improvement_notes || les.improvements || "";
-                  const displayHomework = les.homework_notes || les.homework || "";
 
                   return (
                     <div key={les.id} className="bg-pink-50/40 rounded-2xl border-2 border-pink-200 text-sm transition-all overflow-hidden">
@@ -614,6 +673,18 @@ export default function StudentPortalPage({
                             <div className="space-y-1">
                               <span className="font-bold text-gray-900 text-xs">Vocabulary & Structures:</span>
                               <p className="text-gray-800 bg-white p-3 rounded-xl border-2 border-pink-200 text-xs whitespace-pre-wrap">{displayVocab}</p>
+                            </div>
+                          )}
+                          {displayStrengths && (
+                            <div className="p-3 bg-emerald-50/80 rounded-xl border-2 border-emerald-200">
+                              <span className="font-bold text-emerald-900 text-xs">Strengths:</span>
+                              <p className="text-emerald-950 text-xs whitespace-pre-wrap">{displayStrengths}</p>
+                            </div>
+                          )}
+                          {displayImprovements && (
+                            <div className="p-3 bg-amber-50/80 rounded-xl border-2 border-amber-200">
+                              <span className="font-bold text-amber-900 text-xs">Next Focus:</span>
+                              <p className="text-amber-950 text-xs whitespace-pre-wrap">{displayImprovements}</p>
                             </div>
                           )}
                           {les.teacher_message && (

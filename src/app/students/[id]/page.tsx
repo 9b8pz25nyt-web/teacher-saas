@@ -528,54 +528,55 @@ export default function StudentDetailsPage({
   }
 
   async function handleDeleteReport(reportId: string, homeworkFileUrl?: string | null) {
-    if (!confirm("Are you sure you want to delete this lesson report? This will decrease the completed class count by 1.")) {
-      return;
-    }
-
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { data: reportRow } = await supabase
-        .from("class_reports")
-        .select("report_date, lesson_title")
-        .eq("id", reportId)
-        .single();
-
-      if (homeworkFileUrl) {
-        const parts = homeworkFileUrl.split("/homework-files/");
-        if (parts[1]) {
-          await supabase.storage.from("homework-files").remove([decodeURIComponent(parts[1])]);
-        }
-      }
-
-      const { error } = await supabase
-        .from("class_reports")
-        .delete()
-        .eq("id", reportId)
-        .eq("user_id", user.id);
-
-      if (error) throw error;
-
-      if (reportRow) {
-        await supabase
-          .from("lessons")
-          .delete()
-          .eq("student_id", studentId)
-          .eq("user_id", user.id)
-          .eq("lesson_date", reportRow.report_date)
-          .eq("title", reportRow.lesson_title);
-      }
-
-      const newCompletedCount = Math.max((student?.classes_completed || 1) - 1, 0);
-      await supabase.from("students").update({ classes_completed: newCompletedCount }).eq("id", studentId).eq("user_id", user.id);
-
-      fetchStudentData();
-    } catch (err: any) {
-      console.error("Error deleting report:", err);
-      alert("Failed to delete report: " + (err.message || err));
-    }
+  if (!confirm("Are you sure you want to delete this lesson report?")) {
+    return;
   }
+
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    // 1. Fetch the report date and title so we can clean up any linked lesson entry
+    const { data: reportRow } = await supabase
+      .from("class_reports")
+      .select("report_date, lesson_title")
+      .eq("id", reportId)
+      .single();
+
+    // 2. Remove uploaded homework file from storage if it exists
+    if (homeworkFileUrl) {
+      const parts = homeworkFileUrl.split("/homework-files/");
+      if (parts[1]) {
+        await supabase.storage.from("homework-files").remove([decodeURIComponent(parts[1])]);
+      }
+    }
+
+    // 3. Delete from class_reports using only the report ID (fixing the column error)
+    const { error } = await supabase
+      .from("class_reports")
+      .delete()
+      .eq("id", reportId);
+
+    if (error) throw error;
+
+    // 4. Clean up matching lesson entry if found
+    if (reportRow) {
+      await supabase
+        .from("lessons")
+        .delete()
+        .eq("student_id", studentId)
+        .eq("lesson_date", reportRow.report_date)
+        .eq("title", reportRow.lesson_title);
+    }
+
+    // Note: We intentionally left out the classes_completed subtraction so your count stays untouched!
+
+    fetchStudentData();
+  } catch (err: any) {
+    console.error("Error deleting report:", err);
+    alert("Failed to delete report: " + (err.message || err));
+  }
+}
 
  async function handleAddReport(e: React.FormEvent) {
     e.preventDefault();
@@ -823,9 +824,10 @@ async function handleDownloadInvoicePdf() {
     }
   }
 
-  const combinedTotalClasses =
+const combinedTotalClasses =
     Number(student?.classes_included || 0) + Number(student?.free_classes || 0);
-const validReports = reports.filter(
+
+  const validReports = reports.filter(
     (r) => {
       const title = (r.lesson_title || r.title || "").toLowerCase();
       const status = (r.status || "").toLowerCase();
@@ -846,15 +848,18 @@ const validReports = reports.filter(
              status !== "absent";
     }
   );
- const completedMakeups = makeupClasses.filter(
-  (m) => {
-    const s = (m.status || "").trim().toLowerCase();
-    return s === "completed" || s === "attended";
-  }
-);
 
-  const baseLessonsCount = Math.max(validReports.length, validLessons.length);
-  const dynamicCompletedCount = baseLessonsCount + completedMakeups.length;
+  // Safe filter for makeup classes: counts any makeup session that isn't cancelled or absent
+  const completedMakeups = makeupClasses.filter(
+    (m) => {
+      const s = (m.status || "").trim().toLowerCase();
+      return s !== "cancelled" && s !== "absent";
+    }
+  );
+
+  // If reports only has 2 items and makeups has 1 item, this cleanly equals 3.
+  // If your regular classes are stored in lessons instead of reports, this falls back safely.
+  const dynamicCompletedCount = Math.max(validReports.length, validLessons.length) + completedMakeups.length;
 
   const dynamicRemainingCount = Math.max(combinedTotalClasses - dynamicCompletedCount, 0);
   const dynamicProgressPercent = Math.min(
