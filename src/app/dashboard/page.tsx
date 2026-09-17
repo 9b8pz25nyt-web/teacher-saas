@@ -343,10 +343,14 @@ if (!isQuotaExempt) {
 
     return filtered.length;
   })();
-  return (
+ return (
     <div className="flex flex-col min-h-screen bg-gray-50/50">
-      {/* Pass the students list directly to the banner */}
-      <RenewalAlertBanner students={students} />
+      {/* Pass only active students to the banner */}
+      <RenewalAlertBanner 
+        students={students.filter(
+          (s) => s.status !== "Archived" && s.status !== "Inactive" && s.payment_status !== "Archived"
+        )} 
+      />
 
       <main className="p-8 max-w-7xl mx-auto w-full space-y-6">
         {/* Top Header Controls */}

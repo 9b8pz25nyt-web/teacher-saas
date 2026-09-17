@@ -288,6 +288,8 @@ export default function StudentEditModal({
               <option value="Pending">Pending</option>
               <option value="Paid">Paid</option>
               <option value="Active">Active</option>
+              <option value="Archived">Archived</option> {/* 👈 Add this */}
+    <option value="Inactive">Inactive</option> {/* 👈 Add this */}
             </select>
           </div>
 

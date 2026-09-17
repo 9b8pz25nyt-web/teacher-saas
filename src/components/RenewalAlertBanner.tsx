@@ -1,114 +1,53 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useMemo } from "react";
 import Link from "next/link";
-import { supabase } from "@/lib/supabase";
 
 interface RenewalAlertBannerProps {
   students?: any[];
 }
 
-export default function RenewalAlertBanner({ students: propStudents }: RenewalAlertBannerProps) {
-  const [renewalList, setRenewalList] = useState<any[]>([]);
+export default function RenewalAlertBanner({ students = [] }: RenewalAlertBannerProps) {
+  // Compute instantly using useMemo with zero network delay
+  const renewalList = useMemo(() => {
+    if (!students || students.length === 0) return [];
 
-  useEffect(() => {
-    async function loadExpiring() {
-      let list = propStudents;
+    // Filter out archived or inactive students
+    const activeStudents = students.filter(
+      (s) => 
+        s.status !== "Archived" && 
+        s.status !== "Inactive" && 
+        s.payment_status !== "Archived" && 
+        s.payment_status !== "Inactive"
+    );
 
-      // If no students array was passed in props, fetch scoped to current user
-      if (list === undefined) {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-
-        const { data } = await supabase
-          .from("students")
-          .select("*")
-          .eq("user_id", user.id); // 👈 Scoped strictly to current user
-        list = data || [];
-      }
-
-      const expiring = (list || []).filter((s: any) => {
-        const included = Number(s.classes_included || 0);
-        const free = Number(s.free_classes || 0);
-        const completed = Number(s.classes_completed || 0);
-        const remaining = included + free - completed;
-
-        return remaining <= 5 || included === 0;
-      });
-
-      setRenewalList(expiring);
-    }
-
-    loadExpiring();
-  }, [propStudents]);
+    // Find students with 4 or fewer classes remaining
+    return activeStudents.filter((s) => {
+      const remaining = (s.classes_included || 0) - (s.classes_completed || 0);
+      return remaining <= 4;
+    });
+  }, [students]);
 
   if (renewalList.length === 0) return null;
 
   return (
-    <div className="w-full bg-pink-100/90 border-b border-pink-200 text-pink-950 py-2.5 px-4 overflow-hidden select-none relative z-30 group">
+    <div className="bg-pink-100/80 border-b border-pink-200 text-pink-950 px-6 py-2.5 text-xs font-bold flex items-center justify-between overflow-x-auto whitespace-nowrap shadow-xs">
       <div 
-        className="flex items-center gap-8 whitespace-nowrap animate-marquee group-hover:[animation-play-state:paused] hover:[animation-play-state:paused]"
-        style={{ width: "max-content", animation: "marquee 45s linear infinite" }}
+        className="flex items-center gap-6 animate-marquee"
+        style={{ animationDuration: "40s" }}
       >
-        {/* Track 1 */}
-        <div className="flex items-center gap-6 shrink-0">
-          <span className="font-bold text-xs uppercase tracking-wider text-pink-700 bg-pink-50 px-2.5 py-1 rounded-xl border border-pink-200 shrink-0">
-            PACKAGE RENEWAL ALERTS
-          </span>
-
-          {renewalList.map((student) => {
-            const total = Number(student.classes_included || 0) + Number(student.free_classes || 0);
-            const done = Number(student.classes_completed || 0);
-            const left = Math.max(0, total - done);
-
-            return (
-              <Link
-                key={`track1-${student.id}`}
-                href={`/students/${student.id}?action=renew`}
-                className="inline-flex items-center gap-1.5 text-xs text-pink-900 hover:text-pink-600 transition-colors"
-              >
-                <span>
-                  ⚠️ Action Needed: <strong>{student.name}</strong> has{" "}
-                  <span className="font-bold text-pink-700">
-                    {left} {left === 1 ? "class" : "classes"} left {left === 0 ? "(Package Expired)" : ""}
-                  </span>{" "}
-                  — Click to view profile & prepare renewal invoice →
-                </span>
-                <span className="text-pink-300 font-bold ml-4">•</span>
-              </Link>
-            );
-          })}
-        </div>
-
-        {/* Track 2 (Duplicate for continuous loop) */}
-        <div className="flex items-center gap-6 shrink-0">
-          <span className="font-bold text-xs uppercase tracking-wider text-pink-700 bg-pink-50 px-2.5 py-1 rounded-xl border border-pink-200 shrink-0">
-            PACKAGE RENEWAL ALERTS
-          </span>
-
-          {renewalList.map((student) => {
-            const total = Number(student.classes_included || 0) + Number(student.free_classes || 0);
-            const done = Number(student.classes_completed || 0);
-            const left = Math.max(0, total - done);
-
-            return (
-              <Link
-                key={`track2-${student.id}`}
-                href={`/students/${student.id}?action=renew`}
-                className="inline-flex items-center gap-1.5 text-xs text-pink-900 hover:text-pink-600 transition-colors"
-              >
-                <span>
-                  ⚠️ Action Needed: <strong>{student.name}</strong> has{" "}
-                  <span className="font-bold text-pink-700">
-                    {left} {left === 1 ? "class" : "classes"} left {left === 0 ? "(Package Expired)" : ""}
-                  </span>{" "}
-                  — Click to view profile & prepare renewal invoice →
-                </span>
-                <span className="text-pink-300 font-bold ml-4">•</span>
-              </Link>
-            );
-          })}
-        </div>
+        {renewalList.map((student) => {
+          const remaining = (student.classes_included || 0) - (student.classes_completed || 0);
+          return (
+            <Link
+              key={student.id}
+              href={`/students/${student.id}`}
+              className="hover:underline flex items-center gap-1.5"
+            >
+              <span>⚠️ Action Needed: {student.name} has <strong className="text-pink-700">{remaining} classes left</strong> — Click to view profile & prepare renewal invoice →</span>
+            </Link>
+          );
+        })}
       </div>
     </div>
   );
