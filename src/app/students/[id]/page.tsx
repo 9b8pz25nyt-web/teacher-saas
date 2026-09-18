@@ -79,8 +79,9 @@ export default function StudentDetailsPage({
   const [copiedContract, setCopiedContract] = useState(false);
   const [expandedReportIds, setExpandedReportIds] = useState<string[]>([]);
   const [isParentRequestsOpen, setIsParentRequestsOpen] = useState(true);
+  
 
-  // Template Customization State (Parent Name, Teacher Name, Date, Classes, Duration, Amount)
+  // Template Customization State
   const [customParentName, setCustomParentName] = useState("");
   const [customTeacherName, setCustomTeacherName] = useState("");
   const [customContractDate, setCustomContractDate] = useState("");
@@ -111,6 +112,7 @@ export default function StudentDetailsPage({
   const [renewalCustomNotes, setRenewalCustomNotes] = useState("");
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [invoiceQrDataUrl, setInvoiceQrDataUrl] = useState("");
+  const [portalQrDataUrl, setPortalQrDataUrl] = useState("");
   const invoicePdfRef = useRef<HTMLDivElement>(null);
 
   function toggleExpandReport(id: string) {
@@ -462,7 +464,10 @@ export default function StudentDetailsPage({
         const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://teacher-saas-pink.vercel.app";
         const portalLink = `${baseUrl}/portal/${studentData.access_token}`;
         QRCode.toDataURL(portalLink, { width: 120, margin: 1 })
-          .then((url) => setInvoiceQrDataUrl(url))
+          .then((url) => {
+            setInvoiceQrDataUrl(url);
+            setPortalQrDataUrl(url);
+          })
           .catch(() => {});
       }
 
@@ -795,22 +800,31 @@ ${teacherName}`;
 
   const contractText = `PRIVATE ENGLISH TUTORING SERVICE AGREEMENT
 
-1. Parties Involved
+1. PARTIES INVOLVED
 • Teacher / Instructor: ${teacherName}
 • Student / Parent & Guardian: ${parentOrStudentName}
 • Effective Date: ${contractDate}
 
-2. Lesson Package & Structure
+2. LESSON PACKAGE & STRUCTURE
 • Total Classes Included: ${totalClsCount} Regular Classes${freeClsCount > 0 ? ` + ${freeClsCount} Free Bonus Classes` : ""}
 • Class Duration: ${clsDuration} minutes per session
 • Tuition Fee: ${pkgRate} ${pkgCurrency}
 
-3. Attendance, Cancellations & Makeup Classes
-• Flexibility: Absences and makeup classes are fully accommodated and stress-free.
+3. ATTENDANCE, CANCELLATIONS & MAKEUP CLASSES
+• Flexibility: Absences and makeup classes are fully accommodated and stress-effective.
 • Scheduling Makeups: If a student needs to miss or reschedule a session, simply notify the teacher in advance, and a makeup class will be easily arranged based on mutual availability.
+• Punctuality: Lessons will begin and end on scheduled times.
 
-4. Student Learning Portal
-• The student will be provided with a secure private portal link to track completed chapters, review homework assignments, and access class report cards.`;
+4. HOMEWORK & MATERIALS (AS APPLICABLE)
+• Homework Practice: Assigned when appropriate to reinforce key vocabulary and grammar structures.
+• Learning Resources: Custom textbooks, worksheets, and interactive exercises provided via the Student Learning Portal.
+
+5. STUDENT LEARNING PORTAL
+• Access Link: ${portalUrl}
+• Use: Track attendance, review lesson reports, and check homework completion status anytime.
+
+6. RENEWAL & PAYMENT POLICY
+• Tuition fee is remitted in advance or upon package renewal to secure regular weekly time slots.`;
 
   function handleCopyWelcome() {
     navigator.clipboard.writeText(welcomeCardText);
@@ -824,7 +838,7 @@ ${teacherName}`;
     setTimeout(() => setCopiedContract(false), 2000);
   }
 
-  function handlePrintContract() {
+function handlePrintContract() {
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
 
@@ -834,46 +848,102 @@ ${teacherName}`;
         <head>
           <title>Tutoring Agreement - ${parentOrStudentName}</title>
           <style>
-            body { font-family: Helvetica, Arial, sans-serif; padding: 40px; color: #1f2937; max-width: 750px; margin: 0 auto; line-height: 1.6; }
-            h1 { color: #be185d; font-size: 20px; text-transform: uppercase; border-bottom: 2px solid #db2777; padding-bottom: 10px; margin-bottom: 20px; }
-            h3 { color: #9d174d; font-size: 14px; margin-top: 20px; text-transform: uppercase; }
-            p, li { font-size: 13px; }
-            ul { padding-left: 20px; }
-            .box { background: #fdf2f8; border: 1px solid #fbcfe8; padding: 15px; border-radius: 10px; margin-bottom: 20px; }
-            .signature-section { margin-top: 50px; display: flex; justify-content: space-between; }
-            .sig-box { width: 45%; border-top: 1px solid #374151; padding-top: 8px; font-size: 12px; font-weight: bold; }
+            body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 30px; color: #1f2937; max-width: 800px; margin: 0 auto; line-height: 1.6; background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .agreement-container { border: 2px solid #fbcfe8; border-radius: 16px; padding: 40px; background: #ffffff; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
+            .header-banner { background: linear-gradient(135deg, #be185d, #db2777); color: white; padding: 25px 30px; border-radius: 12px; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: center; }
+            .header-banner h1 { margin: 0; font-size: 20px; text-transform: uppercase; letter-spacing: 1px; font-weight: 800; }
+            .header-banner p { margin: 4px 0 0 0; font-size: 12px; opacity: 0.9; }
+            .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; background: #fdf2f8; border: 1px solid #fbcfe8; padding: 20px; border-radius: 12px; margin-bottom: 25px; }
+            .info-item label { display: block; font-size: 10px; font-weight: bold; text-transform: uppercase; color: #be185d; margin-bottom: 2px; }
+            .info-item span { font-size: 13px; font-weight: 600; color: #111827; }
+            .section-title { font-size: 13px; font-weight: 800; color: #be185d; text-transform: uppercase; margin-top: 25px; margin-bottom: 8px; border-bottom: 1px solid #fce7f3; padding-bottom: 4px; letter-spacing: 0.5px; }
+            ul { padding-left: 20px; margin: 5px 0 15px 0; }
+            li { font-size: 12px; margin-bottom: 4px; color: #374151; }
+            .portal-box { background: #eff6ff; border: 1px solid #bfdbfe; padding: 14px 16px; border-radius: 10px; font-size: 12px; color: #1e40af; margin-top: 15px; display: flex; justify-content: space-between; align-items: center; gap: 15px; }
+            .signature-section { margin-top: 50px; display: flex; justify-content: space-between; gap: 40px; }
+            .sig-box { flex: 1; border-top: 2px solid #374151; padding-top: 10px; font-size: 12px; font-weight: bold; color: #374151; display: flex; justify-content: space-between; align-items: center; }
+            .sig-date { font-weight: normal; color: #4b5563; font-size: 11px; }
+            .footer-note { margin-top: 40px; text-align: center; font-size: 10px; color: #9ca3af; border-top: 1px solid #e5e7eb; padding-top: 15px; }
           </style>
         </head>
         <body>
-          <h1>Private English Tutoring Service Agreement</h1>
-          
-          <div class="box">
-            <p style="margin: 0 0 4px 0;"><strong>Teacher / Instructor:</strong> ${teacherName}</p>
-            <p style="margin: 0 0 4px 0;"><strong>Student / Parent:</strong> ${parentOrStudentName}</p>
-            <p style="margin: 0;"><strong>Effective Date:</strong> ${contractDate}</p>
-          </div>
+          <div class="agreement-container">
+            <div class="header-banner">
+              <div>
+                <h1>Private English Tutoring Agreement</h1>
+                <p>Terms & Conditions</p>
+              </div>
+              <div style="text-align: right; font-size: 11px; font-weight: bold;">
+                CONFIRMED
+              </div>
+            </div>
 
-          <h3>1. Lesson Package & Structure</h3>
-          <ul>
-            <li><strong>Total Classes Included:</strong> ${totalClsCount} Regular Classes${freeClsCount > 0 ? ` + ${freeClsCount} Free Bonus Classes` : ""}</li>
-            <li><strong>Class Duration:</strong> ${clsDuration} minutes per session</li>
-            <li><strong>Tuition Fee:</strong> ${pkgRate} ${pkgCurrency}</li>
-          </ul>
+            <div class="info-grid">
+              <div class="info-item">
+                <label>Teacher / Instructor</label>
+                <span>${teacherName}</span>
+              </div>
+              <div class="info-item">
+                <label>Student / Parent & Guardian</label>
+                <span>${parentOrStudentName}</span>
+              </div>
+              <div class="info-item">
+                <label>Effective Date</label>
+                <span>${contractDate}</span>
+              </div>
+              <div class="info-item">
+                <label>Tuition Investment</label>
+                <span>${pkgRate} ${pkgCurrency}</span>
+              </div>
+            </div>
 
-          <h3>2. Attendance, Cancellations & Makeup Classes</h3>
-          <ul>
-            <li><strong>Flexibility:</strong> Absences and makeup classes are fully accommodated and stress-free.</li>
-            <li><strong>Scheduling Makeups:</strong> If a student needs to miss or reschedule a session, simply notify the teacher in advance, and a makeup class will be easily arranged based on mutual availability.</li>
-          </ul>
+            <div class="section-title">1. Lesson Package & Structure</div>
+            <ul>
+              <li><strong>Total Classes:</strong> ${totalClsCount} Regular Classes${freeClsCount > 0 ? ` + ${freeClsCount} Free Bonus Classes` : ""}</li>
+              <li><strong>Session Duration:</strong> ${clsDuration} minutes per class</li>
+              <li><strong>Curriculum:</strong> Customized interactive speaking, vocabulary, and grammar modules.</li>
+            </ul>
 
-          <h3>3. Student Learning Portal</h3>
-          <ul>
-            <li>The student will be provided with a secure private portal link to track completed chapters, review homework assignments, and access class report cards: <br/><em>${portalUrl}</em></li>
-          </ul>
+            <div class="section-title">2. Attendance, Rescheduling & Makeups</div>
+            <ul>
+              <li><strong>Flexible Policy:</strong> Absences and schedule changes are fully accommodated without penalty.</li>
+              <li><strong>Makeup Coordination:</strong> If a lesson must be missed, notify the teacher in advance to reschedule based on mutual calendar availability.</li>
+              <li><strong>Punctuality:</strong> Sessions begin promptly at the scheduled hour.</li>
+            </ul>
 
-          <div class="signature-section">
-            <div class="sig-box">Teacher's Signature & Date</div>
-            <div class="sig-box">Parent's / Student's Signature & Date</div>
+            <div class="section-title">3. Homework & Learning Resources</div>
+            <ul>
+              <li><strong>Practice:</strong> Targeted assignments are provided when appropriate following each session to reinforce retention.</li>
+              <li><strong>Portal Tracking:</strong> All materials, books, and reports are available via the student portal.</li>
+            </ul>
+
+            <div class="portal-box">
+              <div>
+                🔗 <strong>Student Learning Portal Link:</strong><br/>
+                <em style="word-break: break-all;">${portalUrl}</em>
+              </div>
+              ${portalQrDataUrl ? `<div style="text-align: center; background: #ffffff; padding: 6px; border-radius: 8px; border: 1px solid #bfdbfe;"><img src="${portalQrDataUrl}" style="width: 80px; height: 80px; display: block;" /><span style="font-size: 9px; font-weight: bold; color: #1e40af;">Scan to Open</span></div>` : ""}
+            </div>
+
+            <div class="section-title">4. Renewal & Terms</div>
+            <ul>
+              <li>Package renewal payment is requested upon completion or prior to the start of a new series to secure preferred weekly slots.</li>
+            </ul>
+
+            <div class="signature-section">
+              <div class="sig-box">
+                <span>Teacher's Signature</span>
+                <span class="sig-date">Date: ${contractDate}</span>
+              </div>
+              <div class="sig-box">
+                <span>Parent's / Student's Signature</span>
+                <span class="sig-date">Date: ${contractDate}</span>
+              </div>
+            </div>
+
+            <div class="footer-note">
+              Thank you for trusting me with your English learning journey! Let's achieve great milestones together. ✨
+            </div>
           </div>
 
           <script>
@@ -1386,7 +1456,7 @@ ${renewalBankDetails ? `🏦 Bank Details:\n${renewalBankDetails}\n` : ""}Please
               <p className="font-bold text-pink-950 text-[11px] uppercase">Customization Fields</p>
               <div className="grid grid-cols-1 gap-2">
                 <div>
-                  <label className="block text-[10px] font-semibold text-gray-600 mb-1">Parent's / Student's Name</label>
+                  <label className="block text-[10px] font-semibold text-gray-600 mb-1">Student's Name / Parent's Name</label>
                   <input
                     type="text"
                     value={customParentName}
@@ -1406,15 +1476,22 @@ ${renewalBankDetails ? `🏦 Bank Details:\n${renewalBankDetails}\n` : ""}Please
                       placeholder="e.g. Teacher Gabi"
                     />
                   </div>
-                  <div>
-                    <label className="block text-[10px] font-semibold text-gray-600 mb-1">Effective Date</label>
-                    <input
-                      type="date"
-                      value={customContractDate}
-                      onChange={(e) => setCustomContractDate(e.target.value)}
-                      className="w-full bg-white border border-pink-200 rounded-xl p-2 text-xs text-gray-800"
-                    />
-                  </div>
+                <div>
+  <label className="block text-[10px] font-semibold text-gray-600 mb-1">Effective Date</label>
+  <DatePicker
+    selected={customContractDate ? new Date(customContractDate) : new Date()}
+    onChange={(date: Date | null) => {
+      if (date) {
+        const formatted = date.toISOString().split("T")[0];
+        setCustomContractDate(formatted);
+      }
+    }}
+    dateFormat="yyyy-MM-dd"
+    className="w-full bg-white border border-pink-200 rounded-xl p-2 text-xs text-gray-800 focus:outline-none focus:ring-2 focus:ring-pink-400"
+    wrapperClassName="w-full"
+    calendarClassName="pink-datepicker"
+  />
+</div>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
@@ -1463,7 +1540,7 @@ ${renewalBankDetails ? `🏦 Bank Details:\n${renewalBankDetails}\n` : ""}Please
               </div>
             </div>
 
-            {/* Welcome Card Sub-card (Larger scrollable box) */}
+            {/* Welcome Card Sub-card */}
             <div className="p-3.5 bg-pink-50/40 rounded-2xl border border-pink-100 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-pink-950 flex items-center gap-1.5">
@@ -1484,7 +1561,7 @@ ${renewalBankDetails ? `🏦 Bank Details:\n${renewalBankDetails}\n` : ""}Please
               </div>
             </div>
 
-            {/* Formal Contract Sub-card (Larger scrollable box) */}
+            {/* Formal Contract Sub-card */}
             <div className="p-3.5 bg-pink-50/40 rounded-2xl border border-pink-100 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-pink-950 flex items-center gap-1.5">
@@ -2015,53 +2092,31 @@ ${renewalBankDetails ? `🏦 Bank Details:\n${renewalBankDetails}\n` : ""}Please
                   onChange={(e) => setRenewalRate(e.target.value)}
                 />
               </div>
-              <div>
-                <label className="block mb-1 font-semibold text-gray-700">Class Duration (minutes)</label>
-                <input
-                  type="text"
-                  className="w-full border border-pink-200 rounded-xl p-2.5 bg-white text-gray-800"
-                  value={renewalDuration}
-                  onChange={(e) => setRenewalDuration(e.target.value)}
-                />
-              </div>
-              <div className="md:col-span-2">
-                <label className="block mb-1 font-semibold text-gray-700">Target Start Date</label>
-                <DatePicker
-                  selected={renewalStartDate ? new Date(renewalStartDate) : new Date()}
-                  onChange={(date: Date | null) => {
-                    if (date) {
-                      const formatted = date.toISOString().split("T")[0];
-                      setRenewalStartDate(formatted);
-                    }
-                  }}
-                  dateFormat="yyyy-MM-dd"
-                  className="w-full border border-pink-200 rounded-xl p-2.5 bg-white text-gray-800 text-xs focus:outline-none focus:ring-2 focus:ring-pink-400"
-                  wrapperClassName="w-full"
-                />
-                <div className="flex gap-1.5 mt-1.5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const today = new Date().toISOString().split("T")[0];
-                      setRenewalStartDate(today);
-                    }}
-                    className="px-2.5 py-1 bg-pink-50 hover:bg-pink-100 text-pink-700 rounded-lg text-[10px] font-bold border border-pink-200 cursor-pointer transition"
-                  >
-                    Today
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const nextWeek = new Date();
-                      nextWeek.setDate(nextWeek.getDate() + 7);
-                      setRenewalStartDate(nextWeek.toISOString().split("T")[0]);
-                    }}
-                    className="px-2.5 py-1 bg-pink-50 hover:bg-pink-100 text-pink-700 rounded-lg text-[10px] font-bold border border-pink-200 cursor-pointer transition"
-                  >
-                    +7 Days
-                  </button>
-                </div>
-              </div>
+            <div>
+            <label className="block mb-1 font-semibold text-gray-700">Class Duration (minutes)</label>
+            <input
+              type="text"
+              className="w-full border border-pink-200 rounded-xl p-2.5 bg-white text-gray-800"
+              value={renewalDuration}
+              onChange={(e) => setRenewalDuration(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="block mb-1 font-semibold text-gray-700">Target Start Date</label>
+            <DatePicker
+              selected={renewalStartDate ? new Date(renewalStartDate) : new Date()}
+              onChange={(date: Date | null) => {
+                if (date) {
+                  const formatted = date.toISOString().split("T")[0];
+                  setRenewalStartDate(formatted);
+                }
+              }}
+              dateFormat="yyyy-MM-dd"
+              className="w-full bg-white border border-pink-200 rounded-xl p-2.5 text-xs text-gray-800 focus:outline-none focus:ring-2 focus:ring-pink-400"
+              wrapperClassName="w-full"
+              calendarClassName="pink-datepicker"
+            />
+          </div>
               <div className="md:col-span-2">
                 <label className="block mb-1 font-semibold text-gray-700">Thank You / Payment Message</label>
                 <textarea

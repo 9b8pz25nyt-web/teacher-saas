@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "react-datepicker/dist/react-datepicker.css";
 
 :root {
   --background: #fff7fb;
@@ -95,4 +96,61 @@ input[type="date"] {
 
 .animate-marquee:hover {
   animation-play-state: paused;
+}
+
+/* Bulletproof Compound Selector Pink Theme for React Datepicker */
+.pink-datepicker.react-datepicker {
+  font-family: inherit !important;
+  border: 1px solid #fbcfe8 !important;
+  border-radius: 1rem !important;
+  background-color: #ffffff !important;
+  box-shadow: 0 10px 15px -3px rgba(244, 114, 182, 0.1) !important;
+}
+
+.pink-datepicker .react-datepicker__header {
+  background-color: #fdf2f8 !important;
+  border-bottom: 1px solid #fbcfe8 !important;
+  border-top-left-radius: 1rem !important;
+  border-top-right-radius: 1rem !important;
+}
+
+.pink-datepicker .react-datepicker__current-month, 
+.pink-datepicker .react-datepicker-year-header {
+  color: #be185d !important;
+  font-weight: 700 !important;
+  font-size: 12px !important;
+}
+
+.pink-datepicker .react-datepicker__day-name {
+  color: #db2777 !important;
+  font-weight: 600 !important;
+}
+
+/* Compound selector guarantees override over default library blue */
+.pink-datepicker .react-datepicker__day--selected,
+.pink-datepicker .react-datepicker__day--keyboard-selected,
+.pink-datepicker .react-datepicker__day--selected:focus,
+.pink-datepicker .react-datepicker__day--selected:active {
+  background-color: #db2777 !important;
+  color: #ffffff !important;
+  border-radius: 50% !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+.pink-datepicker .react-datepicker__day--selected:hover,
+.pink-datepicker .react-datepicker__day--keyboard-selected:hover {
+  background-color: #be185d !important;
+  color: #ffffff !important;
+}
+
+.pink-datepicker .react-datepicker__day--today {
+  font-weight: bold !important;
+  color: #db2777 !important;
+}
+
+.pink-datepicker .react-datepicker__day:hover {
+  background-color: #fdf2f8 !important;
+  border-radius: 50% !important;
+  color: #be185d !important;
 }

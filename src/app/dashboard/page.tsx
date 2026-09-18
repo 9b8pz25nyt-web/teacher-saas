@@ -21,7 +21,14 @@ function extractTimeFromTimestamp(timestampStr: string) {
   }
   return timestampStr.substring(0, 5);
 }
-
+// Helper to safely extract YYYY-MM-DD from a timestamp string without timezone shifts
+function extractDateFromTimestamp(timestampStr: string) {
+  if (!timestampStr) return "";
+  if (timestampStr.includes("T")) {
+    return timestampStr.split("T")[0];
+  }
+  return timestampStr.substring(0, 10);
+}
 export default function DashboardPage() {
   const [schedules, setSchedules] = useState<any[]>([]);
   const [makeupEvents, setMakeupEvents] = useState<any[]>([]);
@@ -492,39 +499,40 @@ if (!isQuotaExempt) {
             <p className="text-xs text-gray-400 italic">No classes scheduled for today. Enjoy your day off! ✨</p>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {todaysCombinedSchedules.map((item) => {
-                const matchingLesson = recordedLessons.find(
-                  (l) => l.student_id === item.studentId && l.lesson_date?.substring(0, 10) === todayDateStr
-                );
-                const status = matchingLesson ? matchingLesson.status : item.originalStatus;
+             {todaysCombinedSchedules.map((item) => {
+  const matchingLesson = recordedLessons.find(
+    (l) => l.student_id === item.studentId && extractDateFromTimestamp(l.lesson_date) === todayDateStr
+  );
+  const status = matchingLesson ? matchingLesson.status : item.originalStatus;
+  const statusLower = String(status || "").toLowerCase();
 
-                return (
-                  <div
-                    key={item.id}
-                    className={`p-4 rounded-2xl border flex flex-col justify-between gap-3 shadow-2xs ${
-                      item.type === "makeup"
-                        ? "border-pink-200 bg-pink-100/40"
-                        : "border-pink-100 bg-pink-50/30"
-                    }`}
-                  >
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <p className="text-xs font-bold text-pink-900">{item.time} ({item.duration}m)</p>
-                        <p className="text-sm font-extrabold text-pink-950 mt-0.5">{item.studentName}</p>
-                      </div>
-                      <span className={`text-[10px] font-bold px-2.5 py-1 rounded-xl ${
-                        status === "Completed" 
-                          ? "bg-green-100 text-green-700" 
-                          : item.type === "makeup"
-                          ? "bg-pink-200 text-pink-900"
-                          : "bg-pink-100 text-pink-700"
-                      }`}>
-                        {status} {item.type === "makeup" && "(Make-up)"}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
+  return (
+    <div
+      key={item.id}
+      className={`p-4 rounded-2xl border flex flex-col justify-between gap-3 shadow-2xs ${
+        item.type === "makeup"
+          ? "border-pink-200 bg-pink-100/40"
+          : "border-pink-100 bg-pink-50/30"
+      }`}
+    >
+      <div className="flex justify-between items-start">
+        <div>
+          <p className="text-xs font-bold text-pink-900">{item.time} ({item.duration}m)</p>
+          <p className="text-sm font-extrabold text-pink-950 mt-0.5">{item.studentName}</p>
+        </div>
+        <span className={`text-[10px] font-bold px-2.5 py-1 rounded-xl ${
+          statusLower === "completed" 
+            ? "bg-green-100 text-green-700" 
+            : item.type === "makeup"
+            ? "bg-pink-200 text-pink-900"
+            : "bg-pink-100 text-pink-700"
+        }`}>
+          {status} {item.type === "makeup" && "(Make-up)"}
+        </span>
+      </div>
+    </div>
+  );
+})}
             </div>
           )}
         </div>
