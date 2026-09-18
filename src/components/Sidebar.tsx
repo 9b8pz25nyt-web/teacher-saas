@@ -53,7 +53,7 @@ export default function Sidebar() {
   ];
 
   return (
-    <aside className="w-64 bg-[#6b0633] text-white flex flex-col min-h-screen p-4 flex-shrink-0">
+    <aside className="w-64 bg-[#6b0633] text-white flex flex-col min-h-screen p-4 flex-shrink-0 print:hidden">
       {/* Brand Header */}
       <div className="flex items-center gap-3 mb-8 px-2">
         {logoUrl ? (
@@ -64,14 +64,16 @@ export default function Sidebar() {
           />
         ) : (
           <div className="w-10 h-10 rounded-full bg-pink-100 flex items-center justify-center text-xl shadow-xs">
-            🤖
+            🍎
           </div>
         )}
         <div className="overflow-hidden">
           <h2 className="text-sm font-bold leading-tight truncate">
             {dashboardTitle}
           </h2>
-          <p className="text-xs text-pink-200">Class Dashboard</p>
+          <p className="text-xs text-pink-200">
+            Class Dashboard
+          </p>
         </div>
       </div>
 

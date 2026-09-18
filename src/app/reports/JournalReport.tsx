@@ -110,9 +110,58 @@ export default function JournalReport({
   }, 0);
 
   return (
-    <div className="space-y-4 printable-journal-area">
+    <div className="space-y-4">
+      {/* Enhanced Print Styles to support multi-page printing */}
+      <style jsx global>{`
+        @media print {
+          body, html {
+            height: auto !important;
+            overflow: visible !important;
+            background: white !important;
+          }
+          body * {
+            visibility: hidden !important;
+          }
+          .printable-journal-area,
+          .printable-journal-area * {
+            visibility: visible !important;
+          }
+          .printable-journal-area {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: white !important;
+          }
+          .no-print {
+            display: none !important;
+          }
+          .overflow-x-auto {
+            overflow: visible !important;
+            width: 100% !important;
+          }
+          table {
+            width: 100% !important;
+            page-break-inside: auto !important;
+          }
+          tr {
+            page-break-inside: avoid !important;
+            page-break-after: auto !important;
+            break-inside: avoid !important;
+          }
+          thead {
+            display: table-header-group !important;
+          }
+          tfoot {
+            display: table-footer-group !important;
+          }
+        }
+      `}</style>
+
       {/* Header & Single Print Button */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-pink-100 pb-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-pink-100 pb-3 no-print">
         <div>
           <h4 className="text-sm font-bold text-pink-950 uppercase tracking-tight">
             GENERAL JOURNAL / CASH RECEIPTS & DISBURSEMENTS BOOK (PFRS COMPLIANT)
@@ -133,13 +182,13 @@ export default function JournalReport({
             className="px-4 py-2 bg-pink-600 hover:bg-pink-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer no-print"
           >
             <Printer size={14} />
-            <span>Print</span>
+            <span>Print / Save PDF</span>
           </button>
         </div>
       </div>
 
       {/* Printable Container */}
-      <div ref={reportRef} className="bg-white p-2 rounded-2xl">
+      <div ref={reportRef} className="bg-white p-2 rounded-2xl printable-journal-area">
         {journalEntries.length === 0 ? (
           <div className="p-8 text-center text-gray-400 text-xs italic bg-gray-50/50 rounded-2xl border border-pink-50">
             No finalized paid receipts or expenses recorded for this {timeframe} timeframe.

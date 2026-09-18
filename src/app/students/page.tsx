@@ -110,7 +110,7 @@ export default function StudentsPage() {
       setTeacherAlias(profile.teacher_aliases[0]);
     }
 
- const { data: studentList, error } = await supabase
+    const { data: studentList, error } = await supabase
       .from("students")
       .select("*")
       .eq("teacher_id", user.id)
@@ -141,7 +141,6 @@ export default function StudentsPage() {
     const cleanAmount = Number(paymentAmount.replace(/,/g, ""));
     const cleanPhpEquivalent = phpEquivalent ? Number(phpEquivalent.replace(/,/g, "")) : null;
 
-    // 1. Insert Student and return the newly created row ID
     const { data: newStudent, error: studentError } = await supabase
       .from("students")
       .insert({
@@ -174,7 +173,6 @@ export default function StudentsPage() {
       return;
     }
 
-    // 2. Automatically create a Pending payment entry with matching table schema
     const { error: paymentError } = await supabase.from("payments").insert({
       student_id: newStudent.id,
       amount: cleanAmount,
@@ -230,9 +228,9 @@ export default function StudentsPage() {
                 <div className="flex justify-between">
                   <span className="text-gray-500">Package:</span>
                   <span>
-  {student.classes_included ?? 0}
-  {student.free_classes ? ` (+${student.free_classes} free)` : ""} Classes ({student.class_duration || 40}m)
-</span>
+                    {student.classes_included ?? 0}
+                    {student.free_classes ? ` (+${student.free_classes} free)` : ""} Classes ({student.class_duration || 40}m)
+                  </span>
                 </div>
                 <div className="flex justify-between font-medium">
                   <span className="text-gray-500">Rate:</span>
@@ -459,7 +457,7 @@ export default function StudentsPage() {
                 </div>
               </div>
 
-         <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block mb-1 text-xs font-semibold text-gray-700">
                     Contract Start Date

@@ -35,7 +35,7 @@ export default function ReportsPage() {
   const [payments, setPayments] = useState<any[]>([]);
   const [expenses, setExpenses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [businessName, setBusinessName] = useState("Private ESL Tutoring Services");
+  const [businessName, setBusinessName] = useState("Private Professional Services");
   const [statementSigner, setStatementSigner] = useState("Teacher Gabi");
 
   // Section Accordion Visibility Toggles
@@ -59,12 +59,11 @@ export default function ReportsPage() {
   const [tempTarget, setTempTarget] = useState("50000");
   const [taxMethod, setTaxMethod] = useState<"8percent" | "graduated">("8percent");
 
-// Manual Prior / Unrecorded Income States by Quarter (Hydration-safe)
+  // Manual Prior / Unrecorded Income States by Quarter (Hydration-safe)
   const [manualQ1Income, setManualQ1Income] = useState("0");
   const [manualQ2Income, setManualQ2Income] = useState("0");
   const [manualQ3Income, setManualQ3Income] = useState("0");
 
-  // Load from localStorage once when the component mounts on the client
   useEffect(() => {
     if (typeof window !== "undefined") {
       setManualQ1Income(localStorage.getItem("manualQ1Income") || "0");
@@ -290,7 +289,6 @@ export default function ReportsPage() {
   const cleanQ2Manual = Number(manualQ2Income.replace(/[^0-9.]/g, "")) || 0;
   const cleanQ3Manual = Number(manualQ3Income.replace(/[^0-9.]/g, "")) || 0;
 
-  // Quarterly breakdown calculation for BIR Form 1701Q (Cumulative totals) with manual quarterly inputs
   const quarterlyData = useMemo(() => {
     const getGrossForMonths = (months: string[]) => {
       return payments
@@ -340,7 +338,6 @@ export default function ReportsPage() {
   }, [payments, currentYearStr, taxMethod, cleanQ1Manual, cleanQ2Manual, cleanQ3Manual]);
 
   const runningGrossRevenue = quarterlyData.annual.gross;
-  const annualGrossRevenue = runningGrossRevenue;
 
   const estimatedTaxDue = useMemo(() => {
     if (taxMethod === "8percent") {
@@ -467,9 +464,9 @@ export default function ReportsPage() {
       <div className="p-8 space-y-6 flex-1 max-w-7xl w-full mx-auto">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-pink-600">Financial & Teaching Reports</h1>
+            <h1 className="text-3xl font-bold text-pink-600">Financial Reports</h1>
             <p className="text-xs text-gray-500 mt-0.5">
-              Synchronized reports across collections, expenses, and BIR double-entry journals.
+              Synchronized reports across student collections, operating expenses, and BIR double-entry journals.
             </p>
           </div>
 
@@ -688,7 +685,7 @@ export default function ReportsPage() {
               <p className="font-bold text-gray-800">Previous / Unrecorded Income by Quarter ({currentYearStr}):</p>
               <p className="text-[11px] text-gray-500">Enter past earnings per quarter before using this app to ensure accurate BIR Form 1701Q cumulative totals</p>
             </div>
-         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="bg-white p-3 rounded-xl border border-pink-100 space-y-1">
                 <label className="block text-[11px] font-bold text-gray-700">Q1 Unrecorded (Jan–Mar):</label>
                 <div className="flex items-center gap-1.5">
@@ -699,9 +696,11 @@ export default function ReportsPage() {
                     value={manualQ1Income}
                     onChange={(e) => {
                       const raw = e.target.value.replace(/[^0-9.]/g, "");
-                      const formatted = raw === "" ? "" : isNaN(Number(raw)) ? raw : Number(raw).toLocaleString();
-                      setManualQ1Income(formatted);
-                      if (typeof window !== "undefined") localStorage.setItem("manualQ1Income", formatted);
+                      if (raw === "") setManualQ1Income("");
+                      else {
+                        const num = Number(raw);
+                        setManualQ1Income(isNaN(num) ? raw : num.toLocaleString());
+                      }
                     }}
                     placeholder="0"
                   />
@@ -718,9 +717,11 @@ export default function ReportsPage() {
                     value={manualQ2Income}
                     onChange={(e) => {
                       const raw = e.target.value.replace(/[^0-9.]/g, "");
-                      const formatted = raw === "" ? "" : isNaN(Number(raw)) ? raw : Number(raw).toLocaleString();
-                      setManualQ2Income(formatted);
-                      if (typeof window !== "undefined") localStorage.setItem("manualQ2Income", formatted);
+                      if (raw === "") setManualQ2Income("");
+                      else {
+                        const num = Number(raw);
+                        setManualQ2Income(isNaN(num) ? raw : num.toLocaleString());
+                      }
                     }}
                     placeholder="0"
                   />
@@ -737,9 +738,11 @@ export default function ReportsPage() {
                     value={manualQ3Income}
                     onChange={(e) => {
                       const raw = e.target.value.replace(/[^0-9.]/g, "");
-                      const formatted = raw === "" ? "" : isNaN(Number(raw)) ? raw : Number(raw).toLocaleString();
-                      setManualQ3Income(formatted);
-                      if (typeof window !== "undefined") localStorage.setItem("manualQ3Income", formatted);
+                      if (raw === "") setManualQ3Income("");
+                      else {
+                        const num = Number(raw);
+                        setManualQ3Income(isNaN(num) ? raw : num.toLocaleString());
+                      }
                     }}
                     placeholder="0"
                   />
@@ -799,7 +802,7 @@ export default function ReportsPage() {
                 ₱{effectiveHourlyRate.toLocaleString()}{" "}
                 <span className="text-xs font-medium text-gray-400">PHP / hr</span>
               </h3>
-              <p className="text-[10px] text-gray-400">Net earned per teaching hr</p>
+              <p className="text-[10px] text-gray-400">Net earned per work hr</p>
             </div>
             <span className="p-3 bg-pink-50 rounded-2xl text-pink-600">
               <TrendingUp size={22} />
@@ -814,10 +817,10 @@ export default function ReportsPage() {
               <h3 className="text-2xl font-black text-gray-800">
                 {totalHoursTaught.toFixed(1)}{" "}
                 <span className="text-xs font-medium text-gray-400">
-                  Hours ({totalClassesTaught} classes)
+                  Hours ({totalClassesTaught} sessions)
                 </span>
               </h3>
-              <p className="text-[10px] text-gray-400">Completed class sessions</p>
+              <p className="text-[10px] text-gray-400">Completed teaching sessions</p>
             </div>
             <span className="p-3 bg-pink-50 rounded-2xl text-pink-600">
               <Clock size={22} />
@@ -825,7 +828,7 @@ export default function ReportsPage() {
           </div>
         </div>
 
-        {/* 1. STUDENT REVENUE LEDGER */}
+        {/* 1. REVENUE LEDGER */}
         <div className="bg-white border border-pink-100 rounded-3xl shadow-xs overflow-hidden transition-all duration-200">
           <button
             type="button"
@@ -1076,7 +1079,7 @@ export default function ReportsPage() {
             <div className="flex items-center justify-between border-b border-pink-100 pb-3">
               <div>
                 <h2 className="text-lg font-bold text-pink-950">Record Operating Expense</h2>
-                <p className="text-[11px] text-gray-500">Log monthly internet, software, or teaching subscriptions.</p>
+                <p className="text-[11px] text-gray-500">Log monthly internet, software, or professional subscriptions.</p>
               </div>
               <button
                 type="button"
@@ -1098,7 +1101,7 @@ export default function ReportsPage() {
                   <option value="Zoom Pro Subscription">Zoom Pro Subscription</option>
                   <option value="PLDT / Broadband Internet">PLDT / Broadband Internet</option>
                   <option value="Mobile Data / Hotspot">Mobile Data / Hotspot</option>
-                  <option value="Teaching Materials & Books">Teaching Materials & Books</option>
+                  <option value="Teaching Materials & Books">Materials & Subscriptions</option>
                   <option value="Canva / Software Subscriptions">Canva / Software Subscriptions</option>
                   <option value="Other">+ Other (Custom Expense)</option>
                 </select>
@@ -1204,7 +1207,7 @@ export default function ReportsPage() {
                     Statement of Cash Receipts & Disbursements
                   </h3>
                   <p className="text-xs text-gray-500">
-                    BIR-compliant cash-basis financial report for professional tutoring services.
+                    BIR-compliant cash-basis financial report for online teaching services.
                   </p>
                 </div>
               </div>
@@ -1260,7 +1263,7 @@ export default function ReportsPage() {
               >
                 <div style={{ textAlign: "center", borderBottom: "2px solid #000000", paddingBottom: "16px" }}>
                   <h1 style={{ fontSize: "16px", fontWeight: "900", color: "#000000", margin: "0 0 4px 0", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                    {businessName || "Private ESL Tutoring Services"}
+                    {businessName || "Private Professional Services"}
                   </h1>
                   <h2 style={{ fontSize: "13px", fontWeight: "800", color: "#000000", margin: "0 0 4px 0", letterSpacing: "0.3px" }}>
                     STATEMENT OF CASH RECEIPTS & DISBURSEMENTS
@@ -1454,7 +1457,7 @@ export default function ReportsPage() {
                     BIR FORMS 1701A & 1701Q COMPUTATION WORKSHEET
                   </h2>
                   <p style={{ fontSize: "10.5px", color: "#333333", margin: 0, fontWeight: "600" }}>
-                    Income Tax Return — Purely Business/Profession ({taxMethod === "8percent" ? "8% Flat Tax Option" : "Graduated Rates with 40% OSD"})
+                    Income Tax Return — Purely Online Teaching Profession ({taxMethod === "8percent" ? "8% Flat Tax Option" : "Graduated Rates with 40% OSD"})
                   </p>
                   <p style={{ fontSize: "10px", color: "#555555", margin: "2px 0 0 0" }}>
                     Taxable Year: {currentYearStr} • Taxpayer: {statementSigner} ({businessName})
