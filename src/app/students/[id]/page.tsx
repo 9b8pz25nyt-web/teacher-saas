@@ -16,7 +16,7 @@ import {
   Plus,
   Copy,
   Check,
-  FileCheck,
+  FileText,
   Video,
   ChevronDown,
   ChevronUp,
@@ -25,6 +25,7 @@ import {
   Download,
   Calendar,
   Edit2,
+  Sparkles,
 } from "lucide-react";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
@@ -74,8 +75,19 @@ export default function StudentDetailsPage({
   const [loading, setLoading] = useState(true);
   const [copiedPortal, setCopiedPortal] = useState(false);
   const [copiedRenewalNotice, setCopiedRenewalNotice] = useState(false);
+  const [copiedWelcome, setCopiedWelcome] = useState(false);
+  const [copiedContract, setCopiedContract] = useState(false);
   const [expandedReportIds, setExpandedReportIds] = useState<string[]>([]);
   const [isParentRequestsOpen, setIsParentRequestsOpen] = useState(true);
+
+  // Template Customization State (Parent Name, Teacher Name, Date, Classes, Duration, Amount)
+  const [customParentName, setCustomParentName] = useState("");
+  const [customTeacherName, setCustomTeacherName] = useState("");
+  const [customContractDate, setCustomContractDate] = useState("");
+  const [customClasses, setCustomClasses] = useState("");
+  const [customFreeClasses, setCustomFreeClasses] = useState("");
+  const [customClassDuration, setCustomClassDuration] = useState("");
+  const [customPaymentAmount, setCustomPaymentAmount] = useState("");
   
   const [selectedLesson, setSelectedLesson] = useState<{
     eventId: string;
@@ -86,12 +98,7 @@ export default function StudentDetailsPage({
   } | null>(null);
 
   // Payment Instructions & QR Upload State
-  const [paymentQrFile, setPaymentQrFile] = useState<File | null>(null);
-  const [paymentQrPreviewUrl, setPaymentQrPreviewUrl] = useState<string>("");
   const [renewalBankDetails, setRenewalBankDetails] = useState("");
-  const [renewalPaymentQrPreview, setRenewalPaymentQrPreview] = useState<string>("");
-
-  // Renewal Modal & PDF State
   const [isRenewalModalOpen, setIsRenewalModalOpen] = useState(false);
   const [renewalClassesCount, setRenewalClassesCount] = useState("20");
   const [renewalFreeCount, setRenewalFreeCount] = useState("0");
@@ -112,7 +119,7 @@ export default function StudentDetailsPage({
     );
   }
 
-  // Improved Professional Print Layout Helper
+  // Improved Professional Print Layout Helper for Lesson Reports
   function handlePrintLessonReport(lessonData: {
     title: string;
     date: string;
@@ -436,6 +443,15 @@ export default function StudentDetailsPage({
       setPaymentType(studentData.payment_type || "Monthly");
       setPaymentCurrency(studentData.payment_currency || "PHP");
 
+      // Initialize template customization states
+      setCustomParentName(studentData.name || "");
+      setCustomTeacherName(studentData.teacher_alias || "Teacher Gabi");
+      setCustomContractDate(studentData.start_date || new Date().toISOString().split("T")[0]);
+      setCustomClasses(studentData.classes_included !== undefined ? String(studentData.classes_included) : "20");
+      setCustomFreeClasses(studentData.free_classes !== undefined ? String(studentData.free_classes) : "0");
+      setCustomClassDuration(studentData.class_duration !== undefined ? String(studentData.class_duration) : "40");
+      setCustomPaymentAmount(studentData.payment_amount !== undefined ? String(studentData.payment_amount) : "");
+
       const rawAmount = studentData.payment_amount ? String(studentData.payment_amount) : "";
       setPaymentAmount(
         rawAmount ? Number(rawAmount.replace(/[^0-9.]/g, "")).toLocaleString() : ""
@@ -722,148 +738,6 @@ export default function StudentDetailsPage({
     }
   }
 
-  async function handleAddReport(e: React.FormEvent) {
-    e.preventDefault();
-    if (!lessonTitle.trim()) return alert("Please enter a lesson title");
-
-    setIsSubmittingReport(true);
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
-
-      let uploadedFileUrl: string | null = null;
-
-      if (homeworkFile) {
-        const fileExt = homeworkFile.name.split(".").pop();
-        const fileName = `${studentId}/${Date.now()}.${fileExt}`;
-
-        const { error: uploadError } = await supabase.storage
-          .from("homework-files")
-          .upload(fileName, homeworkFile);
-
-        if (uploadError) throw uploadError;
-
-        const { data: publicUrlData } = supabase.storage
-          .from("homework-files")
-          .getPublicUrl(fileName);
-
-        uploadedFileUrl = publicUrlData.publicUrl;
-      }
-
-      const validBookId = reportBookId && reportBookId.trim() !== "" ? reportBookId : null;
-      
-      const isAbsentOrCancelled = 
-        lessonTitle.toLowerCase().includes("absent") || 
-        lessonTitle.toLowerCase().includes("cancelled");
-
-      const payload: any = {
-        user_id: user.id,
-        lesson_title: lessonTitle.trim(),
-        title: lessonTitle.trim(),
-        report_date: reportDate,
-        lesson_date: reportDate,
-        book_id: validBookId,
-        vocabulary: vocabulary.trim() || null,
-        strengths: strengths.trim() || null,
-        improvements: improvements.trim() || null,
-        homework: homework.trim() || null,
-        teacher_alias: student?.teacher_alias || teacherAlias || "Teacher Gabi",
-        status: isAbsentOrCancelled 
-          ? (lessonTitle.toLowerCase().includes("absent") ? "Absent" : "Cancelled") 
-          : "Completed",
-      };
-
-      const selectedBookItem = studentBooks.find((item: any) => item.books?.id === reportBookId);
-      if (selectedBookItem?.books?.book_type === "pages") {
-        payload.start_page = startPageInput ? Number(startPageInput) : null;
-        payload.end_page = endPageInput ? Number(endPageInput) : null;
-      }
-
-      if (uploadedFileUrl) {
-        payload.homework_file_url = uploadedFileUrl;
-      }
-
-      if (editingReportId) {
-        const { error: updateError } = await supabase
-          .from("class_reports")
-          .update(payload)
-          .eq("id", editingReportId)
-          .eq("user_id", user.id);
-
-        if (updateError) throw updateError;
-      } else {
-        payload.student_id = studentId;
-
-        const { error: reportError } = await supabase
-          .from("class_reports")
-          .insert(payload);
-
-        if (reportError) throw reportError;
-
-        const bookProgressArray = validBookId
-          ? [{ book_id: validBookId, start_page: startPageInput || '1', end_page: endPageInput || '0' }]
-          : [];
-
-        await supabase.from("lessons").insert({
-          user_id: user.id,
-          student_id: studentId,
-          title: lessonTitle.trim(),
-          lesson_date: reportDate,
-          status: isAbsentOrCancelled 
-            ? (lessonTitle.toLowerCase().includes("absent") ? "Absent" : "Cancelled") 
-            : "Completed",
-          description: `Vocab: ${vocabulary}\nStrengths: ${strengths}\nHomework: ${homework}`,
-          homework_file_url: uploadedFileUrl || null,
-          book_id: validBookId,
-          book_progress: bookProgressArray,
-        });
-
-        if (validBookId && selectedChapterIndex !== "" && isChapterComplete) {
-          const currentCompletedChapters = selectedBookItem?.completed_chapters || [];
-          const chapterIdxNum = Number(selectedChapterIndex);
-
-          if (!currentCompletedChapters.includes(chapterIdxNum)) {
-            const updatedChapters = [...currentCompletedChapters, chapterIdxNum];
-
-            await supabase
-              .from("student_books")
-              .update({ completed_chapters: updatedChapters })
-              .eq("student_id", studentId)
-              .eq("book_id", validBookId);
-          }
-        }
-
-        if (!isAbsentOrCancelled) {
-          const currentCompleted = student?.classes_completed || 0;
-          await supabase
-            .from("students")
-            .update({ classes_completed: currentCompleted + 1 })
-            .eq("id", studentId)
-            .eq("user_id", user.id);
-        }
-      }
-
-      setEditingReportId(null);
-      setLessonTitle("");
-      setVocabulary("");
-      setStrengths("");
-      setImprovements("");
-      setHomework("");
-      setHomeworkFile(null);
-      setSelectedChapterIndex("");
-      setIsChapterComplete(false);
-      setIsReportModalOpen(false);
-      fetchStudentData();
-    } catch (err: any) {
-      console.error("Error saving report:", err);
-      alert(err.message || "Failed to save report");
-    } finally {
-      setIsSubmittingReport(false);
-    }
-  }
-
   async function handleDeleteStudent() {
     if (!confirm(`Are you sure you want to delete ${student?.name}?`)) return;
     const { data: { user } } = await supabase.auth.getUser();
@@ -890,27 +764,142 @@ export default function StudentDetailsPage({
     setTimeout(() => setCopiedPortal(false), 2000);
   }
 
-  function handleCopyRenewalMessage() {
-    const portalUrl = student?.access_token
-      ? `${window.location.origin}/portal/${student.access_token}`
-      : "";
+  // Document Template Generators & Clipboard Helpers using Custom Inputs
+  const portalUrl = student?.access_token ? `${window.location.origin}/portal/${student.access_token}` : "[Portal Link]";
+  const teacherName = customTeacherName.trim() || student?.teacher_alias || teacherAlias || "Teacher Gabi";
+  const parentOrStudentName = customParentName.trim() || student?.name || "Student";
+  const totalClsCount = Number(customClasses !== "" ? customClasses : (student?.classes_included || 20));
+  const freeClsCount = Number(customFreeClasses !== "" ? customFreeClasses : (student?.free_classes || 0));
+  const clsDuration = Number(customClassDuration !== "" ? customClassDuration : (student?.class_duration || 40));
+  const cleanPkgRateInput = Number(String(customPaymentAmount !== "" ? customPaymentAmount : (student?.payment_amount || 0)).replace(/[^0-9.]/g, "")) || 0;
+  const pkgRate = cleanPkgRateInput.toLocaleString();
+  const pkgCurrency = student?.payment_currency || "PHP";
+  const contractDate = customContractDate.trim() || student?.start_date || new Date().toISOString().split("T")[0];
 
-    const freeText = Number(renewalFreeCount) > 0 ? ` (+${renewalFreeCount} Free Bonus Classes)` : "";
-    const currency = student?.payment_currency || "PHP";
+  const welcomeCardText = `Welcome to Private English Classes! 🎉
+
+Dear ${parentOrStudentName},
+
+A huge warm welcome to our English learning journey together! I am so excited to have you in class. 
+
+Our lessons are designed to be fun, interactive, and completely tailored to help you reach your language goals—whether that is building speaking confidence, mastering new vocabulary, or excelling in school.
+
+🔗 Your Student Learning Portal:
+You can track your lesson history, view assigned homework, and check your class progress anytime here:
+${portalUrl}
+
+Let's make this learning journey amazing! See you in class soon. 😊
+
+Warmly,
+${teacherName}`;
+
+  const contractText = `PRIVATE ENGLISH TUTORING SERVICE AGREEMENT
+
+1. Parties Involved
+• Teacher / Instructor: ${teacherName}
+• Student / Parent & Guardian: ${parentOrStudentName}
+• Effective Date: ${contractDate}
+
+2. Lesson Package & Structure
+• Total Classes Included: ${totalClsCount} Regular Classes${freeClsCount > 0 ? ` + ${freeClsCount} Free Bonus Classes` : ""}
+• Class Duration: ${clsDuration} minutes per session
+• Tuition Fee: ${pkgRate} ${pkgCurrency}
+
+3. Attendance, Cancellations & Makeup Classes
+• Flexibility: Absences and makeup classes are fully accommodated and stress-free.
+• Scheduling Makeups: If a student needs to miss or reschedule a session, simply notify the teacher in advance, and a makeup class will be easily arranged based on mutual availability.
+
+4. Student Learning Portal
+• The student will be provided with a secure private portal link to track completed chapters, review homework assignments, and access class report cards.`;
+
+  function handleCopyWelcome() {
+    navigator.clipboard.writeText(welcomeCardText);
+    setCopiedWelcome(true);
+    setTimeout(() => setCopiedWelcome(false), 2000);
+  }
+
+  function handleCopyContract() {
+    navigator.clipboard.writeText(contractText);
+    setCopiedContract(true);
+    setTimeout(() => setCopiedContract(false), 2000);
+  }
+
+  function handlePrintContract() {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return;
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Tutoring Agreement - ${parentOrStudentName}</title>
+          <style>
+            body { font-family: Helvetica, Arial, sans-serif; padding: 40px; color: #1f2937; max-width: 750px; margin: 0 auto; line-height: 1.6; }
+            h1 { color: #be185d; font-size: 20px; text-transform: uppercase; border-bottom: 2px solid #db2777; padding-bottom: 10px; margin-bottom: 20px; }
+            h3 { color: #9d174d; font-size: 14px; margin-top: 20px; text-transform: uppercase; }
+            p, li { font-size: 13px; }
+            ul { padding-left: 20px; }
+            .box { background: #fdf2f8; border: 1px solid #fbcfe8; padding: 15px; border-radius: 10px; margin-bottom: 20px; }
+            .signature-section { margin-top: 50px; display: flex; justify-content: space-between; }
+            .sig-box { width: 45%; border-top: 1px solid #374151; padding-top: 8px; font-size: 12px; font-weight: bold; }
+          </style>
+        </head>
+        <body>
+          <h1>Private English Tutoring Service Agreement</h1>
+          
+          <div class="box">
+            <p style="margin: 0 0 4px 0;"><strong>Teacher / Instructor:</strong> ${teacherName}</p>
+            <p style="margin: 0 0 4px 0;"><strong>Student / Parent:</strong> ${parentOrStudentName}</p>
+            <p style="margin: 0;"><strong>Effective Date:</strong> ${contractDate}</p>
+          </div>
+
+          <h3>1. Lesson Package & Structure</h3>
+          <ul>
+            <li><strong>Total Classes Included:</strong> ${totalClsCount} Regular Classes${freeClsCount > 0 ? ` + ${freeClsCount} Free Bonus Classes` : ""}</li>
+            <li><strong>Class Duration:</strong> ${clsDuration} minutes per session</li>
+            <li><strong>Tuition Fee:</strong> ${pkgRate} ${pkgCurrency}</li>
+          </ul>
+
+          <h3>2. Attendance, Cancellations & Makeup Classes</h3>
+          <ul>
+            <li><strong>Flexibility:</strong> Absences and makeup classes are fully accommodated and stress-free.</li>
+            <li><strong>Scheduling Makeups:</strong> If a student needs to miss or reschedule a session, simply notify the teacher in advance, and a makeup class will be easily arranged based on mutual availability.</li>
+          </ul>
+
+          <h3>3. Student Learning Portal</h3>
+          <ul>
+            <li>The student will be provided with a secure private portal link to track completed chapters, review homework assignments, and access class report cards: <br/><em>${portalUrl}</em></li>
+          </ul>
+
+          <div class="signature-section">
+            <div class="sig-box">Teacher's Signature & Date</div>
+            <div class="sig-box">Parent's / Student's Signature & Date</div>
+          </div>
+
+          <script>
+            window.onload = function() { window.print(); window.close(); }
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  }
+
+  function handleCopyRenewalMessage() {
+    const freeText = Number(freeClsCount) > 0 ? ` (+${freeClsCount} Free Bonus Classes)` : "";
     const cleanNum = Number(String(renewalRate).replace(/[^0-9.]/g, "")) || 0;
     const formattedAmount = cleanNum.toLocaleString("en-US");
-    const teacherName = student?.teacher_alias || teacherAlias || "Teacher Gabi";
 
     const renewalText = `🌟 CLASS PACKAGE RENEWAL NOTICE 🌟
 
 Dear Parent,
 
-Thank you for continuing with ${teacherName}'s private English classes! Here are the details for ${student?.name}'s upcoming lesson package:
+Thank you for continuing with ${teacherName}'s private English classes! Here are the details for ${parentOrStudentName}'s upcoming lesson package:
 
 📚 Package Details:
-• Total Classes: ${renewalClassesCount} Classes${freeText}
+• Total Classes: ${totalClsCount} Classes${freeText}
 • Class Duration: ${renewalDuration} minutes per session
-• Tuition Fee: ${formattedAmount} ${currency}
+• Tuition Fee: ${formattedAmount} ${pkgCurrency}
 • Target Start Date: ${renewalStartDate}
 
 ${portalUrl ? `🔗 Student Learning Portal:\n${portalUrl}\n` : ""}${renewalCustomNotes ? `📝 Note:\n${renewalCustomNotes}\n\n` : ""}💳 Payment Instructions:
@@ -933,7 +922,7 @@ ${renewalBankDetails ? `🏦 Bank Details:\n${renewalBankDetails}\n` : ""}Please
       const element = invoicePdfRef.current;
       const opt = {
         margin: 10,
-        filename: `Renewal_Invoice_${student?.name?.replace(/\s+/g, "_") || "Student"}_${renewalStartDate}.pdf`,
+        filename: `Renewal_Invoice_${parentOrStudentName.replace(/\s+/g, "_")}_${renewalStartDate}.pdf`,
         image: { type: "png" as const, quality: 1.0 },
         html2canvas: {
           scale: 5,
@@ -958,8 +947,7 @@ ${renewalBankDetails ? `🏦 Bank Details:\n${renewalBankDetails}\n` : ""}Please
     }
   }
 
-  const combinedTotalClasses =
-    Number(student?.classes_included || 0) + Number(student?.free_classes || 0);
+  const combinedTotalClasses = totalClsCount + freeClsCount;
 
   const validReports = reports.filter(
     (r) => {
@@ -997,8 +985,8 @@ ${renewalBankDetails ? `🏦 Bank Details:\n${renewalBankDetails}\n` : ""}Please
     100
   );
 
-  const totalRegularClasses = Number(student?.classes_included || 0);
-  const totalFreeClasses = Number(student?.free_classes || 0);
+  const totalRegularClasses = totalClsCount;
+  const totalFreeClasses = freeClsCount;
   const isFreePackage = totalRegularClasses === 0 && totalFreeClasses > 0;
 
   const rawStudentStatus = (student?.payment_status || "Pending").trim().toLowerCase();
@@ -1381,6 +1369,152 @@ ${renewalBankDetails ? `🏦 Bank Details:\n${renewalBankDetails}\n` : ""}Please
             )}
           </div>
 
+          {/* DOCUMENTS & CONTRACT TAB SECTION */}
+          <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs space-y-4">
+            <div className="flex items-center justify-between border-b border-pink-100 pb-3">
+              <div className="flex items-center gap-2 text-pink-900 font-bold text-sm">
+                <FileText size={16} className="text-pink-600" />
+                <span>Welcome Card & Contract</span>
+              </div>
+              <span className="text-[10px] font-bold text-pink-600 bg-pink-50 px-2 py-0.5 rounded-md border border-pink-200 uppercase">
+                Templates
+              </span>
+            </div>
+
+            {/* Customization Inputs for Parent, Teacher, Date, Classes, Duration, and Amount */}
+            <div className="p-3 bg-pink-50/60 rounded-2xl border border-pink-200 space-y-2.5 text-xs">
+              <p className="font-bold text-pink-950 text-[11px] uppercase">Customization Fields</p>
+              <div className="grid grid-cols-1 gap-2">
+                <div>
+                  <label className="block text-[10px] font-semibold text-gray-600 mb-1">Parent's / Student's Name</label>
+                  <input
+                    type="text"
+                    value={customParentName}
+                    onChange={(e) => setCustomParentName(e.target.value)}
+                    className="w-full bg-white border border-pink-200 rounded-xl p-2 text-xs text-gray-800"
+                    placeholder="e.g. An Nhien (Chip)"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[10px] font-semibold text-gray-600 mb-1">Teacher Name</label>
+                    <input
+                      type="text"
+                      value={customTeacherName}
+                      onChange={(e) => setCustomTeacherName(e.target.value)}
+                      className="w-full bg-white border border-pink-200 rounded-xl p-2 text-xs text-gray-800"
+                      placeholder="e.g. Teacher Gabi"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold text-gray-600 mb-1">Effective Date</label>
+                    <input
+                      type="date"
+                      value={customContractDate}
+                      onChange={(e) => setCustomContractDate(e.target.value)}
+                      className="w-full bg-white border border-pink-200 rounded-xl p-2 text-xs text-gray-800"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[10px] font-semibold text-gray-600 mb-1">Classes Count</label>
+                    <input
+                      type="number"
+                      value={customClasses}
+                      onChange={(e) => setCustomClasses(e.target.value)}
+                      className="w-full bg-white border border-pink-200 rounded-xl p-2 text-xs text-gray-800"
+                      placeholder="20"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold text-gray-600 mb-1">Free Classes</label>
+                    <input
+                      type="number"
+                      value={customFreeClasses}
+                      onChange={(e) => setCustomFreeClasses(e.target.value)}
+                      className="w-full bg-white border border-pink-200 rounded-xl p-2 text-xs text-gray-800"
+                      placeholder="0"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[10px] font-semibold text-gray-600 mb-1">Class Duration (mins)</label>
+                    <input
+                      type="number"
+                      value={customClassDuration}
+                      onChange={(e) => setCustomClassDuration(e.target.value)}
+                      className="w-full bg-white border border-pink-200 rounded-xl p-2 text-xs text-gray-800"
+                      placeholder="40"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold text-gray-600 mb-1">Payment Amount</label>
+                    <input
+                      type="text"
+                      value={customPaymentAmount}
+                      onChange={(e) => setCustomPaymentAmount(e.target.value)}
+                      className="w-full bg-white border border-pink-200 rounded-xl p-2 text-xs text-gray-800"
+                      placeholder="e.g. 5000"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Welcome Card Sub-card (Larger scrollable box) */}
+            <div className="p-3.5 bg-pink-50/40 rounded-2xl border border-pink-100 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-pink-950 flex items-center gap-1.5">
+                  <Sparkles size={13} className="text-pink-600" />
+                  <span>Welcome Card</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={handleCopyWelcome}
+                  className="px-2.5 py-1 bg-white hover:bg-pink-100 text-pink-700 rounded-lg text-[10px] font-bold border border-pink-200 transition cursor-pointer flex items-center gap-1 shadow-2xs"
+                >
+                  {copiedWelcome ? <Check size={12} className="text-emerald-600" /> : <Copy size={12} />}
+                  <span>{copiedWelcome ? "Copied!" : "Copy Note"}</span>
+                </button>
+              </div>
+              <div className="text-[11px] text-gray-600 h-44 overflow-y-auto font-mono bg-white p-3 rounded-xl border border-pink-100 whitespace-pre-wrap">
+                {welcomeCardText}
+              </div>
+            </div>
+
+            {/* Formal Contract Sub-card (Larger scrollable box) */}
+            <div className="p-3.5 bg-pink-50/40 rounded-2xl border border-pink-100 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-pink-950 flex items-center gap-1.5">
+                  <FileText size={13} className="text-pink-600" />
+                  <span>Tutoring Agreement</span>
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={handlePrintContract}
+                    className="px-2.5 py-1 bg-pink-600 hover:bg-pink-700 text-white rounded-lg text-[10px] font-bold transition cursor-pointer flex items-center gap-1 shadow-2xs"
+                  >
+                    <span>🖨️ Print / PDF</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCopyContract}
+                    className="px-2.5 py-1 bg-white hover:bg-pink-100 text-pink-700 rounded-lg text-[10px] font-bold border border-pink-200 transition cursor-pointer flex items-center gap-1 shadow-2xs"
+                  >
+                    {copiedContract ? <Check size={12} className="text-emerald-600" /> : <Copy size={12} />}
+                    <span>{copiedContract ? "Copied!" : "Copy"}</span>
+                  </button>
+                </div>
+              </div>
+              <div className="text-[11px] text-gray-600 h-44 overflow-y-auto font-mono bg-white p-3 rounded-xl border border-pink-100 whitespace-pre-wrap">
+                {contractText}
+              </div>
+            </div>
+          </div>
+
           <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs space-y-3">
             <div>
               <h3 className="text-sm font-bold text-gray-900">Teacher Notes & Objectives</h3>
@@ -1501,8 +1635,8 @@ ${renewalBankDetails ? `🏦 Bank Details:\n${renewalBankDetails}\n` : ""}Please
                             onClick={() => handlePrintLessonReport({
                               title: rep.lesson_title || rep.title || "Class Report",
                               date: rep.report_date?.substring(0, 10) || "",
-                              studentName: student?.name,
-                              teacherAlias: student?.teacher_alias || teacherAlias,
+                              studentName: parentOrStudentName,
+                              teacherAlias: teacherName,
                               bookTitle: books.find((b) => b.id === rep.book_id)?.title,
                               vocabulary: rep.vocabulary,
                               strengths: rep.strengths,
@@ -1618,8 +1752,8 @@ ${renewalBankDetails ? `🏦 Bank Details:\n${renewalBankDetails}\n` : ""}Please
                             onClick={() => handlePrintLessonReport({
                               title: les.title || "Lesson Log",
                               date: les.lesson_date?.substring(0, 10) || "",
-                              studentName: student?.name,
-                              teacherAlias: student?.teacher_alias || teacherAlias,
+                              studentName: parentOrStudentName,
+                              teacherAlias: teacherName,
                               vocabulary: displayVocab,
                               strengths: displayStrengths,
                               improvements: displayImprovements,
@@ -1638,7 +1772,7 @@ ${renewalBankDetails ? `🏦 Bank Details:\n${renewalBankDetails}\n` : ""}Please
                               setSelectedLesson({
                                 eventId: les.id,
                                 studentId: student.id,
-                                studentName: student.name,
+                                studentName: parentOrStudentName,
                                 type: "regular",
                                 dateString: les.lesson_date,
                               });
@@ -1846,7 +1980,7 @@ ${renewalBankDetails ? `🏦 Bank Details:\n${renewalBankDetails}\n` : ""}Please
             <div className="flex items-center justify-between border-b border-pink-100 pb-3">
               <div>
                 <h2 className="text-lg font-extrabold text-pink-950">Package Renewal & Invoice</h2>
-                <p className="text-xs text-pink-700/80">Generate a renewal notice message and printable invoice for {student?.name}.</p>
+                <p className="text-xs text-pink-700/80">Generate a renewal notice message and printable invoice for {parentOrStudentName}.</p>
               </div>
               <button onClick={() => setIsRenewalModalOpen(false)} className="p-2 rounded-full hover:bg-pink-50 cursor-pointer">
                 <X size={18} />
@@ -1962,7 +2096,7 @@ ${renewalBankDetails ? `🏦 Bank Details:\n${renewalBankDetails}\n` : ""}Please
                       reader.readAsDataURL(file);
                     }
                   }}
-                  className="w-full border border-pink-200 rounded-xl p-2 bg-white text-gray-800 text-xs file:mr-4 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-pink-50 file:text-pink-700 hover:file:bg-pink-100 cursor-pointer"
+                  className="w-full border border-pink-200 rounded-xl p-2 bg-white text-gray-800 text-xs file:mr-4 file:py-1 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-pink-50 file:text-pink-700 hover:file:bg-pink-100 cursor-pointer"
                 />
                 {renewalQrCode && (
                   <div className="mt-2 flex items-center gap-3">
@@ -2001,14 +2135,14 @@ ${renewalBankDetails ? `🏦 Bank Details:\n${renewalBankDetails}\n` : ""}Please
                     </p>
                   </div>
                   <div style={{ textAlign: "right" }}>
-                    <p style={{ fontSize: "11px", color: "#6b7280", margin: 0 }}>Instructor: <strong>{student?.teacher_alias || "Teacher Gabi"}</strong></p>
+                    <p style={{ fontSize: "11px", color: "#6b7280", margin: 0 }}>Instructor: <strong>{teacherName}</strong></p>
                     <p style={{ fontSize: "11px", color: "#6b7280", margin: "2px 0 0 0" }}>Date: {new Date().toLocaleDateString()}</p>
                   </div>
                 </div>
 
                 <div style={{ marginBottom: "24px", padding: "16px", backgroundColor: "#fdf2f8", borderRadius: "10px", border: "1px solid #fbcfe8" }}>
                   <p style={{ fontSize: "10px", fontWeight: "bold", color: "#9d174d", textTransform: "uppercase", margin: "0 0 4px 0" }}>Billed To:</p>
-                  <p style={{ fontSize: "15px", fontWeight: "bold", color: "#111827", margin: "0 0 2px 0" }}>{student?.name}</p>
+                  <p style={{ fontSize: "15px", fontWeight: "bold", color: "#111827", margin: "0 0 2px 0" }}>{parentOrStudentName}</p>
                   <p style={{ fontSize: "11px", color: "#4b5563", margin: 0 }}>Country: {student?.country || "International"} {student?.age ? `• Age: ${student.age}` : ""}</p>
                 </div>
 
@@ -2373,7 +2507,7 @@ ${renewalBankDetails ? `🏦 Bank Details:\n${renewalBankDetails}\n` : ""}Please
           }}
           eventId={selectedLesson.eventId}
           studentId={selectedLesson.studentId}
-          studentName={selectedLesson.studentName}
+          studentName={parentOrStudentName}
           eventType={selectedLesson.type}
           dateString={selectedLesson.dateString}
           studentBooks={studentBooks.map((sb: any) => sb.books || sb)}
