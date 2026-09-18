@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
 import {
   TrendingUp,
@@ -57,12 +57,66 @@ export default function ReportsPage() {
   const [monthlyTarget, setMonthlyTarget] = useState(50000);
   const [isEditingTarget, setIsEditingTarget] = useState(false);
   const [tempTarget, setTempTarget] = useState("50000");
+  const [taxMethod, setTaxMethod] = useState<"8percent" | "graduated">("8percent");
+
+// Manual Prior / Unrecorded Income States by Quarter (Hydration-safe)
+  const [manualQ1Income, setManualQ1Income] = useState("0");
+  const [manualQ2Income, setManualQ2Income] = useState("0");
+  const [manualQ3Income, setManualQ3Income] = useState("0");
+
+  // Load from localStorage once when the component mounts on the client
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setManualQ1Income(localStorage.getItem("manualQ1Income") || "0");
+      setManualQ2Income(localStorage.getItem("manualQ2Income") || "0");
+      setManualQ3Income(localStorage.getItem("manualQ3Income") || "0");
+    }
+  }, []);
 
   // PDF & Modals State
   const [showIncomeStatementModal, setShowIncomeStatementModal] = useState(false);
   const [showExpenseModal, setShowExpenseModal] = useState(false);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [isSavingExpense, setIsSavingExpense] = useState(false);
+  
+  // BIR Tax Modal & PDF Export State
+  const [showTaxModal, setShowTaxModal] = useState(false);
+  const [isGeneratingTaxPdf, setIsGeneratingTaxPdf] = useState(false);
+  const taxPdfRef = useRef<HTMLDivElement>(null);
+
+  async function handleDownloadTaxPdf() {
+    if (!taxPdfRef.current) return;
+    setIsGeneratingTaxPdf(true);
+
+    try {
+      // @ts-ignore
+      const html2pdf = (await import("html2pdf.js")).default;
+      const element = taxPdfRef.current;
+      const opt = {
+        margin: 10,
+        filename: `BIR_Form_1701A_1701Q_Computation_${taxMethod.toUpperCase()}_${selectedDate.slice(0, 4)}.pdf`,
+        image: { type: "png" as const, quality: 1.0 },
+        html2canvas: {
+          scale: 3,
+          useCORS: true,
+          backgroundColor: "#ffffff",
+          letterRendering: true,
+        },
+        jsPDF: {
+          unit: "mm" as const,
+          format: "a4" as const,
+          orientation: "portrait" as const,
+        },
+      };
+
+      await html2pdf().set(opt).from(element).save();
+    } catch (err) {
+      console.error("Tax PDF export error:", err);
+      alert("Failed to export BIR Tax Computation PDF.");
+    } finally {
+      setIsGeneratingTaxPdf(false);
+    }
+  }
 
   // New Expense Form State
   const [expenseTitle, setExpenseTitle] = useState("");
@@ -142,23 +196,21 @@ export default function ReportsPage() {
     return Math.abs(selTime - itemTime) / (1000 * 3600 * 24) <= 7;
   };
 
-const studentBreakdown = students
+  const studentBreakdown = students
     .map((s) => {
       const sId = String(s.id || "").trim().toLowerCase();
 
-      // Filter payments: Match student_id, MUST be "Paid", and match timeframe date filter
       const studentPayments = payments.filter((p) => {
         const pStudentId = String(p.student_id || "").trim().toLowerCase();
         const pDate = p.payment_date || p.created_at;
         return (
           sId !== "" &&
           pStudentId === sId &&
-          p.payment_status === "Paid" && // 👈 Only count actual paid receipts
+          p.payment_status === "Paid" &&
           matchesFilter(pDate)
         );
       });
 
-      // Sum realized gross cash for this timeframe
       const paymentsSum = studentPayments.reduce(
         (acc, curr) =>
           acc +
@@ -172,7 +224,6 @@ const studentBreakdown = students
 
       const grossPackagePhp = paymentsSum;
 
-      // Sum transfer/bank processing fees
       const totalFeesForStudent = studentPayments.reduce(
         (acc, curr) =>
           acc +
@@ -232,6 +283,88 @@ const studentBreakdown = students
     100,
     Math.round((totalNetOperatingIncome / currentHorizonTarget) * 100) || 0
   );
+
+  const currentYearStr = selectedDate.substring(0, 4);
+
+  const cleanQ1Manual = Number(manualQ1Income.replace(/[^0-9.]/g, "")) || 0;
+  const cleanQ2Manual = Number(manualQ2Income.replace(/[^0-9.]/g, "")) || 0;
+  const cleanQ3Manual = Number(manualQ3Income.replace(/[^0-9.]/g, "")) || 0;
+
+  // Quarterly breakdown calculation for BIR Form 1701Q (Cumulative totals) with manual quarterly inputs
+  const quarterlyData = useMemo(() => {
+    const getGrossForMonths = (months: string[]) => {
+      return payments
+        .filter((p) => {
+          const pDate = p.payment_date || p.created_at || "";
+          const isPaid = (p.payment_status || p.status || "").toLowerCase() === "paid" || p.payment_status === "Paid";
+          if (!isPaid || !pDate.startsWith(currentYearStr)) return false;
+          const monthPart = pDate.substring(5, 7);
+          return months.includes(monthPart);
+        })
+        .reduce((sum, p) => sum + (Number(p.php_equivalent) || Number(p.gross_amount_php) || Number(p.payment_amount) || Number(p.net_amount_php) || 0), 0);
+    };
+
+    const q1Gross = getGrossForMonths(["01", "02", "03"]);
+    const q2GrossInc = getGrossForMonths(["04", "05", "06"]);
+    const q3GrossInc = getGrossForMonths(["07", "08", "09"]);
+    const q4GrossInc = getGrossForMonths(["10", "11", "12"]);
+
+    const q1Cumulative = q1Gross + cleanQ1Manual;
+    const q2Cumulative = q1Cumulative + q2GrossInc + cleanQ2Manual;
+    const q3Cumulative = q2Cumulative + q3GrossInc + cleanQ3Manual;
+    const annualCumulative = q3Cumulative + q4GrossInc;
+
+    const calcTax = (gross: number) => {
+      if (taxMethod === "8percent") {
+        const taxable = Math.max(gross - 250000, 0);
+        return taxable * 0.08;
+      } else {
+        const net = gross * 0.60;
+        let tax = 0;
+        if (net <= 250000) tax = 0;
+        else if (net <= 400000) tax = (net - 250000) * 0.15;
+        else if (net <= 800000) tax = 22500 + (net - 400000) * 0.20;
+        else if (net <= 2000000) tax = 102500 + (net - 800000) * 0.25;
+        else if (net <= 8000000) tax = 402500 + (net - 2000000) * 0.30;
+        else tax = 2202500 + (net - 8000000) * 0.35;
+        return tax;
+      }
+    };
+
+    return {
+      q1: { gross: q1Cumulative, taxDue: calcTax(q1Cumulative), deadline: `May 15, ${currentYearStr}` },
+      q2: { gross: q2Cumulative, taxDue: calcTax(q2Cumulative), deadline: `August 15, ${currentYearStr}` },
+      q3: { gross: q3Cumulative, taxDue: calcTax(q3Cumulative), deadline: `November 15, ${currentYearStr}` },
+      annual: { gross: annualCumulative, taxDue: calcTax(annualCumulative), deadline: `April 15 / May 15, ${Number(currentYearStr) + 1}` }
+    };
+  }, [payments, currentYearStr, taxMethod, cleanQ1Manual, cleanQ2Manual, cleanQ3Manual]);
+
+  const runningGrossRevenue = quarterlyData.annual.gross;
+  const annualGrossRevenue = runningGrossRevenue;
+
+  const estimatedTaxDue = useMemo(() => {
+    if (taxMethod === "8percent") {
+      const taxableBase = Math.max(runningGrossRevenue - 250000, 0);
+      return taxableBase * 0.08;
+    } else {
+      const netTaxableIncome = runningGrossRevenue * 0.60;
+      let tax = 0;
+      if (netTaxableIncome <= 250000) {
+        tax = 0;
+      } else if (netTaxableIncome <= 400000) {
+        tax = (netTaxableIncome - 250000) * 0.15;
+      } else if (netTaxableIncome <= 800000) {
+        tax = 22500 + (netTaxableIncome - 400000) * 0.20;
+      } else if (netTaxableIncome <= 2000000) {
+        tax = 102500 + (netTaxableIncome - 800000) * 0.25;
+      } else if (netTaxableIncome <= 8000000) {
+        tax = 402500 + (netTaxableIncome - 2000000) * 0.30;
+      } else {
+        tax = 2202500 + (netTaxableIncome - 8000000) * 0.35;
+      }
+      return tax;
+    }
+  }, [runningGrossRevenue, taxMethod]);
 
   function handleSaveTarget() {
     const val = Number(tempTarget.replace(/[^0-9.]/g, ""));
@@ -495,6 +628,148 @@ const studentBreakdown = students
           </div>
         </div>
 
+        {/* BIR Tax Estimation Card */}
+        <div className="bg-white border border-pink-100 rounded-3xl p-6 shadow-xs space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <span className="p-2.5 bg-pink-50 text-pink-600 rounded-2xl">
+                <Building2 size={22} />
+              </span>
+              <div>
+                <h3 className="text-sm font-bold text-gray-900">
+                  BIR Income Tax Estimation (Philippines)
+                </h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Projected annual & quarterly tax liability (Forms 1701A & 1701Q)
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center bg-pink-50/60 border border-pink-200 rounded-2xl p-1 shadow-2xs">
+                <button
+                  type="button"
+                  onClick={() => setTaxMethod("8percent")}
+                  className={`text-xs font-bold px-3 py-1.5 rounded-xl transition cursor-pointer ${
+                    taxMethod === "8percent"
+                      ? "bg-pink-600 text-white shadow-2xs"
+                      : "text-gray-600 hover:text-pink-600"
+                  }`}
+                >
+                  8% Flat Tax Rate
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTaxMethod("graduated")}
+                  className={`text-xs font-bold px-3 py-1.5 rounded-xl transition cursor-pointer ${
+                    taxMethod === "graduated"
+                      ? "bg-pink-600 text-white shadow-2xs"
+                      : "text-gray-600 hover:text-pink-600"
+                  }`}
+                >
+                  Graduated Rates
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowTaxModal(true)}
+                className="px-3.5 py-2 bg-pink-600 hover:bg-pink-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer"
+              >
+                <Download size={13} />
+                <span>View Form 1701A & 1701Q Sheet</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Manual Prior Income Inputs per Quarter */}
+          <div className="bg-pink-50/40 border border-pink-100 rounded-2xl p-4 space-y-3 text-xs">
+            <div>
+              <p className="font-bold text-gray-800">Previous / Unrecorded Income by Quarter ({currentYearStr}):</p>
+              <p className="text-[11px] text-gray-500">Enter past earnings per quarter before using this app to ensure accurate BIR Form 1701Q cumulative totals</p>
+            </div>
+         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="bg-white p-3 rounded-xl border border-pink-100 space-y-1">
+                <label className="block text-[11px] font-bold text-gray-700">Q1 Unrecorded (Jan–Mar):</label>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-bold text-gray-500">₱</span>
+                  <input
+                    type="text"
+                    className="input text-xs w-full py-1 px-2 bg-white font-semibold text-pink-700"
+                    value={manualQ1Income}
+                    onChange={(e) => {
+                      const raw = e.target.value.replace(/[^0-9.]/g, "");
+                      const formatted = raw === "" ? "" : isNaN(Number(raw)) ? raw : Number(raw).toLocaleString();
+                      setManualQ1Income(formatted);
+                      if (typeof window !== "undefined") localStorage.setItem("manualQ1Income", formatted);
+                    }}
+                    placeholder="0"
+                  />
+                </div>
+              </div>
+
+              <div className="bg-white p-3 rounded-xl border border-pink-100 space-y-1">
+                <label className="block text-[11px] font-bold text-gray-700">Q2 Unrecorded (Apr–Jun):</label>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-bold text-gray-500">₱</span>
+                  <input
+                    type="text"
+                    className="input text-xs w-full py-1 px-2 bg-white font-semibold text-pink-700"
+                    value={manualQ2Income}
+                    onChange={(e) => {
+                      const raw = e.target.value.replace(/[^0-9.]/g, "");
+                      const formatted = raw === "" ? "" : isNaN(Number(raw)) ? raw : Number(raw).toLocaleString();
+                      setManualQ2Income(formatted);
+                      if (typeof window !== "undefined") localStorage.setItem("manualQ2Income", formatted);
+                    }}
+                    placeholder="0"
+                  />
+                </div>
+              </div>
+
+              <div className="bg-white p-3 rounded-xl border border-pink-100 space-y-1">
+                <label className="block text-[11px] font-bold text-gray-700">Q3 Unrecorded (Jul–Sep):</label>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-bold text-gray-500">₱</span>
+                  <input
+                    type="text"
+                    className="input text-xs w-full py-1 px-2 bg-white font-semibold text-pink-700"
+                    value={manualQ3Income}
+                    onChange={(e) => {
+                      const raw = e.target.value.replace(/[^0-9.]/g, "");
+                      const formatted = raw === "" ? "" : isNaN(Number(raw)) ? raw : Number(raw).toLocaleString();
+                      setManualQ3Income(formatted);
+                      if (typeof window !== "undefined") localStorage.setItem("manualQ3Income", formatted);
+                    }}
+                    placeholder="0"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2 border-t border-pink-50 text-xs">
+            <div className="p-3.5 bg-pink-50/40 rounded-2xl space-y-1">
+              <p className="text-gray-500 font-medium">Total Running YTD Gross:</p>
+              <p className="text-base font-bold text-gray-900">
+                ₱{runningGrossRevenue.toLocaleString()} PHP
+              </p>
+            </div>
+            <div className="p-3.5 bg-pink-50/40 rounded-2xl space-y-1">
+              <p className="text-gray-500 font-medium">Projected Annual Tax Due:</p>
+              <p className="text-base font-bold text-pink-600">
+                ₱{Math.round(estimatedTaxDue).toLocaleString()} PHP
+              </p>
+            </div>
+            <div className="p-3.5 bg-pink-50/40 rounded-2xl space-y-1">
+              <p className="text-gray-500 font-medium">Next Filing (Q3 / Nov 15):</p>
+              <p className="text-base font-bold text-pink-600">
+                ₱{Math.round(quarterlyData.q3.taxDue).toLocaleString()} PHP Cumulative
+              </p>
+            </div>
+          </div>
+        </div>
+
         {/* Primary Metric KPI Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="bg-white border border-pink-100 rounded-2xl p-5 shadow-2xs flex items-center justify-between">
@@ -624,7 +899,6 @@ const studentBreakdown = students
                           ₱{s.grossPackagePhp.toLocaleString()} PHP
                         </td>
 
-                        {/* Read-Only Transfer / Bank Fee Column */}
                         <td className="p-4">
                           <span className="font-medium text-rose-600">
                             {s.totalFeesForStudent > 0
@@ -943,7 +1217,6 @@ const studentBreakdown = students
               </button>
             </div>
 
-            {/* Inline Controls for Company & Signer Name */}
             <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-[11px] font-bold text-gray-700 mb-1">
@@ -985,7 +1258,6 @@ const studentBreakdown = students
                 }}
                 className="text-xs"
               >
-                {/* Document Header */}
                 <div style={{ textAlign: "center", borderBottom: "2px solid #000000", paddingBottom: "16px" }}>
                   <h1 style={{ fontSize: "16px", fontWeight: "900", color: "#000000", margin: "0 0 4px 0", textTransform: "uppercase", letterSpacing: "0.5px" }}>
                     {businessName || "Private ESL Tutoring Services"}
@@ -1004,7 +1276,6 @@ const studentBreakdown = students
                   </p>
                 </div>
 
-                {/* Gross Collections */}
                 <div style={{ marginTop: "20px" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #000000", paddingBottom: "6px" }}>
                     <span style={{ fontSize: "11.5px", fontWeight: "800", color: "#000000", textTransform: "uppercase" }}>
@@ -1019,7 +1290,6 @@ const studentBreakdown = students
                   </p>
                 </div>
 
-                {/* Total Cash Inflows */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1.5px solid #000000", marginTop: "8px", fontSize: "11px" }}>
                   <span style={{ fontWeight: "800", color: "#000000" }}>TOTAL CASH INFLOWS</span>
                   <span style={{ fontWeight: "900", color: "#000000", fontFamily: "monospace" }}>
@@ -1027,7 +1297,6 @@ const studentBreakdown = students
                   </span>
                 </div>
 
-                {/* Disbursements Section */}
                 <div style={{ marginTop: "16px" }}>
                   <div style={{ borderBottom: "1px solid #000000", paddingBottom: "4px", marginBottom: "8px" }}>
                     <span style={{ fontSize: "11px", fontWeight: "800", color: "#000000", textTransform: "uppercase" }}>
@@ -1063,7 +1332,6 @@ const studentBreakdown = students
                   </div>
                 </div>
 
-                {/* Net Taxable Receipts */}
                 <div
                   style={{
                     display: "flex",
@@ -1083,7 +1351,6 @@ const studentBreakdown = students
                   </span>
                 </div>
 
-                {/* Signatures */}
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "32px", marginTop: "50px", paddingTop: "16px" }}>
                   <div>
                     <div style={{ borderBottom: "1.5px solid #000000", width: "100%", height: "24px", display: "flex", alignItems: "flex-end", paddingBottom: "2px" }}>
@@ -1123,6 +1390,220 @@ const studentBreakdown = students
               <button
                 type="button"
                 onClick={() => setShowIncomeStatementModal(false)}
+                className="px-4 py-2.5 rounded-xl text-xs font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 transition cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* BIR FORMS 1701A & 1701Q COMPUTATION MODAL & PRINTABLE SHEET */}
+      {showTaxModal && (
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-50 p-4"
+          onClick={() => setShowTaxModal(false)}
+        >
+          <div
+            className="bg-white border border-pink-200 rounded-3xl p-6 w-full max-w-2xl shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150 max-h-[92vh] flex flex-col relative z-60"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-pink-100 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="p-2 bg-pink-50 text-pink-600 rounded-xl">
+                  <Building2 size={18} />
+                </span>
+                <div>
+                  <h3 className="font-bold text-base text-pink-950">
+                    BIR Forms 1701A & 1701Q Computation Summary
+                  </h3>
+                  <p className="text-xs text-gray-500">
+                    Official tax return calculation worksheet for annual & quarterly filings.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowTaxModal(false)}
+                className="text-gray-400 hover:text-gray-600 p-1 rounded-lg transition cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto border border-gray-200 rounded-2xl p-6 bg-white shadow-inner">
+              <div
+                ref={taxPdfRef}
+                style={{
+                  backgroundColor: "#ffffff",
+                  color: "#000000",
+                  fontFamily: "Helvetica, Arial, sans-serif",
+                  padding: "36px 40px",
+                  borderRadius: "8px",
+                  border: "1px solid #000000",
+                  boxSizing: "border-box",
+                }}
+                className="text-xs space-y-4"
+              >
+                <div style={{ textAlign: "center", borderBottom: "2px solid #000000", paddingBottom: "14px" }}>
+                  <h1 style={{ fontSize: "15px", fontWeight: "900", color: "#000000", margin: "0 0 2px 0", textTransform: "uppercase" }}>
+                    Republic of the Philippines • Bureau of Internal Revenue
+                  </h1>
+                  <h2 style={{ fontSize: "13px", fontWeight: "800", color: "#000000", margin: "0 0 2px 0" }}>
+                    BIR FORMS 1701A & 1701Q COMPUTATION WORKSHEET
+                  </h2>
+                  <p style={{ fontSize: "10.5px", color: "#333333", margin: 0, fontWeight: "600" }}>
+                    Income Tax Return — Purely Business/Profession ({taxMethod === "8percent" ? "8% Flat Tax Option" : "Graduated Rates with 40% OSD"})
+                  </p>
+                  <p style={{ fontSize: "10px", color: "#555555", margin: "2px 0 0 0" }}>
+                    Taxable Year: {currentYearStr} • Taxpayer: {statementSigner} ({businessName})
+                  </p>
+                </div>
+
+                <div style={{ borderBottom: "1px solid #000000", paddingBottom: "10px" }}>
+                  <p style={{ fontSize: "11px", fontWeight: "800", textTransform: "uppercase", marginBottom: "6px" }}>
+                    Part I — YTD Gross Sales / Receipts / Revenues
+                  </p>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", paddingLeft: "8px" }}>
+                    <span>Total Running Gross Collections ({currentYearStr}):</span>
+                    <span style={{ fontFamily: "monospace", fontWeight: "800" }}>
+                      PHP {Number(runningGrossRevenue || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Part II: Quarterly Breakdown Schedule (Form 1701Q) */}
+                <div style={{ borderBottom: "1px solid #000000", paddingBottom: "12px" }}>
+                  <p style={{ fontSize: "11px", fontWeight: "800", textTransform: "uppercase", marginBottom: "6px" }}>
+                    Part II — Quarterly Income Tax Schedule (BIR Form 1701Q Cumulative)
+                  </p>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px" }}>
+                    <thead>
+                      <tr style={{ borderBottom: "1px solid #000", textAlign: "left" }}>
+                        <th style={{ padding: "4px" }}>Quarter / Return</th>
+                        <th style={{ padding: "4px" }}>Filing Deadline</th>
+                        <th style={{ padding: "4px" }}>Cumulative Gross</th>
+                        <th style={{ padding: "4px", textAlign: "right" }}>Cumulative Tax Due</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr style={{ borderBottom: "1px dashed #ddd" }}>
+                        <td style={{ padding: "4px", fontWeight: "700" }}>Q1 (Jan–Mar)</td>
+                        <td style={{ padding: "4px" }}>{quarterlyData.q1.deadline}</td>
+                        <td style={{ padding: "4px", fontFamily: "monospace" }}>₱{quarterlyData.q1.gross.toLocaleString()}</td>
+                        <td style={{ padding: "4px", fontFamily: "monospace", textAlign: "right" }}>₱{Math.round(quarterlyData.q1.taxDue).toLocaleString()}</td>
+                      </tr>
+                      <tr style={{ borderBottom: "1px dashed #ddd" }}>
+                        <td style={{ padding: "4px", fontWeight: "700" }}>Q2 (Jan–Jun)</td>
+                        <td style={{ padding: "4px" }}>{quarterlyData.q2.deadline}</td>
+                        <td style={{ padding: "4px", fontFamily: "monospace" }}>₱{quarterlyData.q2.gross.toLocaleString()}</td>
+                        <td style={{ padding: "4px", fontFamily: "monospace", textAlign: "right" }}>₱{Math.round(quarterlyData.q2.taxDue).toLocaleString()}</td>
+                      </tr>
+                      <tr style={{ borderBottom: "1px dashed #ddd" }}>
+                        <td style={{ padding: "4px", fontWeight: "700" }}>Q3 (Jan–Sep)</td>
+                        <td style={{ padding: "4px" }}>{quarterlyData.q3.deadline}</td>
+                        <td style={{ padding: "4px", fontFamily: "monospace" }}>₱{quarterlyData.q3.gross.toLocaleString()}</td>
+                        <td style={{ padding: "4px", fontFamily: "monospace", textAlign: "right" }}>₱{Math.round(quarterlyData.q3.taxDue).toLocaleString()}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <div style={{ borderBottom: "1px solid #000000", paddingBottom: "10px" }}>
+                  <p style={{ fontSize: "11px", fontWeight: "800", textTransform: "uppercase", marginBottom: "6px" }}>
+                    Part III — Annual Tax Calculation Breakdown ({taxMethod === "8percent" ? "8% Flat Rate" : "Graduated w/ OSD"})
+                  </p>
+                  
+                  {taxMethod === "8percent" ? (
+                    <div style={{ paddingLeft: "8px", fontSize: "10.5px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+                        <span>Running Gross Sales / Receipts:</span>
+                        <span style={{ fontFamily: "monospace", fontWeight: "700" }}>₱ {runningGrossRevenue.toLocaleString()}</span>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+                        <span>Less: Allowable Exemption Reduction (Sec. 24):</span>
+                        <span style={{ fontFamily: "monospace", fontWeight: "700" }}>(₱ 250,000.00)</span>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px", borderTop: "1px dashed #999", paddingTop: "4px" }}>
+                        <span style={{ fontWeight: "700" }}>Net Taxable Base:</span>
+                        <span style={{ fontFamily: "monospace", fontWeight: "800" }}>₱ {Math.max(runningGrossRevenue - 250000, 0).toLocaleString()}</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ paddingLeft: "8px", fontSize: "10.5px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+                        <span>Running Gross Sales / Receipts:</span>
+                        <span style={{ fontFamily: "monospace", fontWeight: "700" }}>₱ {runningGrossRevenue.toLocaleString()}</span>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+                        <span>Less: 40% Optional Standard Deduction (OSD):</span>
+                        <span style={{ fontFamily: "monospace", fontWeight: "700" }}>(₱ {(runningGrossRevenue * 0.40).toLocaleString()})</span>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px", borderTop: "1px dashed #999", paddingTop: "4px" }}>
+                        <span style={{ fontWeight: "700" }}>Net Taxable Income:</span>
+                        <span style={{ fontFamily: "monospace", fontWeight: "800" }}>₱ {(runningGrossRevenue * 0.60).toLocaleString()}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    borderTop: "2px solid #000000",
+                    borderBottom: "2px solid #000000",
+                    padding: "10px 4px",
+                    marginTop: "12px",
+                  }}
+                >
+                  <span style={{ fontSize: "12px", fontWeight: "900", textTransform: "uppercase" }}>
+                    Total Estimated Annual Income Tax Due (Form 1701A)
+                  </span>
+                  <span style={{ fontSize: "14px", fontWeight: "900", fontFamily: "monospace" }}>
+                    PHP {Math.round(estimatedTaxDue).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "32px", marginTop: "30px", paddingTop: "12px" }}>
+                  <div>
+                    <div style={{ borderBottom: "1.5px solid #000000", width: "100%", height: "22px", display: "flex", alignItems: "flex-end", paddingBottom: "2px" }}>
+                      <span style={{ fontSize: "11px", fontWeight: "800" }}>{statementSigner}</span>
+                    </div>
+                    <p style={{ fontSize: "10px", marginTop: "4px", fontWeight: "700" }}>
+                      Signature Over Printed Name of Taxpayer
+                    </p>
+                  </div>
+                  <div>
+                    <div style={{ borderBottom: "1.5px solid #000000", width: "100%", height: "22px", display: "flex", alignItems: "flex-end", paddingBottom: "2px" }}>
+                      <span style={{ fontSize: "11px", fontFamily: "monospace", fontWeight: "700" }}>
+                        {new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
+                      </span>
+                    </div>
+                    <p style={{ fontSize: "10px", marginTop: "4px", fontWeight: "700" }}>
+                      Date Computed / Prepared
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-2">
+              <button
+                type="button"
+                onClick={handleDownloadTaxPdf}
+                disabled={isGeneratingTaxPdf}
+                className="px-5 py-2.5 bg-pink-600 hover:bg-pink-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-xs cursor-pointer"
+              >
+                <Download size={14} />
+                <span>{isGeneratingTaxPdf ? "Exporting PDF..." : "Download Tax Returns PDF (1701A & 1701Q)"}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowTaxModal(false)}
                 className="px-4 py-2.5 rounded-xl text-xs font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 transition cursor-pointer"
               >
                 Close
