@@ -64,13 +64,24 @@ export default function ReportsPage() {
   const [manualQ2Income, setManualQ2Income] = useState("0");
   const [manualQ3Income, setManualQ3Income] = useState("0");
 
+// Auto-save manual prior income to localStorage on change
   useEffect(() => {
     if (typeof window !== "undefined") {
-      setManualQ1Income(localStorage.getItem("manualQ1Income") || "0");
-      setManualQ2Income(localStorage.getItem("manualQ2Income") || "0");
-      setManualQ3Income(localStorage.getItem("manualQ3Income") || "0");
+      localStorage.setItem("manualQ1Income", manualQ1Income);
     }
-  }, []);
+  }, [manualQ1Income]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("manualQ2Income", manualQ2Income);
+    }
+  }, [manualQ2Income]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("manualQ3Income", manualQ3Income);
+    }
+  }, [manualQ3Income]);
 
   // PDF & Modals State
   const [showIncomeStatementModal, setShowIncomeStatementModal] = useState(false);

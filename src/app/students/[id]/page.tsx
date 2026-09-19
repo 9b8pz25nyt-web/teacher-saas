@@ -90,6 +90,7 @@ export default function StudentDetailsPage({
   const [customClassDuration, setCustomClassDuration] = useState("");
   const [customPaymentAmount, setCustomPaymentAmount] = useState("");
   
+  
   const [selectedLesson, setSelectedLesson] = useState<{
     eventId: string;
     studentId: string;
