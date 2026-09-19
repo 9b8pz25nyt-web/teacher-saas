@@ -59,10 +59,29 @@ export default function ReportsPage() {
   const [tempTarget, setTempTarget] = useState("50000");
   const [taxMethod, setTaxMethod] = useState<"8percent" | "graduated">("8percent");
 
-  // Manual Prior / Unrecorded Income States by Quarter (Hydration-safe)
-  const [manualQ1Income, setManualQ1Income] = useState("0");
-  const [manualQ2Income, setManualQ2Income] = useState("0");
-  const [manualQ3Income, setManualQ3Income] = useState("0");
+// Manual Prior / Unrecorded Income States by Quarter (Loaded directly from localStorage)
+  const [manualQ1Income, setManualQ1Income] = useState(() => 
+    typeof window !== "undefined" ? localStorage.getItem("manualQ1Income") || "0" : "0"
+  );
+  const [manualQ2Income, setManualQ2Income] = useState(() => 
+    typeof window !== "undefined" ? localStorage.getItem("manualQ2Income") || "0" : "0"
+  );
+  const [manualQ3Income, setManualQ3Income] = useState(() => 
+    typeof window !== "undefined" ? localStorage.getItem("manualQ3Income") || "0" : "0"
+  );
+
+  // Auto-save changes to localStorage
+  useEffect(() => {
+    if (typeof window !== "undefined") localStorage.setItem("manualQ1Income", manualQ1Income);
+  }, [manualQ1Income]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") localStorage.setItem("manualQ2Income", manualQ2Income);
+  }, [manualQ2Income]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") localStorage.setItem("manualQ3Income", manualQ3Income);
+  }, [manualQ3Income]);
 
 // Auto-save manual prior income to localStorage on change
   useEffect(() => {
