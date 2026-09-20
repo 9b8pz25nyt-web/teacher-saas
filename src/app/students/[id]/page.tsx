@@ -123,7 +123,7 @@ export default function StudentDetailsPage({
     );
   }
 
-// Improved Professional Print Layout Helper for Lesson Reports
+/// Improved Professional Print Layout Helper for Lesson Reports
   function handlePrintLessonReport(lessonData: {
     title: string;
     date: string;
@@ -147,7 +147,7 @@ export default function StudentDetailsPage({
           <style>
             @page {
               size: A4;
-              margin: 15mm;
+              margin: 20mm 15mm 15mm 15mm;
             }
             body {
               font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
@@ -167,11 +167,11 @@ export default function StudentDetailsPage({
               margin: 0 auto;
               box-sizing: border-box;
             }
-            /* Adds top spacing when a page break happens naturally */
+            /* Adds breathing room at the top when content flows to page 2 */
             @media print {
               .report-container {
                 border: none;
-                padding-top: 15mm;
+                padding-top: 20mm;
               }
             }
             .header {
