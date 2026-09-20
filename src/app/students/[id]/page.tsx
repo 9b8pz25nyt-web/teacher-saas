@@ -89,6 +89,7 @@ export default function StudentDetailsPage({
   const [customFreeClasses, setCustomFreeClasses] = useState("");
   const [customClassDuration, setCustomClassDuration] = useState("");
   const [customPaymentAmount, setCustomPaymentAmount] = useState("");
+  const [renewalParentName, setRenewalParentName] = useState("");
   
   
   const [selectedLesson, setSelectedLesson] = useState<{
@@ -448,6 +449,7 @@ export default function StudentDetailsPage({
 
       // Initialize template customization states
       setCustomParentName(studentData.name || "");
+      setRenewalParentName(studentData.parent_name || "");
       setCustomTeacherName(studentData.teacher_alias || "Teacher Gabi");
       setCustomContractDate(studentData.start_date || new Date().toISOString().split("T")[0]);
       setCustomClasses(studentData.classes_included !== undefined ? String(studentData.classes_included) : "20");
@@ -579,7 +581,7 @@ export default function StudentDetailsPage({
     fetchStudentData();
   }, [fetchStudentData]);
 
-  async function calculatePHP(amount: string, currency: string) {
+ async function calculatePHP(amount: string, currency: string) {
     const cleanAmount = amount.replace(/,/g, "");
     const numberAmount = Number(cleanAmount);
 
@@ -594,6 +596,47 @@ export default function StudentDetailsPage({
     } catch (error) {
       console.error("Currency conversion failed:", error);
       setPhpEquivalent("");
+    }
+  }
+
+  async function handleSaveCustomName(newName: string) {
+    setCustomParentName(newName);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { error } = await supabase
+        .from("students")
+        .update({ name: newName })
+        .eq("id", studentId)
+        .eq("user_id", user.id);
+
+      if (error) throw error;
+      
+      setStudent((prev: any) => ({ ...prev, name: newName }));
+      setName(newName);
+    } catch (err: any) {
+      console.error("Error updating student name:", err);
+    }
+  }
+
+async function handleSaveParentName(newParentName: string) {
+    setRenewalParentName(newParentName);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { error } = await supabase
+        .from("students")
+        .update({ parent_name: newParentName })
+        .eq("id", studentId)
+        .eq("user_id", user.id);
+
+      if (error) throw error;
+      
+      setStudent((prev: any) => ({ ...prev, parent_name: newParentName }));
+    } catch (err: any) {
+      console.error("Error updating parent name:", err);
     }
   }
 
@@ -631,6 +674,8 @@ export default function StudentDetailsPage({
         .eq("id", studentId)
         .eq("user_id", user.id);
 
+      if (error) throw error;
+
       setIsEditModalOpen(false);
       await fetchStudentData();
     } catch (err: any) {
@@ -638,7 +683,6 @@ export default function StudentDetailsPage({
       alert("Failed to update student: " + err.message);
     }
   }
-
   async function handleAddSchedule(e: React.FormEvent) {
     e.preventDefault();
     if (scheduleDays.length === 0) {
@@ -956,14 +1000,15 @@ function handlePrintContract() {
     printWindow.document.close();
   }
 
-  function handleCopyRenewalMessage() {
+function handleCopyRenewalMessage() {
     const freeText = Number(freeClsCount) > 0 ? ` (+${freeClsCount} Free Bonus Classes)` : "";
     const cleanNum = Number(String(renewalRate).replace(/[^0-9.]/g, "")) || 0;
     const formattedAmount = cleanNum.toLocaleString("en-US");
+    const parentGreeting = renewalParentName.trim() || "Parent";
 
     const renewalText = `🌟 CLASS PACKAGE RENEWAL NOTICE 🌟
 
-Dear Parent,
+Dear ${parentGreeting},
 
 Thank you for continuing with ${teacherName}'s private English classes! Here are the details for ${parentOrStudentName}'s upcoming lesson package:
 
@@ -1462,6 +1507,7 @@ ${renewalBankDetails ? `🏦 Bank Details:\n${renewalBankDetails}\n` : ""}Please
                     type="text"
                     value={customParentName}
                     onChange={(e) => setCustomParentName(e.target.value)}
+                    onBlur={(e) => handleSaveCustomName(e.target.value)}
                     className="w-full bg-white border border-pink-200 rounded-xl p-2 text-xs text-gray-800"
                     placeholder="e.g. An Nhien (Chip)"
                   />
@@ -2066,6 +2112,17 @@ ${renewalBankDetails ? `🏦 Bank Details:\n${renewalBankDetails}\n` : ""}Please
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+              <div>
+                <label className="block mb-1 font-semibold text-gray-700">Parent / Guardian Name</label>
+                <input
+                  type="text"
+                  className="w-full border border-pink-200 rounded-xl p-2.5 bg-white text-gray-800"
+                  value={renewalParentName}
+                  onChange={(e) => setRenewalParentName(e.target.value)}
+                  onBlur={(e) => handleSaveParentName(e.target.value)}
+                  placeholder="e.g. Mommy Sarah"
+                />
+              </div>
               <div>
                 <label className="block mb-1 font-semibold text-gray-700">Renewal Classes Count</label>
                 <input
