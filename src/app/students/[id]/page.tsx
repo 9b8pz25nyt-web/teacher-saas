@@ -147,11 +147,11 @@ export default function StudentDetailsPage({
           <style>
             @page {
               size: A4;
-              margin: 10mm;
+              margin: 15mm;
             }
             body {
               font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-              padding: 20px;
+              padding: 0;
               margin: 0;
               color: #1f2937;
               background-color: #ffffff;
@@ -161,11 +161,18 @@ export default function StudentDetailsPage({
             .report-container {
               border: 2px solid #fbcfe8;
               border-radius: 16px;
-              padding: 30px;
+              padding: 24px 30px;
               background: #fff;
               max-width: 750px;
               margin: 0 auto;
               box-sizing: border-box;
+            }
+            /* Adds top spacing when a page break happens naturally */
+            @media print {
+              .report-container {
+                border: none;
+                padding-top: 15mm;
+              }
             }
             .header {
               border-bottom: 2px solid #db2777;
