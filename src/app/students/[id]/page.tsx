@@ -145,90 +145,94 @@ export default function StudentDetailsPage({
         <head>
           <title>Lesson Report - ${lessonData.title}</title>
           <style>
+            @page {
+              size: A4;
+              margin: 15mm;
+            }
             body {
               font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-              padding: 40px;
+              padding: 0;
+              margin: 0;
               color: #1f2937;
-              max-width: 750px;
-              margin: 0 auto;
               background-color: #ffffff;
               -webkit-print-color-adjust: exact;
               print-color-adjust: exact;
             }
             .report-container {
               border: 2px solid #fbcfe8;
-              border-radius: 16px;
-              padding: 30px;
+              border-radius: 14px;
+              padding: 20px 24px;
               background: #fff;
+              max-width: 100%;
+              box-sizing: border-box;
             }
             .header {
               border-bottom: 2px solid #db2777;
-              padding-bottom: 15px;
-              margin-bottom: 24px;
+              padding-bottom: 10px;
+              margin-bottom: 16px;
               display: flex;
               justify-content: space-between;
               align-items: flex-end;
             }
             .header h2 {
               color: #be185d;
-              margin: 0 0 4px 0;
-              font-size: 20px;
+              margin: 0 0 2px 0;
+              font-size: 18px;
               text-transform: uppercase;
               letter-spacing: 0.5px;
             }
             .meta {
-              font-size: 12px;
+              font-size: 11px;
               color: #4b5563;
               font-weight: 600;
             }
             .badge {
               background: #fdf2f8;
               color: #be185d;
-              padding: 4px 10px;
-              border-radius: 8px;
-              font-size: 11px;
+              padding: 3px 8px;
+              border-radius: 6px;
+              font-size: 10px;
               font-weight: bold;
               border: 1px solid #fbcfe8;
             }
             .section {
-              margin-bottom: 18px;
+              margin-bottom: 12px;
+              break-inside: avoid;
+              page-break-inside: avoid;
             }
             .label {
-              font-size: 11px;
+              font-size: 10px;
               font-weight: 800;
               text-transform: uppercase;
               color: #be185d;
-              margin-bottom: 6px;
+              margin-bottom: 4px;
               letter-spacing: 0.5px;
             }
             .box {
               background: #fdf2f8;
               border: 1px solid #fbcfe8;
-              padding: 12px 16px;
-              border-radius: 10px;
-              font-size: 13px;
-              line-height: 1.6;
+              padding: 10px 14px;
+              border-radius: 8px;
+              font-size: 12px;
+              line-height: 1.5;
               color: #374151;
               white-space: pre-wrap;
             }
             .grid {
               display: grid;
-              grid-template-columns: 1fr;
-              gap: 12px;
-              margin-bottom: 18px;
-            }
-            @media (min-width: 600px) {
-              .grid {
-                grid-template-columns: 1fr 1fr;
-              }
+              grid-template-columns: 1fr 1fr;
+              gap: 10px;
+              margin-bottom: 12px;
+              break-inside: avoid;
+              page-break-inside: avoid;
             }
             .footer {
-              margin-top: 30px;
+              margin-top: 16px;
               text-align: center;
-              font-size: 11px;
+              font-size: 10px;
               color: #9ca3af;
               border-top: 1px solid #e5e7eb;
-              padding-top: 15px;
+              padding-top: 10px;
             }
           </style>
         </head>
@@ -242,13 +246,13 @@ export default function StudentDetailsPage({
               <div class="badge">${lessonData.teacherAlias || "Teacher"}</div>
             </div>
 
-            <div style="font-size: 15px; font-weight: bold; color: #111827; margin-bottom: 16px;">
+            <div style="font-size: 14px; font-weight: bold; color: #111827; margin-bottom: 12px;">
               Topic: ${lessonData.title}
             </div>
 
             ${lessonData.bookTitle ? `<div class="section"><div class="label">Book / Material Covered</div><div class="box">📚 ${lessonData.bookTitle}</div></div>` : ""}
             
-            ${lessonData.vocabulary ? `<div class="section"><div class="label">Vocabulary & Structures</div><div class="box" style="font-family: monospace;">${lessonData.vocabulary}</div></div>` : ""}
+            ${lessonData.vocabulary ? `<div class="section"><div class="label">Vocabulary & Structures</div><div class="box" style="font-family: monospace; font-size: 11px;">${lessonData.vocabulary}</div></div>` : ""}
 
             <div class="grid">
               ${lessonData.strengths ? `<div class="section" style="margin-bottom: 0;"><div class="label" style="color: #047857;">Strengths & Highlights</div><div class="box" style="background: #ecfdf5; border-color: #a7f3d0; color: #065f46;">${lessonData.strengths}</div></div>` : ""}
