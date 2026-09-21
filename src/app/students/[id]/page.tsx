@@ -122,7 +122,6 @@ export default function StudentDetailsPage({
       prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
     );
   }
-
 // Improved Professional Print Layout Helper for Lesson Reports
   function handlePrintLessonReport(lessonData: {
     title: string;
@@ -135,6 +134,7 @@ export default function StudentDetailsPage({
     improvements?: string;
     homework?: string;
     teacherMessage?: string;
+    packageProgress?: string; // 👈 Added this
   }) {
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
@@ -166,6 +166,12 @@ export default function StudentDetailsPage({
               max-width: 750px;
               margin: 0 auto;
               box-sizing: border-box;
+            }
+            @media print {
+              .report-container {
+                border: none;
+                padding-top: 20mm;
+              }
             }
             .header {
               border-bottom: 2px solid #db2777;
@@ -218,7 +224,6 @@ export default function StudentDetailsPage({
               line-height: 1.6;
               color: #374151;
               white-space: pre-wrap;
-              /* Ensures split boxes across pages get top padding & borders */
               box-decoration-break: clone;
               -webkit-box-decoration-break: clone;
             }
@@ -246,7 +251,10 @@ export default function StudentDetailsPage({
             <div class="header">
               <div>
                 <h2>Lesson Report Card</h2>
-                <div class="meta">Student: <strong>${lessonData.studentName || "Student"}</strong> &bull; Date: ${lessonData.date}</div>
+                <div class="meta">
+                  Student: <strong>${lessonData.studentName || "Student"}</strong> 
+                  &bull; Date: ${lessonData.date}${lessonData.packageProgress ? ` &bull; Class: <strong>${lessonData.packageProgress}</strong>` : ""}
+                </div>
               </div>
               <div class="badge">${lessonData.teacherAlias || "Teacher"}</div>
             </div>
@@ -1776,6 +1784,7 @@ ${renewalBankDetails ? `🏦 Bank Details:\n${renewalBankDetails}\n` : ""}Please
                               improvements: rep.improvements,
                               homework: rep.homework,
                               teacherMessage: rep.teacher_message || rep.message || rep.teacher_notes,
+                              packageProgress: `${dynamicCompletedCount} / ${combinedTotalClasses}`,
                             })}
                             className="px-2 py-1 bg-pink-50 hover:bg-pink-100 text-pink-700 text-[10px] font-bold rounded-lg border border-pink-200 transition cursor-pointer"
                             title="Print Report"
