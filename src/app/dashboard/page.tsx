@@ -29,6 +29,7 @@ function extractDateFromTimestamp(timestampStr: string) {
   }
   return timestampStr.substring(0, 10);
 }
+
 export default function DashboardPage() {
   const [schedules, setSchedules] = useState<any[]>([]);
   const [makeupEvents, setMakeupEvents] = useState<any[]>([]);
@@ -37,9 +38,9 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [isCleaning, setIsCleaning] = useState(false);
   const [payments, setPayments] = useState<any[]>([]);
-  const [classesFilter, setClassesFilter] = useState<"weekly" | "monthly" | "yearly">("monthly");
-  const [hoursFilter, setHoursFilter] = useState<"daily" | "monthly" | "yearly">("monthly");
-  const [incomeFilter, setIncomeFilter] = useState<"daily" | "monthly" | "yearly">("monthly");
+  
+  // 🌟 Global Master Time Filter State (Defaults to monthly)
+  const [globalTimeFilter, setGlobalTimeFilter] = useState<"daily" | "weekly" | "monthly" | "yearly">("monthly");
 
   const [selectedAttendance, setSelectedAttendance] = useState<{
     eventId: string;
@@ -162,7 +163,7 @@ export default function DashboardPage() {
     }
   }
 
-// Today calculations (Regular + Makeup)
+  // Today calculations (Regular + Makeup)
   const todayObj = new Date();
   const todayWeekday = todayObj.toLocaleDateString("en-US", { weekday: "long" });
   const localYear = todayObj.getFullYear();
@@ -178,7 +179,7 @@ export default function DashboardPage() {
   );
   const totalTodaysCount = todaysRegularSchedules.length + todaysMakeupSchedules.length;
 
-// Combine regular and makeup classes and sort chronologically by start time
+  // Combine regular and makeup classes and sort chronologically by start time
   const todaysCombinedSchedules = [
     ...todaysRegularSchedules.map((sched) => ({
       id: `reg-${sched.id}`,
@@ -246,22 +247,20 @@ export default function DashboardPage() {
         );
 
         if (matchesSchedule) {
-       const lessonRecord = recordedLessons.find(
-  (l) => l.student_id === student.id && l.lesson_date?.substring(0, 10) === dateString
-);
+          const lessonRecord = recordedLessons.find(
+            (l) => l.student_id === student.id && l.lesson_date?.substring(0, 10) === dateString
+          );
 
-// Absences and Cancellations will NOT consume package quota
-const isQuotaExempt = 
-  lessonRecord?.status === "Cancelled" || 
-  lessonRecord?.status === "Absent" ||
-  lessonRecord?.status === "absent";
+          const isQuotaExempt = 
+            lessonRecord?.status === "Cancelled" || 
+            lessonRecord?.status === "Absent" ||
+            lessonRecord?.status === "absent";
 
-dates.push(dateString);
+          dates.push(dateString);
 
-// Only increment counted slots if the lesson was completed or not marked exempt
-if (!isQuotaExempt) {
-  countedSlots++;
-}
+          if (!isQuotaExempt) {
+            countedSlots++;
+          }
         }
 
         curr.setDate(curr.getDate() + 1);
@@ -274,17 +273,41 @@ if (!isQuotaExempt) {
     return map;
   })();
 
-  // Total Teaching Hours Calculation based on Recorded Lessons
-  const calculatedHours = (() => {
-    const targetDateStr = todayDateStr;
-    const targetMonthStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}`;
-    const targetYearStr = `${selectedYear}`;
+  // 🌟 Global Filter Calculations for KPI Metrics
+  const targetDateStr = todayDateStr;
+  const targetMonthStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}`;
+  const targetYearStr = `${selectedYear}`;
 
+  const now = new Date();
+  const firstDayOfWeek = new Date(now.setDate(now.getDate() - now.getDay()));
+  const firstDayStr = firstDayOfWeek.toISOString().substring(0, 10);
+
+  // Total Classes Count Calculation linked to global filter
+  const calculatedClasses = (() => {
+    const filtered = recordedLessons.filter((l) => {
+      if (!l.lesson_date) return false;
+      const statusLower = String(l.status || "").toLowerCase();
+      if (statusLower === "cancelled") return false;
+
+      const lDate = l.lesson_date.substring(0, 10);
+
+      if (globalTimeFilter === "daily") return lDate === targetDateStr;
+      if (globalTimeFilter === "weekly") return lDate >= firstDayStr;
+      if (globalTimeFilter === "monthly") return lDate.startsWith(targetMonthStr);
+      return lDate.startsWith(targetYearStr);
+    });
+
+    return filtered.length;
+  })();
+
+  // Teaching Hours Calculation linked to global filter
+  const calculatedHours = (() => {
     const filtered = recordedLessons.filter((l) => {
       if (!l.lesson_date || l.status === "Cancelled") return false;
       const lDate = l.lesson_date.substring(0, 10);
-      if (hoursFilter === "daily") return lDate === targetDateStr;
-      if (hoursFilter === "monthly") return lDate.startsWith(targetMonthStr);
+      if (globalTimeFilter === "daily") return lDate === targetDateStr;
+      if (globalTimeFilter === "weekly") return lDate >= firstDayStr;
+      if (globalTimeFilter === "monthly") return lDate.startsWith(targetMonthStr);
       return lDate.startsWith(targetYearStr);
     });
 
@@ -300,16 +323,13 @@ if (!isQuotaExempt) {
     };
   })();
 
-  // Total Income Calculation based on Payments
+  // Total Income Calculation linked to global filter
   const calculatedIncome = (() => {
-    const targetDateStr = todayDateStr;
-    const targetMonthStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}`;
-    const targetYearStr = `${selectedYear}`;
-
     const filtered = payments.filter((p) => {
       const pDate = (p.payment_date || p.created_at || "").substring(0, 10);
-      if (incomeFilter === "daily") return pDate === targetDateStr;
-      if (incomeFilter === "monthly") return pDate.startsWith(targetMonthStr);
+      if (globalTimeFilter === "daily") return pDate === targetDateStr;
+      if (globalTimeFilter === "weekly") return pDate >= firstDayStr;
+      if (globalTimeFilter === "monthly") return pDate.startsWith(targetMonthStr);
       return pDate.startsWith(targetYearStr);
     });
 
@@ -322,37 +342,9 @@ if (!isQuotaExempt) {
       count: filtered.length,
     };
   })();
-// Total Classes Count Calculation based on Recorded Lessons
-  const calculatedClasses = (() => {
-    const targetMonthStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}`;
-    const targetYearStr = `${selectedYear}`;
 
-    // Get ISO date bounds for current week
-    const now = new Date();
-    const firstDayOfWeek = new Date(now.setDate(now.getDate() - now.getDay()));
-    const firstDayStr = firstDayOfWeek.toISOString().substring(0, 10);
-
-    const filtered = recordedLessons.filter((l) => {
-      if (!l.lesson_date) return false;
-      const statusLower = String(l.status || "").toLowerCase();
-      if (statusLower === "cancelled") return false;
-
-      const lDate = l.lesson_date.substring(0, 10);
-
-      if (classesFilter === "weekly") {
-        return lDate >= firstDayStr;
-      }
-      if (classesFilter === "monthly") {
-        return lDate.startsWith(targetMonthStr);
-      }
-      return lDate.startsWith(targetYearStr);
-    });
-
-    return filtered.length;
-  })();
- return (
+  return (
     <div className="flex flex-col min-h-screen bg-gray-50/50">
-      {/* Pass only active students to the banner */}
       <RenewalAlertBanner 
         students={students.filter(
           (s) => s.status !== "Archived" && s.status !== "Inactive" && s.payment_status !== "Archived"
@@ -371,11 +363,28 @@ if (!isQuotaExempt) {
             </p>
           </div>
 
-          <div>
+          <div className="flex items-center gap-3">
+            {/* 🌟 Global Master Filter Bar */}
+            <div className="flex items-center bg-pink-50/80 p-1.5 rounded-2xl border border-pink-200">
+              {(["daily", "weekly", "monthly", "yearly"] as const).map((filter) => (
+                <button
+                  key={filter}
+                  onClick={() => setGlobalTimeFilter(filter)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition capitalize cursor-pointer ${
+                    globalTimeFilter === filter
+                      ? "bg-pink-600 text-white shadow-xs"
+                      : "text-pink-800 hover:bg-pink-100/60"
+                  }`}
+                >
+                  {filter === "daily" ? "Today" : filter === "weekly" ? "This Week" : filter === "monthly" ? "This Month" : "This Year"}
+                </button>
+              ))}
+            </div>
+
             <button
               onClick={handleRunCleanup}
               disabled={isCleaning}
-              className="px-3.5 py-2 bg-pink-50 hover:bg-pink-100 text-pink-700 border border-pink-200 rounded-2xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              className="px-3.5 py-2.5 bg-pink-50 hover:bg-pink-100 text-pink-700 border border-pink-200 rounded-2xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
             >
               <Trash2 size={14} />
               <span>{isCleaning ? "Cleaning..." : "🧹 Clean Storage (>30d)"}</span>
@@ -383,7 +392,7 @@ if (!isQuotaExempt) {
           </div>
         </div>
 
-       {/* 1. KPI Metrics Row */}
+       {/* 1. KPI Metrics Row (Controlled by Master Filter) */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
           {/* Card 1: Today's Schedule Overview */}
           <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs flex flex-col justify-between space-y-3">
@@ -405,21 +414,15 @@ if (!isQuotaExempt) {
             </div>
           </div>
 
-          {/* Card 2: Total Classes Conducted (Dropdown) */}
+          {/* Card 2: Total Classes Conducted */}
           <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs flex flex-col justify-between space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
                 Total Classes
               </span>
-              <select
-                value={classesFilter}
-                onChange={(e) => setClassesFilter(e.target.value as any)}
-                className="text-xs font-bold text-pink-700 bg-pink-50 border border-pink-200 rounded-xl px-2.5 py-1 focus:outline-none cursor-pointer"
-              >
-                <option value="weekly">This Week</option>
-                <option value="monthly">This Month</option>
-                <option value="yearly">This Year</option>
-              </select>
+              <span className="text-[10px] font-extrabold text-pink-600 bg-pink-50 px-2 py-0.5 rounded-lg border border-pink-200 uppercase">
+                {globalTimeFilter}
+              </span>
             </div>
             <div>
               <p className="text-3xl font-extrabold text-pink-950">
@@ -437,15 +440,9 @@ if (!isQuotaExempt) {
               <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
                 Teaching Time
               </span>
-              <select
-                value={hoursFilter}
-                onChange={(e) => setHoursFilter(e.target.value as any)}
-                className="text-xs font-bold text-pink-700 bg-pink-50 border border-pink-200 rounded-xl px-2.5 py-1 focus:outline-none cursor-pointer"
-              >
-                <option value="daily">Today</option>
-                <option value="monthly">This Month</option>
-                <option value="yearly">This Year</option>
-              </select>
+              <span className="text-[10px] font-extrabold text-pink-600 bg-pink-50 px-2 py-0.5 rounded-lg border border-pink-200 uppercase">
+                {globalTimeFilter}
+              </span>
             </div>
             <div>
               <p className="text-3xl font-extrabold text-pink-950">
@@ -463,15 +460,9 @@ if (!isQuotaExempt) {
               <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
                 Revenue & Tuition
               </span>
-              <select
-                value={incomeFilter}
-                onChange={(e) => setIncomeFilter(e.target.value as any)}
-                className="text-xs font-bold text-pink-700 bg-pink-50 border border-pink-200 rounded-xl px-2.5 py-1 focus:outline-none cursor-pointer"
-              >
-                <option value="daily">Today</option>
-                <option value="monthly">This Month</option>
-                <option value="yearly">This Year</option>
-              </select>
+              <span className="text-[10px] font-extrabold text-pink-600 bg-pink-50 px-2 py-0.5 rounded-lg border border-pink-200 uppercase">
+                {globalTimeFilter}
+              </span>
             </div>
             <div>
               <p className="text-3xl font-extrabold text-pink-600">
@@ -500,39 +491,39 @@ if (!isQuotaExempt) {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
              {todaysCombinedSchedules.map((item) => {
-  const matchingLesson = recordedLessons.find(
-    (l) => l.student_id === item.studentId && extractDateFromTimestamp(l.lesson_date) === todayDateStr
-  );
-  const status = matchingLesson ? matchingLesson.status : item.originalStatus;
-  const statusLower = String(status || "").toLowerCase();
+                const matchingLesson = recordedLessons.find(
+                  (l) => l.student_id === item.studentId && extractDateFromTimestamp(l.lesson_date) === todayDateStr
+                );
+                const status = matchingLesson ? matchingLesson.status : item.originalStatus;
+                const statusLower = String(status || "").toLowerCase();
 
-  return (
-    <div
-      key={item.id}
-      className={`p-4 rounded-2xl border flex flex-col justify-between gap-3 shadow-2xs ${
-        item.type === "makeup"
-          ? "border-pink-200 bg-pink-100/40"
-          : "border-pink-100 bg-pink-50/30"
-      }`}
-    >
-      <div className="flex justify-between items-start">
-        <div>
-          <p className="text-xs font-bold text-pink-900">{item.time} ({item.duration}m)</p>
-          <p className="text-sm font-extrabold text-pink-950 mt-0.5">{item.studentName}</p>
-        </div>
-        <span className={`text-[10px] font-bold px-2.5 py-1 rounded-xl ${
-          statusLower === "completed" 
-            ? "bg-green-100 text-green-700" 
-            : item.type === "makeup"
-            ? "bg-pink-200 text-pink-900"
-            : "bg-pink-100 text-pink-700"
-        }`}>
-          {status} {item.type === "makeup" && "(Make-up)"}
-        </span>
-      </div>
-    </div>
-  );
-})}
+                return (
+                  <div
+                    key={item.id}
+                    className={`p-4 rounded-2xl border flex flex-col justify-between gap-3 shadow-2xs ${
+                      item.type === "makeup"
+                        ? "border-pink-200 bg-pink-100/40"
+                        : "border-pink-100 bg-pink-50/30"
+                    }`}
+                  >
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="text-xs font-bold text-pink-900">{item.time} ({item.duration}m)</p>
+                        <p className="text-sm font-extrabold text-pink-950 mt-0.5">{item.studentName}</p>
+                      </div>
+                      <span className={`text-[10px] font-bold px-2.5 py-1 rounded-xl ${
+                        statusLower === "completed" 
+                          ? "bg-green-100 text-green-700" 
+                          : item.type === "makeup"
+                          ? "bg-pink-200 text-pink-900"
+                          : "bg-pink-100 text-pink-700"
+                      }`}>
+                        {status} {item.type === "makeup" && "(Make-up)"}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -631,7 +622,7 @@ if (!isQuotaExempt) {
                   </p>
 
                   <div className="space-y-1.5 relative">
-             {/* MAKEUP CLASSES */}
+                    {/* MAKEUP CLASSES */}
                     {makeupEvents
                       .filter((event) => {
                         const makeupDate = event.makeup_date ? event.makeup_date.substring(0, 10) : "";
@@ -701,10 +692,9 @@ if (!isQuotaExempt) {
                       })
                       .map((sched) => {
                         const matchingLesson = recordedLessons.find(
-  (l) => l.student_id === sched.student_id && l.lesson_date?.substring(0, 10) === dateString
-);
-// Only use matching lesson status for this specific date; fallback strictly to "Scheduled"
-const currentEventStatus = matchingLesson ? matchingLesson.status : "Scheduled";
+                          (l) => l.student_id === sched.student_id && l.lesson_date?.substring(0, 10) === dateString
+                        );
+                        const currentEventStatus = matchingLesson ? matchingLesson.status : "Scheduled";
 
                         return (
                           <ClassEvent
@@ -720,25 +710,25 @@ const currentEventStatus = matchingLesson ? matchingLesson.status : "Scheduled";
                             topic={sched.topic || "Regular Class"}
                             onStatusUpdate={fetchDashboardData}
                             onOpenModal={(statusPreset = "absent") => {
-  if (statusPreset === "present") {
-    setSelectedLesson({
-      eventId: sched.id,
-      studentId: sched.student_id,
-      studentName: sched.students?.name || "Student",
-      type: "regular",
-      dateString // 👈 Ensure dateString is passed here
-    });
-  } else {
-    setSelectedAttendance({
-      eventId: sched.id,
-      studentId: sched.student_id,
-      studentName: sched.students?.name || "Student",
-      status: statusPreset,
-      eventType: "regular",
-      dateString
-    });
-  }
-}}
+                              if (statusPreset === "present") {
+                                setSelectedLesson({
+                                  eventId: sched.id,
+                                  studentId: sched.student_id,
+                                  studentName: sched.students?.name || "Student",
+                                  type: "regular",
+                                  dateString
+                                });
+                              } else {
+                                setSelectedAttendance({
+                                  eventId: sched.id,
+                                  studentId: sched.student_id,
+                                  studentName: sched.students?.name || "Student",
+                                  status: statusPreset,
+                                  eventType: "regular",
+                                  dateString
+                                });
+                              }
+                            }}
                           />
                         );
                       })}
@@ -780,7 +770,6 @@ const currentEventStatus = matchingLesson ? matchingLesson.status : "Scheduled";
           studentName={selectedLesson.studentName}
           eventType={selectedLesson.type}
           dateString={selectedLesson.dateString}
-          // 👇 Add this line to pass the books array properly
           studentBooks={
             students
               .find((s) => s.id === selectedLesson.studentId)
