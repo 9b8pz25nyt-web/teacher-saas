@@ -14,7 +14,7 @@ export default function RenewalAlertBanner({
   recordedLessons = [], 
   makeupEvents = [] 
 }: RenewalAlertBannerProps) {
-  // Compute instantly using useMemo with zero network delay
+  // Compute instantly using optimized Map lookups for zero lag
   const renewalList = useMemo(() => {
     if (!students || students.length === 0) return [];
 
@@ -27,23 +27,37 @@ export default function RenewalAlertBanner({
         s.payment_status !== "Inactive"
     );
 
-    // Find students with 4 or fewer classes remaining using dynamic calculation
+    // 🌟 Speed Fix 1: Pre-group lessons by student_id once (O(N) instead of nested loops)
+    const lessonsMap = new Map<string, any[]>();
+    for (const l of recordedLessons) {
+      if (!l.student_id) continue;
+      const status = String(l.status || "").toLowerCase();
+      if (status === "cancelled" || status === "absent") continue;
+      if (!lessonsMap.has(l.student_id)) {
+        lessonsMap.set(l.student_id, []);
+      }
+      lessonsMap.get(l.student_id)!.push(l);
+    }
+
+    // 🌟 Speed Fix 2: Pre-group makeups by student_id once
+    const makeupsMap = new Map<string, any[]>();
+    for (const m of makeupEvents) {
+      if (!m.student_id) continue;
+      const status = String(m.status || "").toLowerCase();
+      if (status === "cancelled" || status === "absent") continue;
+      if (!makeupsMap.has(m.student_id)) {
+        makeupsMap.set(m.student_id, []);
+      }
+      makeupsMap.get(m.student_id)!.push(m);
+    }
+
+    // Evaluate remaining counts instantly using O(1) lookups
     return activeStudents.map((s) => {
       const totalAllowed = (s.classes_included || 0) + (s.free_classes || 0);
-      
-      const studentLessons = recordedLessons.filter(
-        (l) => l.student_id === s.id && 
-        l.status?.toLowerCase() !== "cancelled" && 
-        l.status?.toLowerCase() !== "absent"
-      );
-      
-      const studentMakeups = makeupEvents.filter(
-        (m) => m.student_id === s.id && 
-        m.status?.toLowerCase() !== "cancelled" && 
-        m.status?.toLowerCase() !== "absent"
-      );
+      const studentLessonsCount = (lessonsMap.get(s.id) || []).length;
+      const studentMakeupsCount = (makeupsMap.get(s.id) || []).length;
 
-      const completedCount = studentLessons.length + studentMakeups.length;
+      const completedCount = studentLessonsCount + studentMakeupsCount;
       const remaining = Math.max(totalAllowed - completedCount, 0);
 
       return { student: s, remaining };
