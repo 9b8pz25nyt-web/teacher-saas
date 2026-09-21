@@ -1901,6 +1901,7 @@ ${renewalBankDetails ? `🏦 Bank Details:\n${renewalBankDetails}\n` : ""}Please
                               improvements: displayImprovements,
                               homework: displayHomework,
                               teacherMessage: les.teacher_message || les.message || les.teacher_notes,
+                              packageProgress: `${dynamicCompletedCount} / ${combinedTotalClasses}`,
                             })}
                             className="px-2 py-1 bg-pink-50 hover:bg-pink-100 text-pink-700 text-[10px] font-bold rounded-lg border border-pink-200 transition cursor-pointer"
                             title="Print Lesson"
