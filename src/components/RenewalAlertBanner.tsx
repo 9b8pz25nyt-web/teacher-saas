@@ -5,9 +5,15 @@ import Link from "next/link";
 
 interface RenewalAlertBannerProps {
   students?: any[];
+  recordedLessons?: any[];
+  makeupEvents?: any[];
 }
 
-export default function RenewalAlertBanner({ students = [] }: RenewalAlertBannerProps) {
+export default function RenewalAlertBanner({ 
+  students = [], 
+  recordedLessons = [], 
+  makeupEvents = [] 
+}: RenewalAlertBannerProps) {
   // Compute instantly using useMemo with zero network delay
   const renewalList = useMemo(() => {
     if (!students || students.length === 0) return [];
@@ -21,12 +27,28 @@ export default function RenewalAlertBanner({ students = [] }: RenewalAlertBanner
         s.payment_status !== "Inactive"
     );
 
-    // Find students with 4 or fewer classes remaining
-    return activeStudents.filter((s) => {
-      const remaining = (s.classes_included || 0) - (s.classes_completed || 0);
-      return remaining <= 4;
-    });
-  }, [students]);
+    // Find students with 4 or fewer classes remaining using dynamic calculation
+    return activeStudents.map((s) => {
+      const totalAllowed = (s.classes_included || 0) + (s.free_classes || 0);
+      
+      const studentLessons = recordedLessons.filter(
+        (l) => l.student_id === s.id && 
+        l.status?.toLowerCase() !== "cancelled" && 
+        l.status?.toLowerCase() !== "absent"
+      );
+      
+      const studentMakeups = makeupEvents.filter(
+        (m) => m.student_id === s.id && 
+        m.status?.toLowerCase() !== "cancelled" && 
+        m.status?.toLowerCase() !== "absent"
+      );
+
+      const completedCount = studentLessons.length + studentMakeups.length;
+      const remaining = Math.max(totalAllowed - completedCount, 0);
+
+      return { student: s, remaining };
+    }).filter((item) => item.remaining <= 4);
+  }, [students, recordedLessons, makeupEvents]);
 
   if (renewalList.length === 0) return null;
 
@@ -36,8 +58,7 @@ export default function RenewalAlertBanner({ students = [] }: RenewalAlertBanner
         className="flex items-center gap-6 animate-marquee"
         style={{ animationDuration: "40s" }}
       >
-        {renewalList.map((student) => {
-          const remaining = (student.classes_included || 0) - (student.classes_completed || 0);
+        {renewalList.map(({ student, remaining }) => {
           return (
             <Link
               key={student.id}

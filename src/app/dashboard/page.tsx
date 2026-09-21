@@ -345,11 +345,13 @@ export default function DashboardPage() {
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-50/50">
-      <RenewalAlertBanner 
-        students={students.filter(
-          (s) => s.status !== "Archived" && s.status !== "Inactive" && s.payment_status !== "Archived"
-        )} 
-      />
+    <RenewalAlertBanner 
+  students={students.filter(
+    (s) => s.status !== "Archived" && s.status !== "Inactive" && s.payment_status !== "Archived"
+  )} 
+  recordedLessons={recordedLessons}
+  makeupEvents={makeupEvents}
+/>
 
       <main className="p-8 max-w-7xl mx-auto w-full space-y-6">
         {/* Top Header Controls */}
