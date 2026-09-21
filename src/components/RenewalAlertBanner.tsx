@@ -56,7 +56,7 @@ export default function RenewalAlertBanner({
     <div className="bg-pink-100/80 border-b border-pink-200 text-pink-950 px-6 py-2.5 text-xs font-bold flex items-center justify-between overflow-x-auto whitespace-nowrap shadow-xs">
       <div 
         className="flex items-center gap-6 animate-marquee"
-        style={{ animationDuration: "40s" }}
+        style={{ animationDuration: "35s" }}
       >
         {renewalList.map(({ student, remaining }) => {
           return (
