@@ -93,7 +93,11 @@ async function handleAIPaste() {
     try {
       const result = await generateReportFromScript(rawPasteText, studentName)
       
-      // Auto-fill individual fields cleanly
+      if (result.error) {
+        alert(result.error)
+        return
+      }
+
       if (result.title) setTitle(result.title)
       if (result.vocab) setVocab(result.vocab)
       if (result.strengths) setStrengths(result.strengths)
@@ -101,10 +105,9 @@ async function handleAIPaste() {
       if (result.parentMessage) setParentMessage(result.parentMessage)
       if (result.homework) setHomework(result.homework)
 
-      // Clear the paste box after successful generation
       setRawPasteText('')
     } catch (err: any) {
-      alert(err.message || "Failed to process text.")
+      alert("Failed to process text: " + (err.message || err))
     } finally {
       setIsAnalyzing(false)
     }
