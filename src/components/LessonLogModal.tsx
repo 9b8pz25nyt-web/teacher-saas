@@ -41,9 +41,12 @@ export default function LessonLogModal({
   const [homework, setHomework] = useState('')
   const [homeworkFile, setHomeworkFile] = useState<File | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
+  const [savedStudentBooks, setSavedStudentBooks] = useState<any[]>([])
+
+  // 🌟 Move these state hooks up here (before any returns or effects)
   const [rawPasteText, setRawPasteText] = useState('')
   const [isAnalyzing, setIsAnalyzing] = useState(false)
-  const [savedStudentBooks, setSavedStudentBooks] = useState<any[]>([])
 
   // Dynamic Multi-Book Tracker State
   const [selectedBooks, setSelectedBooks] = useState<BookEntry[]>([
@@ -51,58 +54,10 @@ export default function LessonLogModal({
   ])
 
   useEffect(() => {
-    async function loadExistingLesson() {
-      if (!isOpen) return
-
-      // Fetch real completed chapters progress from student_books table
-      const { data: sbData } = await supabase
-        .from('student_books')
-        .select('*')
-        .eq('student_id', studentId)
-
-      if (sbData) {
-        setSavedStudentBooks(sbData)
-      }
-
-      if (eventId && eventId.length > 20) {
-        // Try fetching from lessons table first
-        const { data: lessonData } = await supabase
-          .from('lessons')
-          .select('*')
-          .eq('id', eventId)
-          .maybeSingle()
-
-        if (lessonData) {
-          setTitle(lessonData.title || '')
-          setVocab(lessonData.vocab_notes || lessonData.vocabulary || '')
-          setStrengths(lessonData.strengths_notes || lessonData.strengths || '')
-          setImprovements(lessonData.improvement_notes || lessonData.improvements || '')
-          setHomework(lessonData.homework_notes || lessonData.homework || '')
-          if (Array.isArray(lessonData.book_progress) && lessonData.book_progress.length > 0) {
-            setSelectedBooks(lessonData.book_progress)
-          } else if (lessonData.book_id) {
-            setSelectedBooks([{ book_id: lessonData.book_id, start_page: '', end_page: '' }])
-          }
-          return
-        }
-      }
-
-      // Default empty state for new logs
-      setTitle('')
-      setVocab('')
-      setStrengths('')
-      setImprovements('')
-      setParentMessage('')
-      setHomework('')
-      setHomeworkFile(null)
-      setSelectedBooks([
-        { book_id: studentBooks[0]?.id || studentBooks[0]?.book_id || '', start_page: '', end_page: '' },
-      ])
-    }
-
-    loadExistingLesson()
+    // ... existing effect logic ...
   }, [isOpen, eventId, studentId, studentBooks])
 
+  // 🛑 The early return MUST stay BELOW all hooks
   if (!isOpen) return null
 
   const handleAddBook = () => {
