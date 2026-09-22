@@ -6,6 +6,7 @@
     "dev": "next dev --webpack"
   },
   "dependencies": {
+    "@google/genai": "^2.24.0",
     "@supabase/ssr": "^0.12.5",
     "@supabase/supabase-js": "^2.112.4",
     "@types/react-datepicker": "^6.2.0",

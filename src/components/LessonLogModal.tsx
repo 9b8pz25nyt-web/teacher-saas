@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Plus, Trash2, BookOpen, Upload, FileText, X } from 'lucide-react'
+import { Plus, Trash2, BookOpen, Upload, FileText, X, Sparkles } from 'lucide-react'
+import { generateReportFromScript } from "@/app/actions/aiSummary"
 
 interface BookEntry {
   book_id: string
@@ -40,6 +41,8 @@ export default function LessonLogModal({
   const [homework, setHomework] = useState('')
   const [homeworkFile, setHomeworkFile] = useState<File | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [rawPasteText, setRawPasteText] = useState('')
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [savedStudentBooks, setSavedStudentBooks] = useState<any[]>([])
 
   // Dynamic Multi-Book Tracker State
@@ -121,6 +124,33 @@ export default function LessonLogModal({
     })
   }
 
+async function handleAIPaste() {
+    if (!rawPasteText.trim()) {
+      alert("Please paste some transcript or rough notes first.")
+      return
+    }
+
+    setIsAnalyzing(true)
+    try {
+      const result = await generateReportFromScript(rawPasteText, studentName)
+      
+      // Auto-fill individual fields cleanly
+      if (result.title) setTitle(result.title)
+      if (result.vocab) setVocab(result.vocab)
+      if (result.strengths) setStrengths(result.strengths)
+      if (result.improvements) setImprovements(result.improvements)
+      if (result.parentMessage) setParentMessage(result.parentMessage)
+      if (result.homework) setHomework(result.homework)
+
+      // Clear the paste box after successful generation
+      setRawPasteText('')
+    } catch (err: any) {
+      alert(err.message || "Failed to process text.")
+    } finally {
+      setIsAnalyzing(false)
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSubmitting(true)
@@ -154,7 +184,6 @@ export default function LessonLogModal({
       const targetDate = dateString || new Date().toISOString().split('T')[0]
       const validBooks = selectedBooks.filter((b) => b.book_id)
 
-      // Structured description for parser compatibility
       const structuredDesc = `Vocab: ${vocab || "None"}
 Strengths: ${strengths || "None"}
 Improvements: ${improvements || "None"}
@@ -162,14 +191,14 @@ Homework: ${homework || "None"}
 
 Message: ${parentMessage || ""}`
 
-if (eventType === 'makeup') {
+      if (eventType === 'makeup') {
         const { error: makeupErr } = await supabase
           .from('makeup_classes')
           .update({
             status: 'Completed',
             topic: title || 'Make-up Lesson',
             book_progress: validBooks,
-            notes: structuredDesc, // 👈 Save the structured feedback notes here
+            notes: structuredDesc,
           })
           .eq('id', eventId)
 
@@ -213,7 +242,6 @@ if (eventType === 'makeup') {
           if (insertErr) throw insertErr
         }
 
-        // Also increment completed classes count on student record if new
         if (!existingLesson) {
           const { data: currentStudent } = await supabase
             .from('students')
@@ -229,7 +257,6 @@ if (eventType === 'makeup') {
         }
       }
 
-      // Save checked chapters progress to student_books table
       for (const bookEntry of validBooks) {
         if (bookEntry.completed_chapters && bookEntry.completed_chapters.length > 0) {
           const { data: existingSb } = await supabase
@@ -264,6 +291,8 @@ if (eventType === 'makeup') {
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full p-6 space-y-5 border border-pink-100 max-h-[92vh] overflow-y-auto">
+        
+        {/* Header with AI Upload Button */}
         <div className="flex justify-between items-center border-b border-pink-100 pb-3">
           <div>
             <h2 className="text-lg font-extrabold text-pink-950">
@@ -273,15 +302,46 @@ if (eventType === 'makeup') {
               Record daily lesson feedback and track curriculum progress for <span className="font-bold text-pink-900">{studentName}</span>.
             </p>
           </div>
-          <button
-            onClick={onClose}
-            className="text-pink-300 hover:text-pink-600 font-bold text-2xl cursor-pointer transition"
-          >
-            &times;
-          </button>
+
+          <div className="flex items-center gap-2">
+
+            <button
+              onClick={onClose}
+              className="text-pink-300 hover:text-pink-600 font-bold text-2xl cursor-pointer transition ml-1"
+            >
+              &times;
+            </button>
+          </div>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">
+          {/* 🌟 AI Quick Paste Box */}
+          <div className="p-4 bg-pink-50/70 rounded-2xl border border-pink-200 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-pink-950 flex items-center gap-1.5">
+                <Sparkles size={14} className="text-pink-600" />
+                <span>AI Assistant: Paste Class Transcript / Rough Notes</span>
+              </label>
+            </div>
+            <textarea
+              rows={3}
+              placeholder="Paste raw zoom transcript, notes, or bullet points here..."
+              value={rawPasteText}
+              onChange={(e) => setRawPasteText(e.target.value)}
+              className="w-full p-3 bg-white border border-pink-200 rounded-xl text-xs text-pink-950 placeholder:text-pink-300 focus:outline-none focus:ring-2 focus:ring-pink-400"
+            />
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={handleAIPaste}
+                disabled={isAnalyzing || !rawPasteText.trim()}
+                className="px-4 py-2 bg-pink-600 hover:bg-pink-700 text-white text-xs font-bold rounded-xl transition shadow-xs cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+              >
+                <Sparkles size={12} />
+                <span>{isAnalyzing ? "Generating Fields..." : "✨ Generate Report from Text"}</span>
+              </button>
+            </div>
+          </div>
           {/* Multi-Book Selector Section */}
           <div className="space-y-3 p-4 bg-pink-50/40 rounded-2xl border border-pink-100">
             <div className="flex items-center justify-between">
@@ -355,7 +415,6 @@ if (eventType === 'makeup') {
                       </label>
                       <div className="max-h-40 overflow-y-auto space-y-1.5 p-2 bg-pink-50/50 rounded-xl border border-pink-100">
                         {chaptersList.map((chap: any, chapIdx: number) => {
-                          // Look up historical completed chapters from savedStudentBooks database state
                           const currentBookRecord = savedStudentBooks.find(
                             (sb: any) => sb.book_id === entry.book_id || sb.id === entry.book_id
                           )
@@ -363,10 +422,7 @@ if (eventType === 'makeup') {
                             ? currentBookRecord.completed_chapters
                             : []
 
-                          // Check if it was completed in a past lesson
                           const isAlreadyCompleted = historicalCompleted.includes(chapIdx)
-
-                          // Check if it's selected in the current session
                           const isChecked = isAlreadyCompleted || entry.completed_chapters?.includes(chapIdx) || false
                           const chapTitle = typeof chap === "string" ? chap : chap.title || `Lesson ${chapIdx + 1}`
 
