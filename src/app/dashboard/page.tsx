@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import RenewalAlertBanner from "@/components/RenewalAlertBanner";
@@ -210,8 +210,8 @@ export default function DashboardPage() {
   const startDayOffset = (firstDayWeekdayIndex + 6) % 7;
   const totalCalendarSlots = Math.ceil((startDayOffset + daysInMonth) / 7) * 7;
 
-  // Rollover mapping
-  const studentValidDatesMap = (() => {
+// Rollover mapping (Projects exact remaining classes starting from today)
+  const studentValidDatesMap = useMemo(() => {
     const map: Record<string, string[]> = {};
     
     students.forEach((student) => {
@@ -221,21 +221,28 @@ export default function DashboardPage() {
       const totalAllowed = (student.classes_included || 0) + (student.free_classes || 0);
       if (totalAllowed <= 0) return;
 
-      const activeMakeupsCount = makeupEvents.filter(
-        (m) => m.student_id === student.id && m.status !== "Cancelled"
+      // Calculate exact remaining classes
+      const studentLessonsCount = recordedLessons.filter(
+        (l) => l.student_id === student.id && l.status !== "Cancelled" && l.status !== "Absent"
       ).length;
 
-      const startDateStr = student.contract_start_date || `${selectedYear}-01-01`;
-      const startDate = new Date(startDateStr);
+      const studentMakeupsCount = makeupEvents.filter(
+        (m) => m.student_id === student.id && m.status !== "Cancelled" && m.status !== "Absent"
+      ).length;
+
+      const remainingClasses = Math.max(totalAllowed - (studentLessonsCount + studentMakeupsCount), 0);
+      if (remainingClasses === 0) return;
+
+      // Start projecting forward from today
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      let curr = new Date(today);
+
       const dates: string[] = [];
-      
-      let curr = new Date(startDate);
       let safetyCounter = 0;
       let countedSlots = 0;
 
-      const targetRegularSlots = Math.max(totalAllowed - activeMakeupsCount, 0);
-
-      while (countedSlots < targetRegularSlots && safetyCounter < 730) {
+      while (countedSlots < remainingClasses && safetyCounter < 730) {
         const y = curr.getFullYear();
         const m = String(curr.getMonth() + 1).padStart(2, "0");
         const d = String(curr.getDate()).padStart(2, "0");
@@ -251,14 +258,16 @@ export default function DashboardPage() {
             (l) => l.student_id === student.id && l.lesson_date?.substring(0, 10) === dateString
           );
 
-          const isQuotaExempt = 
+          const isCompletedOrExempt = 
+            lessonRecord?.status === "Completed" ||
+            lessonRecord?.status === "completed" ||
             lessonRecord?.status === "Cancelled" || 
             lessonRecord?.status === "Absent" ||
             lessonRecord?.status === "absent";
 
           dates.push(dateString);
 
-          if (!isQuotaExempt) {
+          if (!isCompletedOrExempt) {
             countedSlots++;
           }
         }
@@ -271,7 +280,7 @@ export default function DashboardPage() {
     });
 
     return map;
-  })();
+  }, [students, schedules, makeupEvents, recordedLessons]);
 
   // 🌟 Global Filter Calculations for KPI Metrics
   const targetDateStr = todayDateStr;
@@ -341,7 +350,7 @@ export default function DashboardPage() {
       amount: totalPHP,
       count: filtered.length,
     };
-  })();
+  })()
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-50/50">
