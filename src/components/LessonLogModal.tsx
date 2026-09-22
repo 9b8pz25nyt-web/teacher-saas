@@ -33,6 +33,7 @@ export default function LessonLogModal({
   dateString,
   studentBooks = [],
 }: LessonLogModalProps) {
+  // 1. ALL useState hooks grouped together at the very top
   const [title, setTitle] = useState('')
   const [vocab, setVocab] = useState('')
   const [strengths, setStrengths] = useState('')
@@ -43,21 +44,24 @@ export default function LessonLogModal({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [savedStudentBooks, setSavedStudentBooks] = useState<any[]>([])
-
-  // 🌟 Move these state hooks up here (before any returns or effects)
   const [rawPasteText, setRawPasteText] = useState('')
   const [isAnalyzing, setIsAnalyzing] = useState(false)
 
-  // Dynamic Multi-Book Tracker State
+  // 2. Multi-book tracker state
   const [selectedBooks, setSelectedBooks] = useState<BookEntry[]>([
     { book_id: '', start_page: '', end_page: '' },
   ])
 
+  // 3. useEffect hook
   useEffect(() => {
-    // ... existing effect logic ...
+    async function loadExistingLesson() {
+      if (!isOpen) return
+      // ... rest of effect logic ...
+    }
+    loadExistingLesson()
   }, [isOpen, eventId, studentId, studentBooks])
 
-  // 🛑 The early return MUST stay BELOW all hooks
+  // 4. 🛑 EARLY RETURN MUST BE AT THE VERY BOTTOM (after all hooks)
   if (!isOpen) return null
 
   const handleAddBook = () => {
