@@ -33,7 +33,7 @@ export default function LessonLogModal({
   dateString,
   studentBooks = [],
 }: LessonLogModalProps) {
-  // 1. ALL useState hooks grouped together at the very top
+  // 1. ALL useState hooks must be grouped together at the very top
   const [title, setTitle] = useState('')
   const [vocab, setVocab] = useState('')
   const [strengths, setStrengths] = useState('')
@@ -44,24 +44,24 @@ export default function LessonLogModal({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [savedStudentBooks, setSavedStudentBooks] = useState<any[]>([])
-  const [rawPasteText, setRawPasteText] = useState('')
-  const [isAnalyzing, setIsAnalyzing] = useState(false)
-
-  // 2. Multi-book tracker state
   const [selectedBooks, setSelectedBooks] = useState<BookEntry[]>([
     { book_id: '', start_page: '', end_page: '' },
   ])
+  
+  // 🌟 AI Paste states MUST be up here too (never below an if-return)
+  const [rawPasteText, setRawPasteText] = useState('')
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
 
-  // 3. useEffect hook
+  // 2. useEffect hook
   useEffect(() => {
     async function loadExistingLesson() {
       if (!isOpen) return
-      // ... rest of effect logic ...
+      // ... your fetch logic ...
     }
     loadExistingLesson()
   }, [isOpen, eventId, studentId, studentBooks])
 
-  // 4. 🛑 EARLY RETURN MUST BE AT THE VERY BOTTOM (after all hooks)
+  // 3. 🛑 EARLY RETURN (Must be below ALL hooks)
   if (!isOpen) return null
 
   const handleAddBook = () => {
