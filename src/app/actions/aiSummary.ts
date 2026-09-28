@@ -30,7 +30,7 @@ export async function generateReportFromScript(scriptText: string, studentName: 
                   text: `You are an expert private tutor assistant. Review the following class script or transcript for student "${studentName}". Return ONLY a valid JSON object with these exact keys. Do not include markdown code blocks or extra conversational text:
 {
   "title": "A short, catchy lesson title",
-  "vocab": "Exactly 5 vocabulary words or target patterns with IPA pronunciation and a simple example sentence for each",
+  "vocab": "Format this exact section with clear headings and numbering:\n\nVocabulary:\n1. [Word] - [Pronunciation/Meaning] - [Example sentence]\n2. [Word] - [Pronunciation/Meaning] - [Example sentence]\n3. [Word] - [Pronunciation/Meaning] - [Example sentence]\n4. [Word] - [Pronunciation/Meaning] - [Example sentence]\n5. [Word] - [Pronunciation/Meaning] - [Example sentence]\n\nTarget Patterns:\n1. [Pattern] - [Example sentence]\n2. [Pattern] - [Example sentence]",
   "strengths": "What the student did exceptionally well during the class",
   "improvements": "Areas for the student to practice or improve next time",
   "parentMessage": "A warm, encouraging note to the parents summarizing the session",
