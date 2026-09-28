@@ -2048,14 +2048,32 @@ ${renewalBankDetails ? `🏦 Bank Details:\n${renewalBankDetails}\n` : ""}Please
                           <h4 className="font-bold text-pink-950 text-xs">⭐ Makeup Class: {mc.topic || mc.title || "Makeup Session"}</h4>
                         </div>
 
-                        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                          <span className="text-[11px] font-mono text-gray-500">
-                            {(mc.makeup_date || mc.date || "").substring(0, 10)}
-                          </span>
-                          <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 font-bold text-[10px] rounded-md uppercase border border-emerald-200">
-                            {mc.status || "Attended"}
-                          </span>
-                        </div>
+                       <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+  <span className="text-[11px] font-mono text-gray-500">
+    {(mc.makeup_date || mc.date || "").substring(0, 10)}
+  </span>
+  <button
+    type="button"
+    onClick={() => handlePrintLessonReport({
+      title: `Makeup Class: ${mc.topic || mc.title || "Makeup Session"}`,
+      date: (mc.makeup_date || mc.date || "").substring(0, 10),
+      studentName: parentOrStudentName,
+      teacherAlias: teacherName,
+      vocabulary: displayVocab,
+      strengths: displayStrengths,
+      improvements: displayImprovements,
+      homework: displayHomework,
+      packageProgress: `${dynamicCompletedCount} / ${combinedTotalClasses}`,
+    })}
+    className="px-2 py-1 bg-pink-50 hover:bg-pink-100 text-pink-700 text-[10px] font-bold rounded-lg border border-pink-200 transition cursor-pointer"
+    title="Print Makeup Class Report"
+  >
+    🖨️ Print
+  </button>
+  <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 font-bold text-[10px] rounded-md uppercase border border-emerald-200">
+    {mc.status || "Attended"}
+  </span>
+</div>
                       </div>
 
                       {isExpanded && (
