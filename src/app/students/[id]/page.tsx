@@ -835,24 +835,53 @@ async function handleSaveParentName(newParentName: string) {
   }
 
 async function handleExecuteRenewal(e: React.FormEvent) {
-    e.preventDefault();
-    setIsProcessingRenewal(true);
+  e.preventDefault();
+  setIsProcessingRenewal(true);
+
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const cleanAmount = Number(String(wizardAmount).replace(/[^0-9.]/g, "")) || 0;
+    let phpEq = cleanAmount;
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      phpEq = await convertToPHP(cleanAmount, wizardCurrency);
+    } catch (err) {
+      console.error("Currency conversion error:", err);
+    }
 
-      const cleanAmount = Number(String(wizardAmount).replace(/[^0-9.]/g, "")) || 0;
-      let phpEq = cleanAmount;
+    // 🧮 Calculate rollover classes from current active package cycle
+    const currentTotal = (student?.classes_included || 0) + (student?.free_classes || 0);
+    const pkgStart = student?.start_date ? student.start_date.substring(0, 10) : "";
+    
+    const activeReports = reports.filter(r => {
+      const title = (r.lesson_title || r.title || "").toLowerCase();
+      const status = (r.status || "").toLowerCase();
+      if (title.includes("cancelled") || title.includes("absent") || status === "cancelled" || status === "absent") return false;
+      if (!pkgStart) return true;
+      return (r.report_date || "").substring(0, 10) >= pkgStart;
+    });
+    const activeLessons = lessons.filter(l => {
+      const title = (l.title || "").toLowerCase();
+      const status = (l.status || "").toLowerCase();
+      if (title.includes("cancelled") || title.includes("absent") || status === "cancelled" || status === "absent") return false;
+      if (!pkgStart) return true;
+      return (l.lesson_date || "").substring(0, 10) >= pkgStart;
+    });
+    const activeMakeups = makeupClasses.filter(m => {
+      const s = (m.status || "").trim().toLowerCase();
+      if (s !== "completed" && s !== "attended") return false;
+      if (!pkgStart) return true;
+      return (m.makeup_date || m.date || "").substring(0, 10) >= pkgStart;
+    });
 
-      try {
-        phpEq = await convertToPHP(cleanAmount, wizardCurrency);
-      } catch (err) {
-        console.error("Currency conversion error:", err);
-      }
+    const currentCompleted = Math.max(activeReports.length, activeLessons.length) + activeMakeups.length;
+    const rolloverClasses = Math.max(currentTotal - currentCompleted, 0);
+    const finalClassesIncluded = Number(wizardClasses) + rolloverClasses;
 
-      // 1. Insert payment record into database (Populates General Journal)
-      const { error: paymentError } = await supabase.from("payments").insert({
+  // 1. Insert payment record into database (Populates General Journal)
+    const { error: paymentError } = await supabase.from("payments").insert({
         user_id: user.id,
         student_id: studentId,
         amount: cleanAmount,
@@ -861,7 +890,7 @@ async function handleExecuteRenewal(e: React.FormEvent) {
         payment_status: "Paid",
         payment_date: wizardStartDate,
         payment_method: wizardMethod,
-      });
+    });
 
       if (paymentError) throw paymentError;
 
@@ -869,7 +898,7 @@ async function handleExecuteRenewal(e: React.FormEvent) {
       const { error: studentError } = await supabase
         .from("students")
         .update({
-          classes_included: Number(wizardClasses),
+          classes_included: finalClassesIncluded,
           free_classes: Number(wizardFreeClasses),
           classes_completed: 0, // Reset for new package cycle
           payment_amount: cleanAmount,
@@ -1151,88 +1180,61 @@ ${renewalBankDetails ? `🏦 Bank Details:\n${renewalBankDetails}\n` : ""}Please
     }
   }
 
-  const combinedTotalClasses = totalClsCount + freeClsCount;
+ const combinedTotalClasses = totalClsCount + freeClsCount;
 
- const packageStartDate = student?.start_date ? student.start_date.substring(0, 10) : "";
-
-  const validReports = reports.filter(
+  // 1. Unfiltered lists for displaying ALL historical reports & lessons below
+  const nonCancelledReports = reports.filter(
     (r) => {
       const title = (r.lesson_title || r.title || "").toLowerCase();
       const status = (r.status || "").toLowerCase();
-      const isValid = !title.includes("cancelled") && 
-                      !title.includes("absent") && 
-                      status !== "cancelled" && 
-                      status !== "absent";
-      if (!isValid) return false;
-      if (!packageStartDate) return true;
-      const rDate = (r.report_date || "").substring(0, 10);
-      return rDate >= packageStartDate;
+      return !title.includes("cancelled") && !title.includes("absent") && status !== "cancelled" && status !== "absent";
     }
   );
 
-  const validLessons = lessons.filter(
+  const nonCancelledLessons = lessons.filter(
     (l) => {
       const title = (l.title || "").toLowerCase();
       const status = (l.status || "").toLowerCase();
-      const isValid = !title.includes("cancelled") && 
-                      !title.includes("absent") && 
-                      status !== "cancelled" && 
-                      status !== "absent";
-      if (!isValid) return false;
-      if (!packageStartDate) return true;
-      const lDate = (l.lesson_date || "").substring(0, 10);
-      return lDate >= packageStartDate;
+      return !title.includes("cancelled") && !title.includes("absent") && status !== "cancelled" && status !== "absent";
     }
   );
 
-  const completedMakeups = makeupClasses.filter(
+  const nonCancelledMakeups = makeupClasses.filter(
     (m) => {
       const s = (m.status || "").trim().toLowerCase();
-      const isAttended = s === "completed" || s === "attended";
-      if (!isAttended) return false;
-      if (!packageStartDate) return true;
-      const mDate = (m.makeup_date || m.date || "").substring(0, 10);
-      return mDate >= packageStartDate;
+      return s === "completed" || s === "attended";
     }
   );
 
- const dynamicCompletedCount = Math.max(validReports.length, validLessons.length) + completedMakeups.length;
-  const dynamicRemainingCount = Math.max(combinedTotalClasses - dynamicCompletedCount, 0);
-  const dynamicProgressPercent = Math.min(
-    Math.round((dynamicCompletedCount / (combinedTotalClasses || 1)) * 100),
-    100
-  );
-
-  const totalRegularClasses = totalClsCount;
-  const totalFreeClasses = freeClsCount;
-  const isFreePackage = totalRegularClasses === 0 && totalFreeClasses > 0;
-
-  const rawStudentStatus = (student?.payment_status || "Pending").trim().toLowerCase();
-  const rawPaymentStatus = (latestPayment?.payment_status || latestPayment?.status || "").trim().toLowerCase();
-
-  const isPaid =
-    isFreePackage ||
-    Boolean(latestPayment) ||
-    rawStudentStatus === "paid" ||
-    rawStudentStatus === "completed" ||
-    rawStudentStatus === "active" ||
-    rawPaymentStatus === "paid" ||
-    rawPaymentStatus === "completed";
-
-  const displayStatus = isPaid ? "PAID" : "PENDING";
-const allLoggedItems = [
-    ...validReports.map((r) => ({ type: "report" as const, data: r, date: r.report_date || "" })),
-    ...validLessons.map((l) => ({ type: "lesson" as const, data: l, date: l.lesson_date || "" })),
-    ...completedMakeups.map((m) => ({ type: "makeup" as const, data: m, date: m.makeup_date || m.date || "" })),
+  const allLoggedItems = [
+    ...nonCancelledReports.map((r) => ({ type: "report" as const, data: r, date: r.report_date || "" })),
+    ...nonCancelledLessons.map((l) => ({ type: "lesson" as const, data: l, date: l.lesson_date || "" })),
+    ...nonCancelledMakeups.map((m) => ({ type: "makeup" as const, data: m, date: m.makeup_date || m.date || "" })),
   ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  if (loading) {
-    return (
-      <div className="p-12 text-center text-pink-600 font-medium">
-        Loading student profile...
-      </div>
-    );
-  }
 
+  // 2. Filtered lists strictly for current package progress calculation on or after start_date
+  const packageStartDate = student?.start_date ? student.start_date.substring(0, 10) : "";
+
+  const packageReports = nonCancelledReports.filter((r) => {
+    if (!packageStartDate) return true;
+    return (r.report_date || "").substring(0, 10) >= packageStartDate;
+  });
+
+  const packageLessons = nonCancelledLessons.filter((l) => {
+    if (!packageStartDate) return true;
+    return (l.lesson_date || "").substring(0, 10) >= packageStartDate;
+  });
+
+  const packageMakeups = nonCancelledMakeups.filter((m) => {
+    if (!packageStartDate) return true;
+    return (m.makeup_date || m.date || "").substring(0, 10) >= packageStartDate;
+  });
+const dynamicCompletedCount = Math.max(packageReports.length, packageLessons.length) + packageMakeups.length;
+  const dynamicRemainingCount = Math.max(combinedTotalClasses - dynamicCompletedCount, 0);
+  const dynamicProgressPercent = combinedTotalClasses > 0 ? Math.min(100, Math.round((dynamicCompletedCount / combinedTotalClasses) * 100)) : 0;
+
+  const displayStatus = student?.payment_status || "Active";
+  const isPaid = displayStatus.toLowerCase() === "active" || displayStatus.toLowerCase() === "paid";
   const countryObj = countries.find((c) => c.name === student?.country);
   const currencyObj = currencies[student?.payment_currency];
   const cleanRenewAmount = Number(String(renewalRate).replace(/[^0-9.]/g, "")) || 0;
