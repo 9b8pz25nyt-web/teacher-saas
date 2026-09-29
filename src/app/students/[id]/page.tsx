@@ -835,29 +835,52 @@ async function handleSaveParentName(newParentName: string) {
   }
 
 async function handleExecuteRenewal(e: React.FormEvent) {
-  e.preventDefault();
-  setIsProcessingRenewal(true);
-
-  try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const cleanAmount = Number(String(wizardAmount).replace(/[^0-9.]/g, "")) || 0;
-    let phpEq = cleanAmount;
+    e.preventDefault();
+    setIsProcessingRenewal(true);
 
     try {
-      phpEq = await convertToPHP(cleanAmount, wizardCurrency);
-    } catch (err) {
-      console.error("Currency conversion error:", err);
-    }
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
 
-   // 🧮 Calculate rollover classes from current active package cycle
-    const currentTotal = (student?.classes_included || 0) + (student?.free_classes || 0);
-    const currentCompleted = student?.classes_completed || 0;
-    const rolloverClasses = Math.max(currentTotal - currentCompleted, 0);
-    const finalClassesIncluded = Number(wizardClasses) + rolloverClasses;
+      const cleanAmount = Number(String(wizardAmount).replace(/[^0-9.]/g, "")) || 0;
+      let phpEq = cleanAmount;
 
-  // 1. Insert payment record into database (Populates General Journal)
+      try {
+        phpEq = await convertToPHP(cleanAmount, wizardCurrency);
+      } catch (err) {
+        console.error("Currency conversion error:", err);
+      }
+
+      // 🧮 Calculate rollover classes from current active package cycle
+      const outgoingTotal = (student?.classes_included || 0) + (student?.free_classes || 0);
+      const pkgStart = student?.start_date ? student.start_date.substring(0, 10) : "";
+      
+      const activeReports = reports.filter(r => {
+        const title = (r.lesson_title || r.title || "").toLowerCase();
+        const status = (r.status || "").toLowerCase();
+        if (title.includes("cancelled") || title.includes("absent") || status === "cancelled" || status === "absent") return false;
+        if (!pkgStart) return true;
+        return (r.report_date || "").substring(0, 10) >= pkgStart;
+      });
+      const activeLessons = lessons.filter(l => {
+        const title = (l.title || "").toLowerCase();
+        const status = (l.status || "").toLowerCase();
+        if (title.includes("cancelled") || title.includes("absent") || status === "cancelled" || status === "absent") return false;
+        if (!pkgStart) return true;
+        return (l.lesson_date || "").substring(0, 10) >= pkgStart;
+      });
+      const activeMakeups = makeupClasses.filter(m => {
+        const s = (m.status || "").trim().toLowerCase();
+        if (s !== "completed" && s !== "attended") return false;
+        if (!pkgStart) return true;
+        return (m.makeup_date || m.date || "").substring(0, 10) >= pkgStart;
+      });
+
+      const completedInCurrentCycle = Math.max(activeReports.length, activeLessons.length) + activeMakeups.length;
+      const rolloverClasses = Math.max(outgoingTotal - completedInCurrentCycle, 0);
+      const finalClassesIncluded = Number(wizardClasses) + rolloverClasses;
+
+   // 1. Insert payment record into database (Populates General Journal)
     const { error: paymentError } = await supabase.from("payments").insert({
         user_id: user.id,
         student_id: studentId,
