@@ -851,32 +851,9 @@ async function handleExecuteRenewal(e: React.FormEvent) {
       console.error("Currency conversion error:", err);
     }
 
-    // 🧮 Calculate rollover classes from current active package cycle
+   // 🧮 Calculate rollover classes from current active package cycle
     const currentTotal = (student?.classes_included || 0) + (student?.free_classes || 0);
-    const pkgStart = student?.start_date ? student.start_date.substring(0, 10) : "";
-    
-    const activeReports = reports.filter(r => {
-      const title = (r.lesson_title || r.title || "").toLowerCase();
-      const status = (r.status || "").toLowerCase();
-      if (title.includes("cancelled") || title.includes("absent") || status === "cancelled" || status === "absent") return false;
-      if (!pkgStart) return true;
-      return (r.report_date || "").substring(0, 10) >= pkgStart;
-    });
-    const activeLessons = lessons.filter(l => {
-      const title = (l.title || "").toLowerCase();
-      const status = (l.status || "").toLowerCase();
-      if (title.includes("cancelled") || title.includes("absent") || status === "cancelled" || status === "absent") return false;
-      if (!pkgStart) return true;
-      return (l.lesson_date || "").substring(0, 10) >= pkgStart;
-    });
-    const activeMakeups = makeupClasses.filter(m => {
-      const s = (m.status || "").trim().toLowerCase();
-      if (s !== "completed" && s !== "attended") return false;
-      if (!pkgStart) return true;
-      return (m.makeup_date || m.date || "").substring(0, 10) >= pkgStart;
-    });
-
-    const currentCompleted = Math.max(activeReports.length, activeLessons.length) + activeMakeups.length;
+    const currentCompleted = student?.classes_completed || 0;
     const rolloverClasses = Math.max(currentTotal - currentCompleted, 0);
     const finalClassesIncluded = Number(wizardClasses) + rolloverClasses;
 
