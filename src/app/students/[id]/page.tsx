@@ -851,46 +851,21 @@ async function handleExecuteRenewal(e: React.FormEvent) {
         console.error("Currency conversion error:", err);
       }
 
-      // 🧮 Calculate rollover classes from current active package cycle
-      const outgoingTotal = (student?.classes_included || 0) + (student?.free_classes || 0);
-      const pkgStart = student?.start_date ? student.start_date.substring(0, 10) : "";
-      
-      const activeReports = reports.filter(r => {
-        const title = (r.lesson_title || r.title || "").toLowerCase();
-        const status = (r.status || "").toLowerCase();
-        if (title.includes("cancelled") || title.includes("absent") || status === "cancelled" || status === "absent") return false;
-        if (!pkgStart) return true;
-        return (r.report_date || "").substring(0, 10) >= pkgStart;
-      });
-      const activeLessons = lessons.filter(l => {
-        const title = (l.title || "").toLowerCase();
-        const status = (l.status || "").toLowerCase();
-        if (title.includes("cancelled") || title.includes("absent") || status === "cancelled" || status === "absent") return false;
-        if (!pkgStart) return true;
-        return (l.lesson_date || "").substring(0, 10) >= pkgStart;
-      });
-      const activeMakeups = makeupClasses.filter(m => {
-        const s = (m.status || "").trim().toLowerCase();
-        if (s !== "completed" && s !== "attended") return false;
-        if (!pkgStart) return true;
-        return (m.makeup_date || m.date || "").substring(0, 10) >= pkgStart;
-      });
-
-      const completedInCurrentCycle = Math.max(activeReports.length, activeLessons.length) + activeMakeups.length;
-      const rolloverClasses = Math.max(outgoingTotal - completedInCurrentCycle, 0);
+      // 🧮 Use the exact remaining classes currently displayed on the dashboard
+      const rolloverClasses = dynamicRemainingCount; 
       const finalClassesIncluded = Number(wizardClasses) + rolloverClasses;
 
-   // 1. Insert payment record into database (Populates General Journal)
-    const { error: paymentError } = await supabase.from("payments").insert({
-        user_id: user.id,
-        student_id: studentId,
-        amount: cleanAmount,
-        currency: wizardCurrency,
-        php_equivalent: phpEq,
-        payment_status: "Paid",
-        payment_date: wizardStartDate,
-        payment_method: wizardMethod,
-    });
+      // 1. Insert payment record into database (Populates General Journal)
+      const { error: paymentError } = await supabase.from("payments").insert({
+          user_id: user.id,
+          student_id: studentId,
+          amount: cleanAmount,
+          currency: wizardCurrency,
+          php_equivalent: phpEq,
+          payment_status: "Paid",
+          payment_date: wizardStartDate,
+          payment_method: wizardMethod,
+      });
 
       if (paymentError) throw paymentError;
 
