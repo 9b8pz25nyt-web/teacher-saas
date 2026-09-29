@@ -1153,14 +1153,20 @@ ${renewalBankDetails ? `🏦 Bank Details:\n${renewalBankDetails}\n` : ""}Please
 
   const combinedTotalClasses = totalClsCount + freeClsCount;
 
+ const packageStartDate = student?.start_date ? student.start_date.substring(0, 10) : "";
+
   const validReports = reports.filter(
     (r) => {
       const title = (r.lesson_title || r.title || "").toLowerCase();
       const status = (r.status || "").toLowerCase();
-      return !title.includes("cancelled") && 
-             !title.includes("absent") && 
-             status !== "cancelled" && 
-             status !== "absent";
+      const isValid = !title.includes("cancelled") && 
+                      !title.includes("absent") && 
+                      status !== "cancelled" && 
+                      status !== "absent";
+      if (!isValid) return false;
+      if (!packageStartDate) return true;
+      const rDate = (r.report_date || "").substring(0, 10);
+      return rDate >= packageStartDate;
     }
   );
 
@@ -1168,17 +1174,25 @@ ${renewalBankDetails ? `🏦 Bank Details:\n${renewalBankDetails}\n` : ""}Please
     (l) => {
       const title = (l.title || "").toLowerCase();
       const status = (l.status || "").toLowerCase();
-      return !title.includes("cancelled") && 
-             !title.includes("absent") && 
-             status !== "cancelled" && 
-             status !== "absent";
+      const isValid = !title.includes("cancelled") && 
+                      !title.includes("absent") && 
+                      status !== "cancelled" && 
+                      status !== "absent";
+      if (!isValid) return false;
+      if (!packageStartDate) return true;
+      const lDate = (l.lesson_date || "").substring(0, 10);
+      return lDate >= packageStartDate;
     }
   );
 
-const completedMakeups = makeupClasses.filter(
+  const completedMakeups = makeupClasses.filter(
     (m) => {
       const s = (m.status || "").trim().toLowerCase();
-      return s === "completed" || s === "attended";
+      const isAttended = s === "completed" || s === "attended";
+      if (!isAttended) return false;
+      if (!packageStartDate) return true;
+      const mDate = (m.makeup_date || m.date || "").substring(0, 10);
+      return mDate >= packageStartDate;
     }
   );
 
