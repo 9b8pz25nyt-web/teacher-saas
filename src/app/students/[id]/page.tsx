@@ -852,12 +852,10 @@ async function handleExecuteRenewal(e: React.FormEvent) {
         console.error("Currency conversion error:", err);
       }
 
-      // 🧮 Automatically calculate remaining rollover classes from the current package
-      const currentPackageTotal = (student?.classes_included || 0) + (student?.free_classes || 0);
-      const currentCompleted = Math.max(packageReports.length, packageLessons.length) + packageMakeups.length;
-      const automaticRollover = Math.max(currentPackageTotal - currentCompleted, 0);
-      
-      const finalClassesIncluded = Number(wizardClasses) + automaticRollover;
+      // 🧮 Formula: Previous Classes (Remaining) + Renewed Classes
+      const previousClasses = dynamicRemainingCount; 
+      const renewedClasses = Number(wizardClasses) || 0;
+      const totalClassesIncluded = previousClasses + renewedClasses;
 
       // 1. Insert payment record into database (Populates General Journal)
       const { error: paymentError } = await supabase.from("payments").insert({
@@ -873,13 +871,13 @@ async function handleExecuteRenewal(e: React.FormEvent) {
 
       if (paymentError) throw paymentError;
 
-      // 2. Update student profile (Reset completed classes to 0, update package size & status)
+      // 2. Update student profile with the new total classes and reset completed to 0
       const { error: studentError } = await supabase
         .from("students")
         .update({
-          classes_included: finalClassesIncluded,
-          free_classes: Number(wizardFreeClasses),
-          classes_completed: 0, // Reset for new package cycle
+          classes_included: totalClassesIncluded, // Previous Classes + Renewed Classes
+          free_classes: 0,
+          classes_completed: 0, // Reset completed classes for the new cycle
           payment_amount: cleanAmount,
           payment_currency: wizardCurrency,
           php_equivalent: phpEq,
@@ -893,7 +891,7 @@ async function handleExecuteRenewal(e: React.FormEvent) {
 
       setIsRenewalWizardOpen(false);
       await fetchStudentData();
-      alert(`🎉 Package successfully renewed with ${automaticRollover} rollover class(es) added (${finalClassesIncluded} total)!`);
+      alert(`🎉 Package renewed successfully! (${previousClasses} previous + ${renewedClasses} renewed = ${totalClassesIncluded} total classes)`);
     } catch (err: any) {
       console.error("Error executing renewal:", err);
       alert("Failed to process renewal: " + (err.message || err));
@@ -901,7 +899,6 @@ async function handleExecuteRenewal(e: React.FormEvent) {
       setIsProcessingRenewal(false);
     }
   }
-
   function handleCopyPortalLink() {
     if (!student?.access_token) return;
     const portalUrl = `${window.location.origin}/portal/${student.access_token}`;
