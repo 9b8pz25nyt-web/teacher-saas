@@ -1104,10 +1104,10 @@ ${renewalBankDetails ? `🏦 Bank Details:\n${renewalBankDetails}\n` : ""}Please
     }
   );
 
-  const completedMakeups = makeupClasses.filter(
+const completedMakeups = makeupClasses.filter(
     (m) => {
       const s = (m.status || "").trim().toLowerCase();
-      return s !== "cancelled" && s !== "absent";
+      return s === "completed" || s === "attended";
     }
   );
 
