@@ -36,6 +36,7 @@ export default function JournalReport({
     const selTime = new Date(selectedDate).getTime();
     return Math.abs(selTime - itemTime) / (1000 * 3600 * 24) <= 7;
   };
+
 const journalEntries = useMemo(() => {
     const entries: any[] = [];
 
@@ -43,36 +44,49 @@ const journalEntries = useMemo(() => {
     const safeExpenses = Array.isArray(expenses) ? expenses : [];
     const safeStudents = Array.isArray(students) ? students : [];
 
-    // 1. Process Completed/Paid Student Payments (Skipping 0 amounts)
+    // 1. Process Completed/Paid Student Payments & Zero-Amount Memos
     safePayments.forEach((p) => {
       const entryDate =
         p.payment_date ||
         (p.updated_at ? p.updated_at.split("T")[0] : p.created_at?.split("T")[0]);
 
-      const grossPhp = Number(p.php_equivalent) || Number(p.amount) || 0;
-
-      if (p.payment_status === "Paid" && matchesFilter(entryDate) && grossPhp > 0) {
+      if (matchesFilter(entryDate)) {
         const student = safeStudents.find((s) => s.id === p.student_id);
-        const feePhp = Number(p.transfer_fee_php) || 0;
-        const netPhp = Math.max(0, grossPhp - feePhp);
-        const currencySymbol = currencies[p.currency]?.symbol || "";
+        const grossPhp = Number(p.php_equivalent) || Number(p.amount) || 0;
 
-        entries.push({
-          id: `pay-${p.id}`,
-          date: entryDate,
-          ref: "OR-PAY",
-          type: "payment",
-          studentName: student?.name || "Unknown Student",
-          method: p.payment_method || "Bank Transfer",
-          foreignCurrency: `${currencySymbol}${Number(p.amount).toLocaleString()} ${p.currency || "PHP"}`,
-          grossPhp,
-          feePhp,
-          netPhp,
-        });
+        if (p.payment_status === "Paid" && grossPhp > 0) {
+          // Standard Financial Paid Entry
+          const feePhp = Number(p.transfer_fee_php) || 0;
+          const netPhp = Math.max(0, grossPhp - feePhp);
+          const currencySymbol = currencies[p.currency]?.symbol || "";
+
+          entries.push({
+            id: `pay-${p.id}`,
+            date: entryDate,
+            ref: "OR-PAY",
+            type: "payment",
+            studentName: student?.name || "Unknown Student",
+            method: p.payment_method || "Bank Transfer",
+            foreignCurrency: `${currencySymbol}${Number(p.amount).toLocaleString()} ${p.currency || "PHP"}`,
+            grossPhp,
+            feePhp,
+            netPhp,
+          });
+        } else {
+          // Memorandum Entry for Free Packages / 0-Amount Records
+          entries.push({
+            id: `memo-${p.id}`,
+            date: entryDate,
+            ref: "MEMO",
+            type: "memo",
+            studentName: student?.name || "Unknown Student",
+            description: `Free Class Package / Promotional Record for ${student?.name || "Student"}`,
+          });
+        }
       }
     });
 
-    // 2. Process Operating Expenses (Skipping 0 amounts)
+    // 2. Process Operating Expenses
     safeExpenses.forEach((exp) => {
       const entryDate = exp.expense_date || exp.created_at?.split("T")[0];
       const amountPhp = Number(exp.amount_php) || 0;
@@ -95,6 +109,7 @@ const journalEntries = useMemo(() => {
       (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
     );
   }, [payments, students, expenses, selectedDate, timeframe]);
+
   // Totals for reconciliation check
   const totalDebits = journalEntries.reduce((acc, curr) => {
     if (curr.type === "payment") return acc + curr.grossPhp;
@@ -205,7 +220,7 @@ const journalEntries = useMemo(() => {
                   <th className="p-3.5 text-right">CREDIT (PHP)</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-pink-50">
+          <tbody className="divide-y divide-pink-50">
                 {journalEntries.map((entry) => {
                   if (entry.type === "payment") {
                     return (
@@ -247,6 +262,33 @@ const journalEntries = useMemo(() => {
                           <div className="text-pink-700">
                             ₱{entry.grossPhp.toLocaleString("en-US", { minimumFractionDigits: 2 })}
                           </div>
+                        </td>
+                      </tr>
+                    );
+                  }
+
+                  if (entry.type === "memo") {
+                    return (
+                      <tr key={entry.id} className="hover:bg-pink-50/20 transition bg-amber-50/20">
+                        <td className="p-3.5 font-semibold text-gray-700 font-mono align-top">
+                          {entry.date}
+                        </td>
+                        <td className="p-3.5 font-mono text-amber-700 font-bold align-top">
+                          MEMO
+                        </td>
+                        <td className="p-3.5 space-y-1 align-top" colSpan={2}>
+                          <div className="font-bold text-gray-900">
+                            [MEMORANDUM ENTRY] {entry.description}
+                          </div>
+                          <div className="text-[11px] text-gray-500 italic">
+                            No monetary effect on cash or revenue accounts (Informational record only).
+                          </div>
+                        </td>
+                        <td className="p-3.5 text-right font-mono text-gray-400 align-top">
+                          —
+                        </td>
+                        <td className="p-3.5 text-right font-mono text-gray-400 align-top">
+                          —
                         </td>
                       </tr>
                     );
