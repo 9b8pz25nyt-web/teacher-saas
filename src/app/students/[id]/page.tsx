@@ -1255,28 +1255,20 @@ const dynamicCompletedCount = Math.max(packageReports.length, packageLessons.len
             <span>Renewal Notice & Invoice</span>
           </button>
           {/* 👈 PASTE THE RENEWAL WIZARD BUTTON HERE */}
-         <button
+       <button
             type="button"
             onClick={() => {
               setWizardClasses(String(student?.classes_included || 20));
               setWizardFreeClasses(String(student?.free_classes || 0));
               setWizardAmount(String(student?.payment_amount || ""));
               setWizardCurrency(student?.payment_currency || "PHP");
-              
-              // 🧮 Calculate exact remaining rollover classes
-              const currentTotal = (student?.classes_included || 0) + (student?.free_classes || 0);
-              const currentCompleted = Number(student?.classes_completed || 0);
-              const rem = Math.max(currentTotal - currentCompleted, dynamicRemainingCount);
-              setWizardRolloverClasses(String(rem));
-
               setIsRenewalWizardOpen(true);
             }}
-            className="..."
+            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer relative z-10"
           >
-            <Sparkles size={14} className="text-emerald-600" />
+            <Sparkles size={14} className="text-white" />
             <span>⚡ Process Paid Renewal</span>
           </button>
-
           <button
             onClick={() => {
               const today = new Date().toISOString().split("T")[0];
