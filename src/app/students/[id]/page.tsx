@@ -1269,26 +1269,7 @@ const dynamicCompletedCount = Math.max(packageReports.length, packageLessons.len
             <Sparkles size={14} className="text-white" />
             <span>⚡ Process Paid Renewal</span>
           </button>
-          <button
-            onClick={() => {
-              const today = new Date().toISOString().split("T")[0];
-              setReportDate(today);
-              setEditingReportId(null);
-              setLessonTitle("");
-              setVocabulary("");
-              setStrengths("");
-              setImprovements("");
-              setHomework("");
-              setHomeworkFile(null);
-              setSelectedChapterIndex("");
-              setIsChapterComplete(false);
-              setIsReportModalOpen(true);
-            }}
-            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer"
-          >
-            <Plus size={14} />
-            <span>Log Lesson & Homework</span>
-          </button>
+        
 
           <button
             onClick={() => setIsEditModalOpen(true)}
