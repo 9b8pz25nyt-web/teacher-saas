@@ -1111,7 +1111,7 @@ ${renewalBankDetails ? `🏦 Bank Details:\n${renewalBankDetails}\n` : ""}Please
     }
   );
 
- const dynamicCompletedCount = Math.max(validReports.length, validLessons.length);
+ const dynamicCompletedCount = Math.max(validReports.length, validLessons.length) + completedMakeups.length;
   const dynamicRemainingCount = Math.max(combinedTotalClasses - dynamicCompletedCount, 0);
   const dynamicProgressPercent = Math.min(
     Math.round((dynamicCompletedCount / (combinedTotalClasses || 1)) * 100),
