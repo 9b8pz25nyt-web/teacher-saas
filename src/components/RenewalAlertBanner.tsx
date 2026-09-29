@@ -27,8 +27,13 @@ export default function RenewalAlertBanner({
         (l) => l.student_id === student.id && l.status !== "Cancelled" && l.status !== "Absent"
       ).length;
 
+      // Only count makeup classes that are actually completed/attended
       const completedMakeups = makeupEvents.filter(
-        (m) => m.student_id === student.id && m.status !== "Cancelled" && m.status !== "Absent"
+        (m) => {
+          if (m.student_id !== student.id) return false;
+          const status = (m.status || "").trim().toLowerCase();
+          return status === "completed" || status === "attended";
+        }
       ).length;
 
       const remaining = totalAllowed - (completedLessons + completedMakeups);
