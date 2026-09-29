@@ -852,32 +852,36 @@ async function handleExecuteRenewal(e: React.FormEvent) {
         console.error("Currency conversion error:", err);
       }
 
-      // 🧮 Formula: Previous Classes (Remaining) + Renewed Classes
-      const previousClasses = dynamicRemainingCount; 
-      const renewedClasses = Number(wizardClasses) || 0;
-      const totalClassesIncluded = previousClasses + renewedClasses;
+      // 🧮 1. Calculate previous remaining classes
+      const currentTotal = (student?.classes_included || 0) + (student?.free_classes || 0);
+      const currentCompleted = dynamicCompletedCount; // e.g., 5 completed classes
+      const previousRemaining = Math.max(currentTotal - currentCompleted, 0); // e.g., 6
 
-      // 1. Insert payment record into database (Populates General Journal)
-      const { error: paymentError } = await supabase.from("payments").insert({
-          user_id: user.id,
-          student_id: studentId,
-          amount: cleanAmount,
-          currency: wizardCurrency,
-          php_equivalent: phpEq,
-          payment_status: "Paid",
-          payment_date: wizardStartDate,
-          payment_method: wizardMethod,
-      });
+      // 2. Add new renewal classes
+      const renewedClasses = Number(wizardClasses) || 0; // e.g., 30
+      const newTotalClasses = previousRemaining + renewedClasses; // e.g., 36
+
+ // 1. Insert payment record into database (Populates General Journal)
+  const { error: paymentError } = await supabase.from("payments").insert({
+      user_id: user.id,
+      student_id: studentId,
+      amount: cleanAmount,
+      currency: wizardCurrency,
+      php_equivalent: phpEq,
+      payment_status: "Paid",
+      payment_date: wizardStartDate,
+      payment_method: wizardMethod,
+  });
 
       if (paymentError) throw paymentError;
 
-      // 2. Update student profile with the new total classes and reset completed to 0
+      // 2. Update student profile: Total = Previous + Renewal, Completed preserved as baseline
       const { error: studentError } = await supabase
         .from("students")
         .update({
-          classes_included: totalClassesIncluded, // Previous Classes + Renewed Classes
-          free_classes: 0,
-          classes_completed: 0, // Reset completed classes for the new cycle
+          classes_included: newTotalClasses, // 36
+          free_classes: Number(wizardFreeClasses),
+          classes_completed: currentCompleted, // 5 (preserved so Remaining = 36 - 5 = 31)
           payment_amount: cleanAmount,
           payment_currency: wizardCurrency,
           php_equivalent: phpEq,
@@ -891,7 +895,7 @@ async function handleExecuteRenewal(e: React.FormEvent) {
 
       setIsRenewalWizardOpen(false);
       await fetchStudentData();
-      alert(`🎉 Package renewed successfully! (${previousClasses} previous + ${renewedClasses} renewed = ${totalClassesIncluded} total classes)`);
+      alert(`🎉 Package renewed! (${previousRemaining} previous remaining + ${renewedClasses} renewal = ${newTotalClasses} total, minus ${currentCompleted} completed = ${newTotalClasses - currentCompleted} remaining)`);
     } catch (err: any) {
       console.error("Error executing renewal:", err);
       alert("Failed to process renewal: " + (err.message || err));
@@ -1156,8 +1160,6 @@ ${renewalBankDetails ? `🏦 Bank Details:\n${renewalBankDetails}\n` : ""}Please
     }
   }
 
- const combinedTotalClasses = totalClsCount + freeClsCount;
-
   // 1. Unfiltered lists for displaying ALL historical reports & lessons below
   const nonCancelledReports = reports.filter(
     (r) => {
@@ -1205,7 +1207,10 @@ ${renewalBankDetails ? `🏦 Bank Details:\n${renewalBankDetails}\n` : ""}Please
     if (!packageStartDate) return true;
     return (m.makeup_date || m.date || "").substring(0, 10) >= packageStartDate;
   });
-const dynamicCompletedCount = Math.max(packageReports.length, packageLessons.length) + packageMakeups.length;
+// 🧮 Baseline completed classes + newly completed reports in current cycle
+  const baseCompleted = Number(student?.classes_completed || 0);
+  const dynamicCompletedCount = baseCompleted + Math.max(packageReports.length, packageLessons.length) + packageMakeups.length;
+  const combinedTotalClasses = (student?.classes_included || 0) + (student?.free_classes || 0);
   const dynamicRemainingCount = Math.max(combinedTotalClasses - dynamicCompletedCount, 0);
   const dynamicProgressPercent = combinedTotalClasses > 0 ? Math.min(100, Math.round((dynamicCompletedCount / combinedTotalClasses) * 100)) : 0;
 
