@@ -54,7 +54,13 @@ export default function ReportsPage() {
   const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split("T")[0]);
 
   // Income Target State
-  const [monthlyTarget, setMonthlyTarget] = useState(50000);
+  const [monthlyTarget, setMonthlyTarget] = useState(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("monthlyTarget");
+      return saved ? Number(saved) : 50000;
+    }
+    return 50000;
+  });
   const [isEditingTarget, setIsEditingTarget] = useState(false);
   const [tempTarget, setTempTarget] = useState("50000");
   const [taxMethod, setTaxMethod] = useState<"8percent" | "graduated">("8percent");
@@ -393,9 +399,14 @@ export default function ReportsPage() {
     }
   }, [runningGrossRevenue, taxMethod]);
 
-  function handleSaveTarget() {
+function handleSaveTarget() {
     const val = Number(tempTarget.replace(/[^0-9.]/g, ""));
-    if (val > 0) setMonthlyTarget(val);
+    if (val > 0) {
+      setMonthlyTarget(val);
+      if (typeof window !== "undefined") {
+        localStorage.setItem("monthlyTarget", val.toString());
+      }
+    }
     setIsEditingTarget(false);
   }
 
