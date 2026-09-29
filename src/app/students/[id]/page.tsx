@@ -121,6 +121,7 @@ export default function StudentDetailsPage({
   const [isRenewalWizardOpen, setIsRenewalWizardOpen] = useState(false);
   const [wizardClasses, setWizardClasses] = useState("20");
   const [wizardFreeClasses, setWizardFreeClasses] = useState("0");
+  const [wizardRolloverClasses, setWizardRolloverClasses] = useState("0");
   const [wizardAmount, setWizardAmount] = useState("");
   const [wizardCurrency, setWizardCurrency] = useState("PHP");
   const [wizardMethod, setWizardMethod] = useState("Bank Transfer");
@@ -851,8 +852,7 @@ async function handleExecuteRenewal(e: React.FormEvent) {
         console.error("Currency conversion error:", err);
       }
 
-      // 🧮 Use the exact remaining classes currently displayed on the dashboard
-      const rolloverClasses = dynamicRemainingCount; 
+      const rolloverClasses = Number(wizardRolloverClasses) || 0;
       const finalClassesIncluded = Number(wizardClasses) + rolloverClasses;
 
       // 1. Insert payment record into database (Populates General Journal)
@@ -869,7 +869,7 @@ async function handleExecuteRenewal(e: React.FormEvent) {
 
       if (paymentError) throw paymentError;
 
-      // 2. Update student profile (Reset completed classes to 0, update package size & status)
+      // 2. Update student profile
       const { error: studentError } = await supabase
         .from("students")
         .update({
@@ -1251,16 +1251,23 @@ const dynamicCompletedCount = Math.max(packageReports.length, packageLessons.len
             <span>Renewal Notice & Invoice</span>
           </button>
           {/* 👈 PASTE THE RENEWAL WIZARD BUTTON HERE */}
-          <button
+         <button
             type="button"
             onClick={() => {
               setWizardClasses(String(student?.classes_included || 20));
               setWizardFreeClasses(String(student?.free_classes || 0));
               setWizardAmount(String(student?.payment_amount || ""));
               setWizardCurrency(student?.payment_currency || "PHP");
+              
+              // 🧮 Calculate exact remaining rollover classes
+              const currentTotal = (student?.classes_included || 0) + (student?.free_classes || 0);
+              const currentCompleted = Number(student?.classes_completed || 0);
+              const rem = Math.max(currentTotal - currentCompleted, dynamicRemainingCount);
+              setWizardRolloverClasses(String(rem));
+
               setIsRenewalWizardOpen(true);
             }}
-            className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer"
+            className="..."
           >
             <Sparkles size={14} className="text-emerald-600" />
             <span>⚡ Process Paid Renewal</span>
@@ -2399,9 +2406,9 @@ const dynamicCompletedCount = Math.max(packageReports.length, packageLessons.len
             </div>
 
             <form onSubmit={handleExecuteRenewal} className="space-y-4 text-xs">
-              <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block mb-1 font-semibold text-gray-700">Classes Count *</label>
+                  <label className="block mb-1 font-semibold text-gray-700">Classes *</label>
                   <input
                     type="number"
                     className="w-full border border-pink-200 rounded-xl p-2.5 bg-white text-gray-800"
@@ -2411,7 +2418,16 @@ const dynamicCompletedCount = Math.max(packageReports.length, packageLessons.len
                   />
                 </div>
                 <div>
-                  <label className="block mb-1 font-semibold text-gray-700">Free Bonus Classes</label>
+                  <label className="block mb-1 font-semibold text-gray-700">Rollover</label>
+                  <input
+                    type="number"
+                    className="w-full border border-pink-200 rounded-xl p-2.5 bg-white text-gray-800"
+                    value={wizardRolloverClasses}
+                    onChange={(e) => setWizardRolloverClasses(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1 font-semibold text-gray-700">Free Bonus</label>
                   <input
                     type="number"
                     className="w-full border border-pink-200 rounded-xl p-2.5 bg-white text-gray-800"
