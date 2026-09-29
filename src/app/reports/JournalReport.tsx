@@ -36,23 +36,23 @@ export default function JournalReport({
     const selTime = new Date(selectedDate).getTime();
     return Math.abs(selTime - itemTime) / (1000 * 3600 * 24) <= 7;
   };
-
-  const journalEntries = useMemo(() => {
+const journalEntries = useMemo(() => {
     const entries: any[] = [];
 
     const safePayments = Array.isArray(payments) ? payments : [];
     const safeExpenses = Array.isArray(expenses) ? expenses : [];
     const safeStudents = Array.isArray(students) ? students : [];
 
-    // 1. Process Completed/Paid Student Payments
+    // 1. Process Completed/Paid Student Payments (Skipping 0 amounts)
     safePayments.forEach((p) => {
       const entryDate =
         p.payment_date ||
         (p.updated_at ? p.updated_at.split("T")[0] : p.created_at?.split("T")[0]);
 
-      if (p.payment_status === "Paid" && matchesFilter(entryDate)) {
+      const grossPhp = Number(p.php_equivalent) || Number(p.amount) || 0;
+
+      if (p.payment_status === "Paid" && matchesFilter(entryDate) && grossPhp > 0) {
         const student = safeStudents.find((s) => s.id === p.student_id);
-        const grossPhp = Number(p.php_equivalent) || Number(p.amount) || 0;
         const feePhp = Number(p.transfer_fee_php) || 0;
         const netPhp = Math.max(0, grossPhp - feePhp);
         const currencySymbol = currencies[p.currency]?.symbol || "";
@@ -72,12 +72,12 @@ export default function JournalReport({
       }
     });
 
-    // 2. Process Operating Expenses
+    // 2. Process Operating Expenses (Skipping 0 amounts)
     safeExpenses.forEach((exp) => {
       const entryDate = exp.expense_date || exp.created_at?.split("T")[0];
-      if (matchesFilter(entryDate)) {
-        const amountPhp = Number(exp.amount_php) || 0;
+      const amountPhp = Number(exp.amount_php) || 0;
 
+      if (matchesFilter(entryDate) && amountPhp > 0) {
         entries.push({
           id: `exp-${exp.id}`,
           date: entryDate,
@@ -95,7 +95,6 @@ export default function JournalReport({
       (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
     );
   }, [payments, students, expenses, selectedDate, timeframe]);
-
   // Totals for reconciliation check
   const totalDebits = journalEntries.reduce((acc, curr) => {
     if (curr.type === "payment") return acc + curr.grossPhp;
