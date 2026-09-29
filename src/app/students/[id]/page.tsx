@@ -852,8 +852,12 @@ async function handleExecuteRenewal(e: React.FormEvent) {
         console.error("Currency conversion error:", err);
       }
 
-      const rolloverClasses = Number(wizardRolloverClasses) || 0;
-      const finalClassesIncluded = Number(wizardClasses) + rolloverClasses;
+      // 🧮 Automatically calculate remaining rollover classes from the current package
+      const currentPackageTotal = (student?.classes_included || 0) + (student?.free_classes || 0);
+      const currentCompleted = Math.max(packageReports.length, packageLessons.length) + packageMakeups.length;
+      const automaticRollover = Math.max(currentPackageTotal - currentCompleted, 0);
+      
+      const finalClassesIncluded = Number(wizardClasses) + automaticRollover;
 
       // 1. Insert payment record into database (Populates General Journal)
       const { error: paymentError } = await supabase.from("payments").insert({
@@ -869,7 +873,7 @@ async function handleExecuteRenewal(e: React.FormEvent) {
 
       if (paymentError) throw paymentError;
 
-      // 2. Update student profile
+      // 2. Update student profile (Reset completed classes to 0, update package size & status)
       const { error: studentError } = await supabase
         .from("students")
         .update({
@@ -889,7 +893,7 @@ async function handleExecuteRenewal(e: React.FormEvent) {
 
       setIsRenewalWizardOpen(false);
       await fetchStudentData();
-      alert("🎉 Package successfully renewed, payment logged, and ledger updated!");
+      alert(`🎉 Package successfully renewed with ${automaticRollover} rollover class(es) added (${finalClassesIncluded} total)!`);
     } catch (err: any) {
       console.error("Error executing renewal:", err);
       alert("Failed to process renewal: " + (err.message || err));
@@ -2406,36 +2410,27 @@ const dynamicCompletedCount = Math.max(packageReports.length, packageLessons.len
             </div>
 
             <form onSubmit={handleExecuteRenewal} className="space-y-4 text-xs">
-            <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block mb-1 font-semibold text-gray-700">Classes *</label>
-                  <input
-                    type="number"
-                    className="w-full border border-pink-200 rounded-xl p-2.5 bg-white text-gray-800"
-                    value={wizardClasses}
-                    onChange={(e) => setWizardClasses(e.target.value)}
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block mb-1 font-semibold text-gray-700">Rollover</label>
-                  <input
-                    type="number"
-                    className="w-full border border-pink-200 rounded-xl p-2.5 bg-white text-gray-800"
-                    value={wizardRolloverClasses}
-                    onChange={(e) => setWizardRolloverClasses(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="block mb-1 font-semibold text-gray-700">Free Bonus</label>
-                  <input
-                    type="number"
-                    className="w-full border border-pink-200 rounded-xl p-2.5 bg-white text-gray-800"
-                    value={wizardFreeClasses}
-                    onChange={(e) => setWizardFreeClasses(e.target.value)}
-                  />
-                </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block mb-1 font-semibold text-gray-700">Classes Count *</label>
+                <input
+                  type="number"
+                  className="w-full border border-pink-200 rounded-xl p-2.5 bg-white text-gray-800"
+                  value={wizardClasses}
+                  onChange={(e) => setWizardClasses(e.target.value)}
+                  required
+                />
               </div>
+              <div>
+                <label className="block mb-1 font-semibold text-gray-700">Free Bonus Classes</label>
+                <input
+                  type="number"
+                  className="w-full border border-pink-200 rounded-xl p-2.5 bg-white text-gray-800"
+                  value={wizardFreeClasses}
+                  onChange={(e) => setWizardFreeClasses(e.target.value)}
+                />
+              </div>
+            </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
