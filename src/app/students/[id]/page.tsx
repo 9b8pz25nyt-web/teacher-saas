@@ -117,6 +117,16 @@ export default function StudentDetailsPage({
   const [portalQrDataUrl, setPortalQrDataUrl] = useState("");
   const invoicePdfRef = useRef<HTMLDivElement>(null);
 
+  // Renewal Wizard Modal State
+  const [isRenewalWizardOpen, setIsRenewalWizardOpen] = useState(false);
+  const [wizardClasses, setWizardClasses] = useState("20");
+  const [wizardFreeClasses, setWizardFreeClasses] = useState("0");
+  const [wizardAmount, setWizardAmount] = useState("");
+  const [wizardCurrency, setWizardCurrency] = useState("PHP");
+  const [wizardMethod, setWizardMethod] = useState("Bank Transfer");
+  const [wizardStartDate, setWizardStartDate] = useState(new Date().toISOString().split("T")[0]);
+  const [isProcessingRenewal, setIsProcessingRenewal] = useState(false);
+
   function toggleExpandReport(id: string) {
     setExpandedReportIds((prev) =>
       prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
@@ -700,6 +710,7 @@ async function handleSaveParentName(newParentName: string) {
       alert("Failed to update student: " + err.message);
     }
   }
+
   async function handleAddSchedule(e: React.FormEvent) {
     e.preventDefault();
     if (scheduleDays.length === 0) {
@@ -820,6 +831,66 @@ async function handleSaveParentName(newParentName: string) {
       router.push("/students");
     } else {
       alert(error.message);
+    }
+  }
+
+async function handleExecuteRenewal(e: React.FormEvent) {
+    e.preventDefault();
+    setIsProcessingRenewal(true);
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const cleanAmount = Number(String(wizardAmount).replace(/[^0-9.]/g, "")) || 0;
+      let phpEq = cleanAmount;
+
+      try {
+        phpEq = await convertToPHP(cleanAmount, wizardCurrency);
+      } catch (err) {
+        console.error("Currency conversion error:", err);
+      }
+
+      // 1. Insert payment record into database (Populates General Journal)
+      const { error: paymentError } = await supabase.from("payments").insert({
+        user_id: user.id,
+        student_id: studentId,
+        amount: cleanAmount,
+        currency: wizardCurrency,
+        php_equivalent: phpEq,
+        payment_status: "Paid",
+        payment_date: wizardStartDate,
+        payment_method: wizardMethod,
+      });
+
+      if (paymentError) throw paymentError;
+
+      // 2. Update student profile (Reset completed classes to 0, update package size & status)
+      const { error: studentError } = await supabase
+        .from("students")
+        .update({
+          classes_included: Number(wizardClasses),
+          free_classes: Number(wizardFreeClasses),
+          classes_completed: 0, // Reset for new package cycle
+          payment_amount: cleanAmount,
+          payment_currency: wizardCurrency,
+          php_equivalent: phpEq,
+          payment_status: "Active",
+          start_date: wizardStartDate,
+        })
+        .eq("id", studentId)
+        .eq("user_id", user.id);
+
+      if (studentError) throw studentError;
+
+      setIsRenewalWizardOpen(false);
+      await fetchStudentData();
+      alert("🎉 Package successfully renewed, payment logged, and ledger updated!");
+    } catch (err: any) {
+      console.error("Error executing renewal:", err);
+      alert("Failed to process renewal: " + (err.message || err));
+    } finally {
+      setIsProcessingRenewal(false);
     }
   }
 
@@ -1187,6 +1258,21 @@ const allLoggedItems = [
           >
             <Receipt size={14} className="text-pink-600" />
             <span>Renewal Notice & Invoice</span>
+          </button>
+          {/* 👈 PASTE THE RENEWAL WIZARD BUTTON HERE */}
+          <button
+            type="button"
+            onClick={() => {
+              setWizardClasses(String(student?.classes_included || 20));
+              setWizardFreeClasses(String(student?.free_classes || 0));
+              setWizardAmount(String(student?.payment_amount || ""));
+              setWizardCurrency(student?.payment_currency || "PHP");
+              setIsRenewalWizardOpen(true);
+            }}
+            className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer"
+          >
+            <Sparkles size={14} className="text-emerald-600" />
+            <span>⚡ Process Paid Renewal</span>
           </button>
 
           <button
@@ -2307,7 +2393,130 @@ const allLoggedItems = [
           </div>
         </div>
       )}
+{/* 👈 PASTE THE ONE-CLICK RENEWAL WIZARD MODAL HERE */}
+      {isRenewalWizardOpen && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white w-full max-w-md p-6 rounded-3xl shadow-2xl space-y-5 border border-pink-100">
+            <div className="flex items-center justify-between border-b border-pink-100 pb-3">
+              <div>
+                <h2 className="text-lg font-extrabold text-pink-950">⚡ One-Click Package Renewal</h2>
+                <p className="text-xs text-pink-700/80">Record payment & reset class counts for {student?.name}.</p>
+              </div>
+              <button onClick={() => setIsRenewalWizardOpen(false)} className="p-2 rounded-full hover:bg-pink-50 cursor-pointer">
+                <X size={18} />
+              </button>
+            </div>
 
+            <form onSubmit={handleExecuteRenewal} className="space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block mb-1 font-semibold text-gray-700">Classes Count *</label>
+                  <input
+                    type="number"
+                    className="w-full border border-pink-200 rounded-xl p-2.5 bg-white text-gray-800"
+                    value={wizardClasses}
+                    onChange={(e) => setWizardClasses(e.target.value)}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1 font-semibold text-gray-700">Free Bonus Classes</label>
+                  <input
+                    type="number"
+                    className="w-full border border-pink-200 rounded-xl p-2.5 bg-white text-gray-800"
+                    value={wizardFreeClasses}
+                    onChange={(e) => setWizardFreeClasses(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block mb-1 font-semibold text-gray-700">Tuition Fee Amount *</label>
+                  <input
+                    type="text"
+                    className="w-full border border-pink-200 rounded-xl p-2.5 bg-white text-gray-800"
+                    value={wizardAmount}
+                    onChange={(e) => setWizardAmount(e.target.value)}
+                    placeholder="e.g. 5000"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1 font-semibold text-gray-700">Currency *</label>
+                  <select
+                    className="w-full border border-pink-200 rounded-xl p-2.5 bg-white text-gray-800"
+                    value={wizardCurrency}
+                    onChange={(e) => setWizardCurrency(e.target.value)}
+                  >
+                    <option value="PHP">PHP (₱)</option>
+                    <option value="CNY">CNY (¥)</option>
+                    <option value="USD">USD ($)</option>
+                    <option value="VND">VND (₫)</option>
+                    <option value="KRW">KRW (₩)</option>
+                    <option value="JPY">JPY (¥)</option>
+                    <option value="THB">THB (฿)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block mb-1 font-semibold text-gray-700">Payment Method</label>
+                  <select
+                    className="w-full border border-pink-200 rounded-xl p-2.5 bg-white text-gray-800"
+                    value={wizardMethod}
+                    onChange={(e) => setWizardMethod(e.target.value)}
+                  >
+                    <option value="Bank Transfer">Bank Transfer</option>
+                    <option value="WeChat Pay">WeChat Pay</option>
+                    <option value="Alipay">Alipay</option>
+                    <option value="PromptPay">PromptPay</option>
+                    <option value="Cash">Cash</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block mb-1 font-semibold text-gray-700">Payment Date *</label>
+                  <DatePicker
+                    selected={wizardStartDate ? new Date(wizardStartDate) : new Date()}
+                    onChange={(date: Date | null) => {
+                      if (date) {
+                        setWizardStartDate(date.toISOString().split("T")[0]);
+                      }
+                    }}
+                    dateFormat="yyyy-MM-dd"
+                    className="w-full bg-white border border-pink-200 rounded-xl p-2.5 text-xs text-gray-800 focus:outline-none focus:ring-2 focus:ring-pink-400"
+                    wrapperClassName="w-full"
+                    calendarClassName="pink-datepicker"
+                  />
+                </div>
+              </div>
+
+              <div className="p-3 bg-emerald-50 rounded-2xl border border-emerald-200 text-emerald-900 text-[11px]">
+                ✨ **Automated Actions:** Clicking confirm will instantly log this paid transaction into your BIR financial journal, reset completed classes to 0, and start the new package cycle.
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-pink-100">
+                <button
+                  type="button"
+                  onClick={() => setIsRenewalWizardOpen(false)}
+                  className="px-4 py-2.5 rounded-xl bg-gray-100 text-gray-700 font-bold hover:bg-gray-200 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isProcessingRenewal}
+                  className="px-5 py-2.5 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 cursor-pointer disabled:opacity-50 shadow-xs"
+                >
+                  {isProcessingRenewal ? "Processing..." : "Confirm & Renew Package"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
       {/* ASSIGN BOOKS MODAL */}
       {isBookModalOpen && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
