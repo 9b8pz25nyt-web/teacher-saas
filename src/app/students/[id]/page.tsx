@@ -2777,6 +2777,167 @@ ${renewalBankDetails ? `🏦 Bank Details:\n${renewalBankDetails}\n` : ""}Please
           studentBooks={studentBooks.map((sb: any) => sb.books || sb)}
         />
       )}
+      {/* ADD / EDIT REPORT MODAL */}
+      {isReportModalOpen && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white w-full max-w-lg p-6 rounded-3xl shadow-2xl space-y-4 border border-pink-100 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-pink-100 pb-3">
+              <h2 className="text-lg font-extrabold text-pink-950">
+                {editingReportId ? "Edit Lesson Report" : "Log Lesson Report"}
+              </h2>
+              <button onClick={() => setIsReportModalOpen(false)} className="p-2 rounded-full hover:bg-pink-50 cursor-pointer">
+                <X size={18} />
+              </button>
+            </div>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                setIsSubmittingReport(true);
+                try {
+                  const { data: { user } } = await supabase.auth.getUser();
+                  if (!user) return;
+
+                  let homeworkUrl = null;
+                  if (homeworkFile) {
+                    const fileExt = homeworkFile.name.split(".").pop();
+                    const fileName = `${Math.random()}.${fileExt}`;
+                    const filePath = `${user.id}/${fileName}`;
+                    const { error: uploadError } = await supabase.storage.from("homework-files").upload(filePath, homeworkFile);
+                    if (!uploadError) {
+                      const { data: publicUrlData } = supabase.storage.from("homework-files").getPublicUrl(filePath);
+                      homeworkUrl = publicUrlData.publicUrl;
+                    }
+                  }
+
+                  const reportPayload = {
+                    user_id: user.id,
+                    teacher_id: user.id,
+                    student_id: studentId,
+                    lesson_title: lessonTitle || "Regular Class",
+                    report_date: reportDate,
+                    book_id: reportBookId || null,
+                    vocabulary: vocabulary || null,
+                    strengths: strengths || null,
+                    improvements: improvements || null,
+                    homework: homework || null,
+                    homework_file_url: homeworkUrl,
+                  };
+
+                  if (editingReportId) {
+                    const { error } = await supabase.from("class_reports").update(reportPayload).eq("id", editingReportId);
+                    if (error) throw error;
+                  } else {
+                    const { error } = await supabase.from("class_reports").insert(reportPayload);
+                    if (error) throw error;
+
+                    // Also log to lessons table to keep calendar & package count in sync
+                    await supabase.from("lessons").insert({
+                      user_id: user.id,
+                      student_id: studentId,
+                      title: lessonTitle || "Regular Class",
+                      lesson_date: reportDate,
+                      status: "Completed",
+                      description: `Vocab: ${vocabulary}\nStrengths: ${strengths}\nImprovements: ${improvements}\nHomework: ${homework}`,
+                    });
+                  }
+
+                  setIsReportModalOpen(false);
+                  await fetchStudentData();
+                  alert("🎉 Lesson report saved successfully!");
+                } catch (err: any) {
+                  console.error("Error saving report:", err);
+                  alert("Failed to save report: " + (err.message || err));
+                } finally {
+                  setIsSubmittingReport(false);
+                }
+              }}
+              className="space-y-3 text-xs"
+            >
+              <div>
+                <label className="block mb-1 font-semibold text-gray-700">Lesson Title / Topic *</label>
+                <input
+                  type="text"
+                  className="w-full border border-pink-200 rounded-xl p-2.5 bg-white text-gray-800"
+                  value={lessonTitle}
+                  onChange={(e) => setLessonTitle(e.target.value)}
+                  placeholder="e.g. Unit 3: Exploring Nature"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block mb-1 font-semibold text-gray-700">Lesson Date *</label>
+                <input
+                  type="date"
+                  className="w-full border border-pink-200 rounded-xl p-2.5 bg-white text-gray-800"
+                  value={reportDate}
+                  onChange={(e) => setReportDate(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block mb-1 font-semibold text-gray-700">Vocabulary & Structures</label>
+                <textarea
+                  rows={2}
+                  className="w-full border border-pink-200 rounded-xl p-2.5 bg-white text-gray-800 font-mono"
+                  value={vocabulary}
+                  onChange={(e) => setVocabulary(e.target.value)}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block mb-1 font-semibold text-emerald-800">Strengths & Highlights</label>
+                  <textarea
+                    rows={2}
+                    className="w-full border border-emerald-200 rounded-xl p-2.5 bg-emerald-50/40 text-gray-800"
+                    value={strengths}
+                    onChange={(e) => setStrengths(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1 font-semibold text-amber-800">Next Focus / Tips</label>
+                  <textarea
+                    rows={2}
+                    className="w-full border border-amber-200 rounded-xl p-2.5 bg-amber-50/40 text-gray-800"
+                    value={improvements}
+                    onChange={(e) => setImprovements(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block mb-1 font-semibold text-gray-700">Assigned Homework</label>
+                <textarea
+                  rows={2}
+                  className="w-full border border-pink-200 rounded-xl p-2.5 bg-white text-gray-800"
+                  value={homework}
+                  onChange={(e) => setHomework(e.target.value)}
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-pink-100">
+                <button
+                  type="button"
+                  onClick={() => setIsReportModalOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-gray-100 text-gray-700 font-bold hover:bg-gray-200 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingReport}
+                  className="px-5 py-2 rounded-xl bg-pink-600 text-white font-bold hover:bg-pink-700 cursor-pointer disabled:opacity-50 shadow-xs"
+                >
+                  {isSubmittingReport ? "Saving..." : "Save Report"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
