@@ -306,12 +306,12 @@ export default function DashboardPage() {
   const firstDayOfWeek = new Date(now.setDate(now.getDate() - now.getDay()));
   const firstDayStr = firstDayOfWeek.toISOString().substring(0, 10);
 
-  // Total Classes Count Calculation linked to global filter
-  const calculatedClasses = (() => {
-    const filtered = recordedLessons.filter((l) => {
+// Total Classes Count Calculation linked to global filter (Valid Regular + Valid Makeup)
+  const calculatedClasses = useMemo(() => {
+    const filteredLessons = recordedLessons.filter((l) => {
       if (!l.lesson_date) return false;
       const statusLower = String(l.status || "").toLowerCase();
-      if (statusLower === "cancelled") return false;
+      if (statusLower === "cancelled" || statusLower === "absent") return false;
 
       const lDate = l.lesson_date.substring(0, 10);
 
@@ -321,13 +321,29 @@ export default function DashboardPage() {
       return lDate.startsWith(targetYearStr);
     });
 
-    return filtered.length;
-  })();
+    const filteredMakeups = makeupEvents.filter((m) => {
+      if (!m.makeup_date) return false;
+      const statusLower = String(m.status || "").toLowerCase();
+      if (statusLower === "cancelled" || statusLower === "absent") return false;
 
-  // Teaching Hours Calculation linked to global filter
-  const calculatedHours = (() => {
-    const filtered = recordedLessons.filter((l) => {
-      if (!l.lesson_date || l.status === "Cancelled") return false;
+      const mDate = m.makeup_date.substring(0, 10);
+
+      if (globalTimeFilter === "daily") return mDate === targetDateStr;
+      if (globalTimeFilter === "weekly") return mDate >= firstDayStr;
+      if (globalTimeFilter === "monthly") return mDate.startsWith(targetMonthStr);
+      return mDate.startsWith(targetYearStr);
+    });
+
+    return filteredLessons.length + filteredMakeups.length;
+  }, [recordedLessons, makeupEvents, globalTimeFilter, targetDateStr, firstDayStr, targetMonthStr, targetYearStr]);
+
+  // Teaching Hours Calculation linked to global filter (Valid Regular + Valid Makeup)
+  const calculatedHours = useMemo(() => {
+    const filteredLessons = recordedLessons.filter((l) => {
+      if (!l.lesson_date) return false;
+      const statusLower = String(l.status || "").toLowerCase();
+      if (statusLower === "cancelled" || statusLower === "absent") return false;
+
       const lDate = l.lesson_date.substring(0, 10);
       if (globalTimeFilter === "daily") return lDate === targetDateStr;
       if (globalTimeFilter === "weekly") return lDate >= firstDayStr;
@@ -335,18 +351,34 @@ export default function DashboardPage() {
       return lDate.startsWith(targetYearStr);
     });
 
-    const totalMinutes = filtered.reduce((acc, l) => {
+    const filteredMakeups = makeupEvents.filter((m) => {
+      if (!m.makeup_date) return false;
+      const statusLower = String(m.status || "").toLowerCase();
+      if (statusLower === "cancelled" || statusLower === "absent") return false;
+
+      const mDate = m.makeup_date.substring(0, 10);
+      if (globalTimeFilter === "daily") return mDate === targetDateStr;
+      if (globalTimeFilter === "weekly") return mDate >= firstDayStr;
+      if (globalTimeFilter === "monthly") return mDate.startsWith(targetMonthStr);
+      return mDate.startsWith(targetYearStr);
+    });
+
+    const regularMinutes = filteredLessons.reduce((acc, l) => {
       const student = students.find((s) => s.id === l.student_id);
       return acc + (student?.class_duration || 25);
     }, 0);
 
+    const makeupMinutes = filteredMakeups.reduce((acc, m) => {
+      return acc + (m.duration || 40);
+    }, 0);
+
+    const totalMinutes = regularMinutes + makeupMinutes;
     const hours = (totalMinutes / 60).toFixed(1);
     return {
       hours,
-      classCount: filtered.length,
+      classCount: filteredLessons.length + filteredMakeups.length,
     };
-  })();
-
+  }, [recordedLessons, makeupEvents, students, globalTimeFilter, targetDateStr, firstDayStr, targetMonthStr, targetYearStr]);
   // Total Income Calculation linked to global filter
   const calculatedIncome = (() => {
     const filtered = payments.filter((p) => {
