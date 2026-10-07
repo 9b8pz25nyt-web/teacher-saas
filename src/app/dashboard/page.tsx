@@ -69,6 +69,20 @@ export default function DashboardPage() {
     "July", "August", "September", "October", "November", "December"
   ];
 
+// 🌟 Lifetime Total calculated strictly from completed regular lessons & completed/attended makeups
+  const allTimeLessons = useMemo(() => {
+    const validLessons = recordedLessons.filter((l) => {
+      const statusLower = String(l.status || "").toLowerCase();
+      return statusLower === "completed";
+    }).length;
+
+    const validMakeups = makeupEvents.filter((m) => {
+      const statusLower = String(m.status || "").toLowerCase();
+      return statusLower === "completed" || statusLower === "attended";
+    }).length;
+
+    return validLessons + validMakeups;
+  }, [recordedLessons, makeupEvents]);
   const availableYears = Array.from({ length: 7 }, (_, i) => 2024 + i);
 
   const fetchDashboardData = useCallback(async () => {
@@ -210,7 +224,7 @@ export default function DashboardPage() {
   const startDayOffset = (firstDayWeekdayIndex + 6) % 7;
   const totalCalendarSlots = Math.ceil((startDayOffset + daysInMonth) / 7) * 7;
 
-// Rollover mapping (Projects exact remaining classes starting from today)
+  // Rollover mapping (Projects exact remaining classes starting from today)
   const studentValidDatesMap = useMemo(() => {
     const map: Record<string, string[]> = {};
     
@@ -350,17 +364,17 @@ export default function DashboardPage() {
       amount: totalPHP,
       count: filtered.length,
     };
-  })()
+  })();
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-50/50">
-    <RenewalAlertBanner 
-  students={students.filter(
-    (s) => s.status !== "Archived" && s.status !== "Inactive" && s.payment_status !== "Archived"
-  )} 
-  recordedLessons={recordedLessons}
-  makeupEvents={makeupEvents}
-/>
+      <RenewalAlertBanner 
+        students={students.filter(
+          (s) => s.status !== "Archived" && s.status !== "Inactive" && s.payment_status !== "Archived"
+        )} 
+        recordedLessons={recordedLessons}
+        makeupEvents={makeupEvents}
+      />
 
       <main className="p-8 max-w-7xl mx-auto w-full space-y-6">
         {/* Top Header Controls */}
@@ -403,8 +417,8 @@ export default function DashboardPage() {
           </div>
         </div>
 
-       {/* 1. KPI Metrics Row (Controlled by Master Filter) */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+        {/* 1. KPI Metrics Row (5 Cards including Lifetime Total beside Today's Schedule) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5">
           {/* Card 1: Today's Schedule Overview */}
           <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs flex flex-col justify-between space-y-3">
             <div className="flex items-center justify-between">
@@ -425,7 +439,27 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Card 2: Total Classes Conducted */}
+          {/* Card 2: Lifetime Total Classes Completed (Beside Today's Schedule) */}
+          <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs flex flex-col justify-between space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                Lifetime Total
+              </span>
+              <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 font-bold text-[10px] rounded-md border border-emerald-200 uppercase">
+                All-Time
+              </span>
+            </div>
+            <div>
+              <p className="text-3xl font-extrabold text-pink-950">
+                {allTimeLessons} <span className="text-base font-semibold text-gray-500">Done</span>
+              </p>
+              <p className="text-xs text-gray-400 mt-1">
+                Total completed since day one
+              </p>
+            </div>
+          </div>
+
+          {/* Card 3: Total Classes Conducted */}
           <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs flex flex-col justify-between space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
@@ -445,7 +479,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Card 3: Teaching Hours */}
+          {/* Card 4: Teaching Hours */}
           <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs flex flex-col justify-between space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
@@ -465,7 +499,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Card 4: Total Income */}
+          {/* Card 5: Total Income */}
           <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs flex flex-col justify-between space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
@@ -486,7 +520,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-      {/* 2. Classes For Today Card */}
+        {/* 2. Classes For Today Card */}
         <div className="bg-white p-6 rounded-3xl border border-pink-100 shadow-xs space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold text-pink-950">
@@ -501,7 +535,7 @@ export default function DashboardPage() {
             <p className="text-xs text-gray-400 italic">No classes scheduled for today. Enjoy your day off! ✨</p>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-             {todaysCombinedSchedules.map((item) => {
+              {todaysCombinedSchedules.map((item) => {
                 const matchingLesson = recordedLessons.find(
                   (l) => l.student_id === item.studentId && extractDateFromTimestamp(l.lesson_date) === todayDateStr
                 );
