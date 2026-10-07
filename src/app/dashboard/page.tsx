@@ -69,7 +69,7 @@ export default function DashboardPage() {
     "July", "August", "September", "October", "November", "December"
   ];
 
-// 🌟 Lifetime Total calculated strictly from completed regular lessons & completed/attended makeups
+  // 🌟 Lifetime Total calculated strictly from completed regular lessons & completed/attended makeups
   const allTimeLessons = useMemo(() => {
     const validLessons = recordedLessons.filter((l) => {
       const statusLower = String(l.status || "").toLowerCase();
@@ -83,6 +83,7 @@ export default function DashboardPage() {
 
     return validLessons + validMakeups;
   }, [recordedLessons, makeupEvents]);
+
   const availableYears = Array.from({ length: 7 }, (_, i) => 2024 + i);
 
   const fetchDashboardData = useCallback(async () => {
@@ -417,9 +418,9 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* 1. KPI Metrics Row (5 Cards including Lifetime Total beside Today's Schedule) */}
+        {/* 1. KPI Metrics Row (Reordered: Live Classes, Total Monthly, Lifetime Total, Teaching Time, Revenue) */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5">
-          {/* Card 1: Today's Schedule Overview */}
+          {/* Card 1: Today's Schedule Overview (Live) */}
           <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs flex flex-col justify-between space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
@@ -439,27 +440,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Card 2: Lifetime Total Classes Completed (Beside Today's Schedule) */}
-          <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs flex flex-col justify-between space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                Lifetime Total
-              </span>
-              <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 font-bold text-[10px] rounded-md border border-emerald-200 uppercase">
-                All-Time
-              </span>
-            </div>
-            <div>
-              <p className="text-3xl font-extrabold text-pink-950">
-                {allTimeLessons} <span className="text-base font-semibold text-gray-500">Done</span>
-              </p>
-              <p className="text-xs text-gray-400 mt-1">
-                Total completed since day one
-              </p>
-            </div>
-          </div>
-
-          {/* Card 3: Total Classes Conducted */}
+          {/* Card 2: Total Classes Conducted (Monthly) */}
           <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs flex flex-col justify-between space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
@@ -475,6 +456,26 @@ export default function DashboardPage() {
               </p>
               <p className="text-xs text-gray-400 mt-1">
                 Completed or recorded slots
+              </p>
+            </div>
+          </div>
+
+          {/* Card 3: Lifetime Total Classes Completed (All-Time) */}
+          <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs flex flex-col justify-between space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                Lifetime Total
+              </span>
+              <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 font-bold text-[10px] rounded-md border border-emerald-200 uppercase">
+                All-Time
+              </span>
+            </div>
+            <div>
+              <p className="text-3xl font-extrabold text-pink-950">
+                {allTimeLessons} <span className="text-base font-semibold text-gray-500">Done</span>
+              </p>
+              <p className="text-xs text-gray-400 mt-1">
+                Total completed since day one
               </p>
             </div>
           </div>
