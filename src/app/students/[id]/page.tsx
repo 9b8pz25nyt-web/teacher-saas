@@ -852,7 +852,7 @@ async function handleExecuteRenewal(e: React.FormEvent) {
         console.error("Currency conversion error:", err);
       }
 
-      // 🧮 Simply add the newly entered renewal classes to the existing classes_included total
+      // 🧮 Accumulate existing total classes with newly entered renewal classes
       const existingIncluded = Number(student?.classes_included || 0);
       const renewedClasses = Number(wizardClasses) || 0;
       const newTotalClasses = existingIncluded + renewedClasses;
@@ -871,9 +871,7 @@ async function handleExecuteRenewal(e: React.FormEvent) {
 
       if (paymentError) throw paymentError;
 
-      // 2. Update student profile:
-      // - classes_included set to accumulated total (e.g., 10 + 10 = 20)
-      // - classes_completed reset to 0 for the fresh cycle start_date
+      // 2. Update student profile: Add renewal classes to existing total & reset completed to 0
       const { error: studentError } = await supabase
         .from("students")
         .update({
