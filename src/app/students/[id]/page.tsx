@@ -836,26 +836,26 @@ async function handleSaveParentName(newParentName: string) {
   }
 
 async function handleExecuteRenewal(e: React.FormEvent) {
-  e.preventDefault();
-  setIsProcessingRenewal(true);
-
-  try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const cleanAmount = Number(String(wizardAmount).replace(/[^0-9.]/g, "")) || 0;
-    let phpEq = cleanAmount;
+    e.preventDefault();
+    setIsProcessingRenewal(true);
 
     try {
-      phpEq = await convertToPHP(cleanAmount, wizardCurrency);
-    } catch (err) {
-      console.error("Currency conversion error:", err);
-    }
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
 
-    // 🌟 Add newly entered renewal classes to existing classes_included
-    const existingIncluded = Number(student?.classes_included || 0);
-    const renewedClasses = Number(wizardClasses) || 0;
-    const newTotalClasses = existingIncluded + renewedClasses;
+      const cleanAmount = Number(String(wizardAmount).replace(/[^0-9.]/g, "")) || 0;
+      let phpEq = cleanAmount;
+
+      try {
+        phpEq = await convertToPHP(cleanAmount, wizardCurrency);
+      } catch (err) {
+        console.error("Currency conversion error:", err);
+      }
+
+      // 🌟 Simply add the newly entered renewal classes to the existing classes_included total
+      const existingIncluded = Number(student?.classes_included || 0);
+      const renewedClasses = Number(wizardClasses) || 0;
+      const newTotalClasses = existingIncluded + renewedClasses;
 
     // 1. Insert payment record into database (Populates General Journal)
     const { error: paymentError } = await supabase.from("payments").insert({
@@ -869,36 +869,36 @@ async function handleExecuteRenewal(e: React.FormEvent) {
       payment_method: wizardMethod,
     });
 
-    if (paymentError) throw paymentError;
+      if (paymentError) throw paymentError;
 
-    // 2. Update student profile: Add renewal classes to existing total & reset completed to 0
-    const { error: studentError } = await supabase
-      .from("students")
-      .update({
-        classes_included: newTotalClasses,
-        free_classes: Number(wizardFreeClasses),
-        classes_completed: 0,
-        payment_amount: cleanAmount,
-        payment_currency: wizardCurrency,
-        php_equivalent: phpEq,
-        payment_status: "Active",
-        start_date: wizardStartDate,
-      })
-      .eq("id", studentId)
-      .eq("user_id", user.id);
+      // 2. Update student profile with new total classes and reset completed count baseline
+      const { error: studentError } = await supabase
+        .from("students")
+        .update({
+          classes_included: newTotalClasses,
+          free_classes: Number(wizardFreeClasses),
+          classes_completed: 0,
+          payment_amount: cleanAmount,
+          payment_currency: wizardCurrency,
+          php_equivalent: phpEq,
+          payment_status: "Active",
+          start_date: wizardStartDate,
+        })
+        .eq("id", studentId)
+        .eq("user_id", user.id);
 
-    if (studentError) throw studentError;
+      if (studentError) throw studentError;
 
-    setIsRenewalWizardOpen(false);
-    await fetchStudentData();
-    alert(`🎉 Package successfully renewed! Added ${renewedClasses} classes to existing count (New Total: ${newTotalClasses} classes).`);
-  } catch (err: any) {
-    console.error("Error executing renewal:", err);
-    alert("Failed to process renewal: " + (err.message || err));
-  } finally {
-    setIsProcessingRenewal(false);
+      setIsRenewalWizardOpen(false);
+      await fetchStudentData();
+      alert(`🎉 Package successfully renewed! Added ${renewedClasses} classes (New Total: ${newTotalClasses} classes).`);
+    } catch (err: any) {
+      console.error("Error executing renewal:", err);
+      alert("Failed to process renewal: " + (err.message || err));
+    } finally {
+      setIsProcessingRenewal(false);
+    }
   }
-}
   function handleCopyPortalLink() {
     if (!student?.access_token) return;
     const portalUrl = `${window.location.origin}/portal/${student.access_token}`;
