@@ -836,76 +836,69 @@ async function handleSaveParentName(newParentName: string) {
   }
 
 async function handleExecuteRenewal(e: React.FormEvent) {
-    e.preventDefault();
-    setIsProcessingRenewal(true);
+  e.preventDefault();
+  setIsProcessingRenewal(true);
+
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const cleanAmount = Number(String(wizardAmount).replace(/[^0-9.]/g, "")) || 0;
+    let phpEq = cleanAmount;
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const cleanAmount = Number(String(wizardAmount).replace(/[^0-9.]/g, "")) || 0;
-      let phpEq = cleanAmount;
-
-      try {
-        phpEq = await convertToPHP(cleanAmount, wizardCurrency);
-      } catch (err) {
-        console.error("Currency conversion error:", err);
-      }
-
-      // 🧮 Exact Formula:
-      // 1. Previous Remaining = Current Total - Current Completed
-      const currentTotal = (student?.classes_included || 0) + (student?.free_classes || 0);
-      const currentCompleted = dynamicCompletedCount; // e.g. 5
-      const previousRemaining = Math.max(currentTotal - currentCompleted, 0); // e.g. 6
-
-      // 2. New Total = Previous Remaining + New Renewal Classes
-      const renewedClasses = Number(wizardClasses) || 0; // e.g. 30
-      const newTotalClasses = previousRemaining + renewedClasses; // e.g. 36
-
-      // 1. Insert payment record into database (Populates General Journal)
-      const { error: paymentError } = await supabase.from("payments").insert({
-          user_id: user.id,
-          student_id: studentId,
-          amount: cleanAmount,
-          currency: wizardCurrency,
-          php_equivalent: phpEq,
-          payment_status: "Paid",
-          payment_date: wizardStartDate,
-          payment_method: wizardMethod,
-      });
-
-      if (paymentError) throw paymentError;
-
-      // 2. Update student profile:
-      // - classes_included set to new total (36)
-      // - classes_completed preserved as baseline (5) so Remaining = 36 - 5 = 31
-      const { error: studentError } = await supabase
-        .from("students")
-        .update({
-          classes_included: newTotalClasses, // 36
-          free_classes: Number(wizardFreeClasses),
-          classes_completed: currentCompleted, // 5
-          payment_amount: cleanAmount,
-          payment_currency: wizardCurrency,
-          php_equivalent: phpEq,
-          payment_status: "Active",
-          start_date: wizardStartDate,
-        })
-        .eq("id", studentId)
-        .eq("user_id", user.id);
-
-      if (studentError) throw studentError;
-
-      setIsRenewalWizardOpen(false);
-      await fetchStudentData();
-      alert(`🎉 Package successfully renewed! (${previousRemaining} previous remaining + ${renewedClasses} renewal = ${newTotalClasses} total, minus ${currentCompleted} completed = ${newTotalClasses - currentCompleted} remaining)`);
-    } catch (err: any) {
-      console.error("Error executing renewal:", err);
-      alert("Failed to process renewal: " + (err.message || err));
-    } finally {
-      setIsProcessingRenewal(false);
+      phpEq = await convertToPHP(cleanAmount, wizardCurrency);
+    } catch (err) {
+      console.error("Currency conversion error:", err);
     }
+
+    // 🌟 Add newly entered renewal classes to existing classes_included
+    const existingIncluded = Number(student?.classes_included || 0);
+    const renewedClasses = Number(wizardClasses) || 0;
+    const newTotalClasses = existingIncluded + renewedClasses;
+
+    // 1. Insert payment record into database (Populates General Journal)
+    const { error: paymentError } = await supabase.from("payments").insert({
+      user_id: user.id,
+      student_id: studentId,
+      amount: cleanAmount,
+      currency: wizardCurrency,
+      php_equivalent: phpEq,
+      payment_status: "Paid",
+      payment_date: wizardStartDate,
+      payment_method: wizardMethod,
+    });
+
+    if (paymentError) throw paymentError;
+
+    // 2. Update student profile: Add renewal classes to existing total & reset completed to 0
+    const { error: studentError } = await supabase
+      .from("students")
+      .update({
+        classes_included: newTotalClasses,
+        free_classes: Number(wizardFreeClasses),
+        classes_completed: 0,
+        payment_amount: cleanAmount,
+        payment_currency: wizardCurrency,
+        php_equivalent: phpEq,
+        payment_status: "Active",
+        start_date: wizardStartDate,
+      })
+      .eq("id", studentId)
+      .eq("user_id", user.id);
+
+    if (studentError) throw studentError;
+
+    setIsRenewalWizardOpen(false);
+    await fetchStudentData();
+    alert(`🎉 Package successfully renewed! Added ${renewedClasses} classes to existing count (New Total: ${newTotalClasses} classes).`);
+  } catch (err: any) {
+    console.error("Error executing renewal:", err);
+    alert("Failed to process renewal: " + (err.message || err));
+  } finally {
+    setIsProcessingRenewal(false);
   }
+}
   function handleCopyPortalLink() {
     if (!student?.access_token) return;
     const portalUrl = `${window.location.origin}/portal/${student.access_token}`;
@@ -1213,7 +1206,8 @@ ${renewalBankDetails ? `🏦 Bank Details:\n${renewalBankDetails}\n` : ""}Please
 // 🧮 Baseline completed classes + newly completed reports in current cycle
   const baseCompleted = Number(student?.classes_completed || 0);
  // 🧮 Dynamically count all valid completed lessons & reports across the board
-  const dynamicCompletedCount = Math.max(nonCancelledReports.length, nonCancelledLessons.length) + nonCancelledMakeups.length;
+  // 🧮 Dynamically count completed lessons & reports strictly for the current package cycle
+const dynamicCompletedCount = Math.max(packageReports.length, packageLessons.length) + packageMakeups.length;
   const combinedTotalClasses = (student?.classes_included || 0) + (student?.free_classes || 0);
   const dynamicRemainingCount = Math.max(combinedTotalClasses - dynamicCompletedCount, 0);
   const dynamicProgressPercent = combinedTotalClasses > 0 ? Math.min(100, Math.round((dynamicCompletedCount / combinedTotalClasses) * 100)) : 0;
