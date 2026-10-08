@@ -857,7 +857,7 @@ async function handleExecuteRenewal(e: React.FormEvent) {
       const renewedClasses = Number(wizardClasses) || 0;
       const newTotalClasses = existingIncluded + renewedClasses;
 
-      // 1. Insert payment record into database (Populates General Journal)
+      // 1. Insert payment record into database
       const { error: paymentError } = await supabase.from("payments").insert({
         user_id: user.id,
         student_id: studentId,
