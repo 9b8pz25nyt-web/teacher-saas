@@ -852,26 +852,28 @@ async function handleExecuteRenewal(e: React.FormEvent) {
         console.error("Currency conversion error:", err);
       }
 
-      // 🌟 Simply add the newly entered renewal classes to the existing classes_included total
+      // 🧮 Simply add the newly entered renewal classes to the existing classes_included total
       const existingIncluded = Number(student?.classes_included || 0);
       const renewedClasses = Number(wizardClasses) || 0;
       const newTotalClasses = existingIncluded + renewedClasses;
 
-    // 1. Insert payment record into database (Populates General Journal)
-    const { error: paymentError } = await supabase.from("payments").insert({
-      user_id: user.id,
-      student_id: studentId,
-      amount: cleanAmount,
-      currency: wizardCurrency,
-      php_equivalent: phpEq,
-      payment_status: "Paid",
-      payment_date: wizardStartDate,
-      payment_method: wizardMethod,
-    });
+      // 1. Insert payment record into database (Populates General Journal)
+      const { error: paymentError } = await supabase.from("payments").insert({
+        user_id: user.id,
+        student_id: studentId,
+        amount: cleanAmount,
+        currency: wizardCurrency,
+        php_equivalent: phpEq,
+        payment_status: "Paid",
+        payment_date: wizardStartDate,
+        payment_method: wizardMethod,
+      });
 
       if (paymentError) throw paymentError;
 
-      // 2. Update student profile with new total classes and reset completed count baseline
+      // 2. Update student profile:
+      // - classes_included set to accumulated total (e.g., 10 + 10 = 20)
+      // - classes_completed reset to 0 for the fresh cycle start_date
       const { error: studentError } = await supabase
         .from("students")
         .update({
@@ -891,7 +893,7 @@ async function handleExecuteRenewal(e: React.FormEvent) {
 
       setIsRenewalWizardOpen(false);
       await fetchStudentData();
-      alert(`🎉 Package successfully renewed! Added ${renewedClasses} classes (New Total: ${newTotalClasses} classes).`);
+      alert(`🎉 Package successfully renewed! Added ${renewedClasses} classes (Existing: ${existingIncluded} + New: ${renewedClasses} = Total: ${newTotalClasses} classes).`);
     } catch (err: any) {
       console.error("Error executing renewal:", err);
       alert("Failed to process renewal: " + (err.message || err));
