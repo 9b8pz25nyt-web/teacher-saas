@@ -589,14 +589,14 @@ export default function DashboardPage() {
                         <p className="text-xs font-bold text-pink-900">{item.time} ({item.duration}m)</p>
                         <p className="text-sm font-extrabold text-pink-950 mt-0.5">{item.studentName}</p>
                       </div>
-                     <span className={`text-[10px] font-bold px-2.5 py-1 rounded-xl ${
+                    <span className={`text-[10px] font-bold px-2.5 py-1 rounded-xl ${
   statusLower === "completed" 
     ? "bg-green-100 text-green-700" 
     : item.type === "makeup"
     ? "bg-pink-200 text-pink-900"
     : "bg-pink-100 text-pink-700"
 }`}>
-  {status || "Scheduled"} {item.type === "makeup" && "(Make-up)"}
+  {status || "Active"} {item.type === "makeup" && "(Make-up)"}
 </span>
                     </div>
                   </div>
