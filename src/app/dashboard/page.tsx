@@ -450,106 +450,110 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* 1. KPI Metrics Row (Reordered: Live Classes, Total Monthly, Lifetime Total, Teaching Time, Revenue) */}
+     {/* 1. KPI Metrics Row (Aligned Numbers) */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5">
           {/* Card 1: Today's Schedule Overview (Live) */}
-          <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs flex flex-col justify-between space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                Today&apos;s Schedule
-              </span>
-              <span className="text-xs font-bold text-pink-700 bg-pink-50 px-2.5 py-1 rounded-xl border border-pink-200">
-                Live
-              </span>
-            </div>
+          <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs flex flex-col justify-between">
             <div>
-              <p className="text-3xl font-extrabold text-pink-950">
-                {totalTodaysCount} <span className="text-base font-semibold text-gray-500">Classes</span>
-              </p>
-              <p className="text-xs text-gray-400 mt-1">
-                {todaysRegularSchedules.length} Regular • {todaysMakeupSchedules.length} Make-up
-              </p>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                  Today&apos;s Schedule
+                </span>
+                <span className="text-xs font-bold text-pink-700 bg-pink-50 px-2.5 py-1 rounded-xl border border-pink-200">
+                  Live
+                </span>
+              </div>
+              <div className="flex items-baseline gap-1.5 my-2">
+                <span className="text-3xl font-extrabold text-pink-950">{totalTodaysCount}</span>
+                <span className="text-base font-semibold text-gray-500">Classes</span>
+              </div>
             </div>
+            <p className="text-xs text-gray-400 mt-2">
+              {todaysRegularSchedules.length} Regular • {todaysMakeupSchedules.length} Make-up
+            </p>
           </div>
 
           {/* Card 2: Total Classes Conducted (Monthly) */}
-          <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs flex flex-col justify-between space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                Total Classes
-              </span>
-              <span className="text-[10px] font-extrabold text-pink-600 bg-pink-50 px-2 py-0.5 rounded-lg border border-pink-200 uppercase">
-                {globalTimeFilter}
-              </span>
-            </div>
+          <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs flex flex-col justify-between">
             <div>
-              <p className="text-3xl font-extrabold text-pink-950">
-                {calculatedClasses} <span className="text-base font-semibold text-gray-500">Lessons</span>
-              </p>
-              <p className="text-xs text-gray-400 mt-1">
-                Completed or recorded slots
-              </p>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                  Total Classes
+                </span>
+                <span className="text-[10px] font-extrabold text-pink-600 bg-pink-50 px-2 py-0.5 rounded-lg border border-pink-200 uppercase">
+                  {globalTimeFilter}
+                </span>
+              </div>
+              <div className="flex items-baseline gap-1.5 my-2">
+                <span className="text-3xl font-extrabold text-pink-950">{calculatedClasses}</span>
+                <span className="text-base font-semibold text-gray-500">Lessons</span>
+              </div>
             </div>
+            <p className="text-xs text-gray-400 mt-2">
+              Completed or recorded slots
+            </p>
           </div>
 
           {/* Card 3: Lifetime Total Classes Completed (All-Time) */}
-          <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs flex flex-col justify-between space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                Lifetime Total
-              </span>
-              <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 font-bold text-[10px] rounded-md border border-emerald-200 uppercase">
-                All-Time
-              </span>
-            </div>
+          <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs flex flex-col justify-between">
             <div>
-              <p className="text-3xl font-extrabold text-pink-950">
-                {allTimeLessons} <span className="text-base font-semibold text-gray-500">Done</span>
-              </p>
-              <p className="text-xs text-gray-400 mt-1">
-                Total completed since day one
-              </p>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                  Lifetime Total
+                </span>
+                <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 font-bold text-[10px] rounded-md border border-emerald-200 uppercase">
+                  All-Time
+                </span>
+              </div>
+              <div className="flex items-baseline gap-1.5 my-2">
+                <span className="text-3xl font-extrabold text-pink-950">{allTimeLessons}</span>
+                <span className="text-base font-semibold text-gray-500">Done</span>
+              </div>
             </div>
+            <p className="text-xs text-gray-400 mt-2">
+              Total completed since day one
+            </p>
           </div>
 
           {/* Card 4: Teaching Hours */}
-          <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs flex flex-col justify-between space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                Teaching Time
-              </span>
-              <span className="text-[10px] font-extrabold text-pink-600 bg-pink-50 px-2 py-0.5 rounded-lg border border-pink-200 uppercase">
-                {globalTimeFilter}
-              </span>
-            </div>
+          <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs flex flex-col justify-between">
             <div>
-              <p className="text-3xl font-extrabold text-pink-950">
-                {calculatedHours.hours} <span className="text-base font-semibold text-gray-500">Hours</span>
-              </p>
-              <p className="text-xs text-gray-400 mt-1">
-                From {calculatedHours.classCount} completed lessons
-              </p>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                  Teaching Time
+                </span>
+                <span className="text-[10px] font-extrabold text-pink-600 bg-pink-50 px-2 py-0.5 rounded-lg border border-pink-200 uppercase">
+                  {globalTimeFilter}
+                </span>
+              </div>
+              <div className="flex items-baseline gap-1.5 my-2">
+                <span className="text-3xl font-extrabold text-pink-950">{calculatedHours.hours}</span>
+                <span className="text-base font-semibold text-gray-500">Hours</span>
+              </div>
             </div>
+            <p className="text-xs text-gray-400 mt-2">
+              From {calculatedHours.classCount} completed lessons
+            </p>
           </div>
 
           {/* Card 5: Total Income */}
-          <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs flex flex-col justify-between space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                Revenue & Tuition
-              </span>
-              <span className="text-[10px] font-extrabold text-pink-600 bg-pink-50 px-2 py-0.5 rounded-lg border border-pink-200 uppercase">
-                {globalTimeFilter}
-              </span>
-            </div>
+          <div className="bg-white border border-pink-100 rounded-3xl p-5 shadow-xs flex flex-col justify-between">
             <div>
-              <p className="text-3xl font-extrabold text-pink-600">
-                ₱{calculatedIncome.amount.toLocaleString()}
-              </p>
-              <p className="text-xs text-pink-400 font-medium mt-1">
-                {calculatedIncome.count} transactions recorded
-              </p>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                  Revenue & Tuition
+                </span>
+                <span className="text-[10px] font-extrabold text-pink-600 bg-pink-50 px-2 py-0.5 rounded-lg border border-pink-200 uppercase">
+                  {globalTimeFilter}
+                </span>
+              </div>
+              <div className="flex items-baseline gap-1.5 my-2">
+                <span className="text-3xl font-extrabold text-pink-600">₱{calculatedIncome.amount.toLocaleString()}</span>
+              </div>
             </div>
+            <p className="text-xs text-pink-400 font-medium mt-2">
+              {calculatedIncome.count} transactions recorded
+            </p>
           </div>
         </div>
 
