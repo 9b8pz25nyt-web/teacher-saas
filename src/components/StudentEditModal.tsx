@@ -68,17 +68,16 @@ export default function StudentEditModal({
                 onChange={(e) => setName(e.target.value)}
               />
             </div>
-            <div>
-              {/* 🌟 2. Added Parent's Name Field Here */}
-              <label className="block mb-1 font-semibold text-gray-700">Parent&apos;s Name</label>
-              <input
-                type="text"
-                className="input w-full border border-gray-200 rounded-xl p-2.5 bg-white text-gray-800"
-                placeholder="e.g. Mrs. Smith"
-                value={parentName}
-                onChange={(e) => setParentName(e.target.value)}
-              />
-            </div>
+           <div>
+  <label className="block mb-1 font-semibold text-gray-700">Parent&apos;s Name</label>
+  <input
+    type="text"
+    className="input w-full border border-gray-200 rounded-xl p-2.5 bg-white text-gray-800"
+    placeholder="e.g. Mrs. Smith"
+    value={parentName}
+    onChange={(e) => setParentName(e.target.value)}
+  />
+</div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

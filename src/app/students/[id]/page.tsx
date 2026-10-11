@@ -2586,6 +2586,8 @@ ${renewalBankDetails ? `🏦 Bank Details:\n${renewalBankDetails}\n` : ""}Please
           teacherAliases={teacherAliases}
           name={name}
           setName={setName}
+          parentName={parentName}
+  setParentName={setParentName}
           teacherAlias={teacherAlias}
           setTeacherAlias={setTeacherAlias}
           meetingLink={meetingLink}
