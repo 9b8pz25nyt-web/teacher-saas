@@ -1206,14 +1206,38 @@ ${renewalBankDetails ? `🏦 Bank Details:\n${renewalBankDetails}\n` : ""}Please
     if (!packageStartDate) return true;
     return (m.makeup_date || m.date || "").substring(0, 10) >= packageStartDate;
   });
-// 🧮 Baseline completed classes + newly completed reports in current cycle
-  const baseCompleted = Number(student?.classes_completed || 0);
- // 🧮 Dynamically count all valid completed lessons & reports across the board
-  // 🧮 Dynamically count completed lessons & reports strictly for the current package cycle
-const dynamicCompletedCount = Number(student?.classes_completed || 0);
-  const combinedTotalClasses = (student?.classes_included || 0) + (student?.free_classes || 0);
+// --- DYNAMIC PACKAGE CALCULATIONS ---
+  const combinedTotalClasses = 
+    Number(student?.classes_included || 0) + Number(student?.free_classes || 0);
+
+  // Filter out cancelled or absent reports, lessons, and makeup classes
+  const validReports = reports.filter((r) => {
+    const title = (r.lesson_title || r.title || "").toLowerCase();
+    const status = (r.status || "").toLowerCase();
+    return !title.includes("cancelled") && !title.includes("absent") && status !== "cancelled" && status !== "absent";
+  });
+
+  const validLessons = lessons.filter((l) => {
+    const title = (l.title || "").toLowerCase();
+    const status = (l.status || "").toLowerCase();
+    return !title.includes("cancelled") && !title.includes("absent") && status !== "cancelled" && status !== "absent";
+  });
+
+  const validMakeups = makeupClasses.filter((m) => {
+    const s = (m.status || "").trim().toLowerCase();
+    const title = (m.topic || m.title || "").toLowerCase();
+    return (s === "completed" || s === "attended") && !title.includes("cancelled") && !title.includes("absent");
+  });
+
+  // Calculate actual completed count dynamically from logs (taking max of reports/lessons to avoid double counting, plus valid makeups)
+  const loggedRegularCount = Math.max(validReports.length, validLessons.length);
+  const dynamicCompletedCount = loggedRegularCount + validMakeups.length;
+
   const dynamicRemainingCount = Math.max(combinedTotalClasses - dynamicCompletedCount, 0);
-  const dynamicProgressPercent = combinedTotalClasses > 0 ? Math.min(100, Math.round((dynamicCompletedCount / combinedTotalClasses) * 100)) : 0;
+  const dynamicProgressPercent = combinedTotalClasses > 0 
+    ? Math.min(100, Math.round((dynamicCompletedCount / combinedTotalClasses) * 100)) 
+    : 0;
+  // --- END CALCULATIONS ---
   const displayStatus = student?.payment_status || "Active";
   const isPaid = displayStatus.toLowerCase() === "active" || displayStatus.toLowerCase() === "paid";
   const countryObj = countries.find((c) => c.name === student?.country);
