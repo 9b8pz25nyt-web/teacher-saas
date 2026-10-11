@@ -15,6 +15,8 @@ export default function StudentEditModal({
   teacherAliases,
   name,
   setName,
+  parentName,         // 👈 1. Add parent name state props
+  setParentName,      // 👈
   teacherAlias,
   setTeacherAlias,
   meetingLink,
@@ -67,6 +69,20 @@ export default function StudentEditModal({
               />
             </div>
             <div>
+              {/* 🌟 2. Added Parent's Name Field Here */}
+              <label className="block mb-1 font-semibold text-gray-700">Parent&apos;s Name</label>
+              <input
+                type="text"
+                className="input w-full border border-gray-200 rounded-xl p-2.5 bg-white text-gray-800"
+                placeholder="e.g. Mrs. Smith"
+                value={parentName}
+                onChange={(e) => setParentName(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
               <label className="block mb-1 font-semibold text-gray-700">Assigned Teacher Alias</label>
               <select
                 className="input w-full border border-gray-200 rounded-xl p-2.5 bg-white text-gray-800"
@@ -80,17 +96,16 @@ export default function StudentEditModal({
                 ))}
               </select>
             </div>
-          </div>
-
-          <div>
-            <label className="block mb-1 font-semibold text-gray-700">Classroom Video Link (Zoom / Meet URL)</label>
-            <input
-              type="text"
-              className="input w-full border border-gray-200 rounded-xl p-2.5 bg-white text-gray-800"
-              placeholder="https://zoom.us/..."
-              value={meetingLink}
-              onChange={(e) => setMeetingLink(e.target.value)}
-            />
+            <div>
+              <label className="block mb-1 font-semibold text-gray-700">Classroom Video Link (Zoom / Meet URL)</label>
+              <input
+                type="text"
+                className="input w-full border border-gray-200 rounded-xl p-2.5 bg-white text-gray-800"
+                placeholder="https://zoom.us/..."
+                value={meetingLink}
+                onChange={(e) => setMeetingLink(e.target.value)}
+              />
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -288,8 +303,8 @@ export default function StudentEditModal({
               <option value="Pending">Pending</option>
               <option value="Paid">Paid</option>
               <option value="Active">Active</option>
-              <option value="Archived">Archived</option> {/* 👈 Add this */}
-    <option value="Inactive">Inactive</option> {/* 👈 Add this */}
+              <option value="Archived">Archived</option>
+              <option value="Inactive">Inactive</option>
             </select>
           </div>
 

@@ -304,6 +304,7 @@ export default function StudentDetailsPage({
   const [isBookModalOpen, setIsBookModalOpen] = useState(false);
   const [name, setName] = useState("");
   const [teacherAlias, setTeacherAlias] = useState("Teacher Gabi");
+  const [parentName, setParentName] = useState("");
   const [meetingLink, setMeetingLink] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -465,6 +466,7 @@ export default function StudentDetailsPage({
       setStudent(studentData);
       setName(studentData.name || "");
       setTeacherAlias(studentData.teacher_alias || "Teacher Gabi");
+      setParentName(studentData.parent_name || "");
       setMeetingLink(studentData.meeting_link || "");
       setEmail(studentData.email || "");
       setPhone(studentData.phone || "");
@@ -676,6 +678,7 @@ async function handleSaveParentName(newParentName: string) {
         .update({
           name,
           teacher_alias: teacherAlias,
+          parent_name: parentName,
           meeting_link: meetingLink.trim() || null,
           email: email.trim() || null,
           phone: phone.trim() || null,
